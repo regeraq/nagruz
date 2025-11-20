@@ -20,7 +20,6 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Navigation } from "@/components/navigation";
-import deviceImage from "@assets/image_1763675434884.png";
 
 const navLinks = [
   { label: "Главная", id: "hero" },
@@ -168,76 +167,60 @@ export default function Home() {
         
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
         
-        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-8 py-32 md:py-40">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="text-center lg:text-left">
-              <Badge 
-                variant="secondary" 
-                className="mb-6 text-sm font-medium px-4 py-2 justify-center lg:justify-start flex w-fit"
-                data-testid="badge-new-equipment"
-              >
-                Новое оборудование 2025 года
-              </Badge>
-              
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70" data-testid="heading-hero">
-                {device.name}
-              </h1>
-              
-              <p className="text-lg md:text-xl text-muted-foreground mb-8 leading-relaxed" data-testid="text-hero-description">
-                {device.description}
-              </p>
-              
-              <div className="flex flex-wrap gap-3 sm:gap-4 mb-12 justify-center lg:justify-start">
-                <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-power">
-                  <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
-                  <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power">{device.power}</span>
-                </div>
-                <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-steps">
-                  <Zap className="h-4 sm:h-5 w-4 sm:w-5 text-tech-cyan" />
-                  <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-steps">{device.steps}</span>
-                </div>
-                <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-voltage">
-                  <Cable className="h-4 sm:h-5 w-4 sm:w-5 text-chart-3" />
-                  <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-voltage">{device.voltage}</span>
-                </div>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                <Button 
-                  size="lg" 
-                  onClick={scrollToContact}
-                  data-testid="button-hero-cta-primary"
-                  className="text-base px-8 h-12"
-                >
-                  Получить спецификацию
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-                <Button 
-                  size="lg" 
-                  variant="outline"
-                  onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
-                  data-testid="button-hero-cta-secondary"
-                  className="text-base px-8 h-12"
-                >
-                  Технические характеристики
-                </Button>
-              </div>
+        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-8 py-32 md:py-40 text-center">
+          <Badge 
+            variant="secondary" 
+            className="mb-6 text-sm font-medium px-4 py-2"
+            data-testid="badge-new-equipment"
+          >
+            Новое оборудование 2025 года
+          </Badge>
+          
+          <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70" data-testid="heading-hero">
+            {device.name}
+          </h1>
+          
+          <p className="text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-4xl mx-auto mb-8 leading-relaxed" data-testid="text-hero-description">
+            {device.description}
+          </p>
+          
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-12">
+            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-power">
+              <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
+              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power">{device.power}</span>
             </div>
-            
-            <div className="hidden lg:flex items-center justify-center">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/5 rounded-lg blur-2xl"></div>
-                <img 
-                  src={deviceImage} 
-                  alt={`${device.name} - нагрузочное устройство`}
-                  className="relative rounded-lg max-h-96 object-contain"
-                  data-testid="image-device-hero"
-                />
-              </div>
+            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-steps">
+              <Zap className="h-4 sm:h-5 w-4 sm:w-5 text-tech-cyan" />
+              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-steps">{device.steps}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-voltage">
+              <Cable className="h-4 sm:h-5 w-4 sm:w-5 text-chart-3" />
+              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-voltage">{device.voltage}</span>
             </div>
           </div>
           
-          <div className="mt-16 text-center text-xs text-muted-foreground uppercase tracking-wider">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Button 
+              size="lg" 
+              onClick={scrollToContact}
+              data-testid="button-hero-cta-primary"
+              className="text-base px-8 h-12"
+            >
+              Получить спецификацию
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline"
+              onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
+              data-testid="button-hero-cta-secondary"
+              className="text-base px-8 h-12"
+            >
+              Технические характеристики
+            </Button>
+          </div>
+          
+          <div className="mt-16 text-xs text-muted-foreground uppercase tracking-wider">
             Прокрутите вниз
           </div>
         </div>
