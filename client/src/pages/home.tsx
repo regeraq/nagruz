@@ -40,8 +40,39 @@ function scrollToSection(id: string) {
   }
 }
 
+const devices = {
+  "nu-100": {
+    name: "НУ-100",
+    power: "100 кВт",
+    steps: "20 ступеней",
+    voltage: "AC/DC",
+    minVoltage: "230-400 В / 110-220 В",
+    maxPower: "100 кВт",
+    frequency: "50 Гц",
+    phases: "3",
+    cosφ: "0.99",
+    cooling: "Воздушное принудительное",
+    description: "Профессиональное нагрузочное устройство для тестирования дизель-генераторов, газопоршневых и газотурбинных установок, ИБП и аккумуляторных батарей"
+  },
+  "nu-30": {
+    name: "НУ-30",
+    power: "30 кВт",
+    steps: "6 ступеней",
+    voltage: "AC/DC",
+    minVoltage: "230-400 В / 110-220 В",
+    maxPower: "30 кВт",
+    frequency: "50 Гц",
+    phases: "3",
+    cosφ: "0.99",
+    cooling: "Воздушное принудительное",
+    description: "Компактное нагрузочное устройство для тестирования генераторов, ИБП и источников питания мощностью до 30 кВт"
+  }
+};
+
 export default function Home() {
+  const [selectedDevice, setSelectedDevice] = useState<"nu-100" | "nu-30">("nu-100");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const device = devices[selectedDevice];
   const { toast } = useToast();
 
   const form = useForm<InsertContactSubmission>({
@@ -135,26 +166,25 @@ export default function Home() {
           </Badge>
           
           <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70" data-testid="heading-hero">
-            НМ-100-Т220/400-П220-400-К2
+            {device.name}
           </h1>
           
           <p className="text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-4xl mx-auto mb-8 leading-relaxed" data-testid="text-hero-description">
-            Профессиональное нагрузочное устройство для тестирования дизель-генераторов, 
-            газопоршневых и газотурбинных установок, ИБП и аккумуляторных батарей
+            {device.description}
           </p>
           
           <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-12">
             <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-power">
               <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
-              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power">100 кВт</span>
+              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power">{device.power}</span>
             </div>
             <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-steps">
               <Zap className="h-4 sm:h-5 w-4 sm:w-5 text-tech-cyan" />
-              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-steps">20 ступеней</span>
+              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-steps">{device.steps}</span>
             </div>
             <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-voltage">
               <Cable className="h-4 sm:h-5 w-4 sm:w-5 text-chart-3" />
-              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-voltage">AC/DC</span>
+              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-voltage">{device.voltage}</span>
             </div>
           </div>
           
@@ -187,6 +217,25 @@ export default function Home() {
 
       <section id="purpose" className="py-24 md:py-32">
         <div className="max-w-7xl mx-auto px-6 md:px-8">
+          <div className="mb-12 flex flex-wrap gap-2">
+            <Button
+              variant={selectedDevice === "nu-100" ? "default" : "outline"}
+              onClick={() => setSelectedDevice("nu-100")}
+              data-testid="button-device-nu-100"
+              className="text-sm"
+            >
+              НУ-100
+            </Button>
+            <Button
+              variant={selectedDevice === "nu-30" ? "default" : "outline"}
+              onClick={() => setSelectedDevice("nu-30")}
+              data-testid="button-device-nu-30"
+              className="text-sm"
+            >
+              НУ-30
+            </Button>
+          </div>
+          
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <Badge variant="secondary" className="mb-4" data-testid="badge-purpose-section">
