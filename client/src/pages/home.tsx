@@ -19,6 +19,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Navigation } from "@/components/navigation";
 
 const navLinks = [
   { label: "Главная", id: "hero" },
@@ -52,7 +53,10 @@ const devices = {
     phases: "3",
     cosφ: "0.99",
     cooling: "Воздушное принудительное",
-    description: "Профессиональное нагрузочное устройство для тестирования дизель-генераторов, газопоршневых и газотурбинных установок, ИБП и аккумуляторных батарей"
+    description: "Профессиональное нагрузочное устройство для тестирования дизель-генераторов, газопоршневых и газотурбинных установок, ИБП и аккумуляторных батарей",
+    powerRange: "50–100 кВт",
+    acVoltage: "230–400 В",
+    dcVoltage: "110–220 В"
   },
   "nu-30": {
     name: "НУ-30",
@@ -65,7 +69,10 @@ const devices = {
     phases: "3",
     cosφ: "0.99",
     cooling: "Воздушное принудительное",
-    description: "Компактное нагрузочное устройство для тестирования генераторов, ИБП и источников питания мощностью до 30 кВт"
+    description: "Компактное нагрузочное устройство для тестирования генераторов, ИБП и источников питания мощностью до 30 кВт",
+    powerRange: "15–30 кВт",
+    acVoltage: "230–400 В",
+    dcVoltage: "110–220 В"
   }
 };
 
@@ -148,6 +155,10 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+      <Navigation 
+        selectedDevice={selectedDevice} 
+        onDeviceChange={setSelectedDevice}
+      />
       <section
         id="hero"
         className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-background via-background to-primary/5"
@@ -217,25 +228,6 @@ export default function Home() {
 
       <section id="purpose" className="py-24 md:py-32">
         <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="mb-12 flex flex-wrap gap-2">
-            <Button
-              variant={selectedDevice === "nu-100" ? "default" : "outline"}
-              onClick={() => setSelectedDevice("nu-100")}
-              data-testid="button-device-nu-100"
-              className="text-sm"
-            >
-              НУ-100
-            </Button>
-            <Button
-              variant={selectedDevice === "nu-30" ? "default" : "outline"}
-              onClick={() => setSelectedDevice("nu-30")}
-              data-testid="button-device-nu-30"
-              className="text-sm"
-            >
-              НУ-30
-            </Button>
-          </div>
-          
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <Badge variant="secondary" className="mb-4" data-testid="badge-purpose-section">
@@ -390,11 +382,11 @@ export default function Home() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {[
-                    { label: "Суммарная мощность", value: "50–100 кВт ±10%" },
+                    { label: "Суммарная мощность", value: device.powerRange + " ±10%" },
                     { label: "Режим работы", value: "Непрерывный" },
                     { label: "Частота (AC)", value: "50 Гц ±1%" },
                     { label: "Фазность", value: "3 фазы" },
-                    { label: "Условия эксплуатации", value: "Улица/помещение, −40...+40 °C" },
+                    { label: "Условия эксплуатации", value: "Улица/помещение, +1...+40 °C" },
                     { label: "Влажность", value: "До 80% при 25 °С" },
                     { label: "Охлаждение", value: "Воздушное принудительное" },
                     { label: "Защита", value: "Перегрев, отсутствие охлаждения, перегрузка, КЗ" },
@@ -442,7 +434,7 @@ export default function Home() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {[
-                    { label: "Напряжение", value: "230–400 В" },
+                    { label: "Напряжение", value: device.acVoltage },
                     { label: "Частота", value: "50 Гц ±1%" },
                     { label: "Коэффициент мощности", value: "cos φ ≥ 0.99" },
                   ].map((spec, idx) => (
