@@ -53,10 +53,10 @@ export function Navigation() {
               data-testid="link-logo"
             >
               <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-xl font-mono">НМ</span>
+                <span className="text-primary-foreground font-bold text-xl font-mono">НУ</span>
               </div>
               <div className="hidden md:block">
-                <div className="text-sm font-semibold text-foreground">НМ-100</div>
+                <div className="text-sm font-semibold text-foreground">НУ-100</div>
                 <div className="text-xs text-muted-foreground font-medium">Нагрузочное устройство</div>
               </div>
             </button>

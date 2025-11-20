@@ -372,7 +372,7 @@ export default function Home() {
               Технические характеристики
             </h2>
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-specifications-desc">
-              Полная спецификация нагрузочного устройства НМ-100
+              Полная спецификация нагрузочного устройства {device.name}
             </p>
           </div>
 
@@ -1006,10 +1006,10 @@ export default function Home() {
             <div>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-xl font-mono">НМ</span>
+                  <span className="text-primary-foreground font-bold text-xl font-mono">НУ</span>
                 </div>
                 <div>
-                  <div className="text-sm font-semibold">НМ-100</div>
+                  <div className="text-sm font-semibold">{device.name}</div>
                   <div className="text-xs text-muted-foreground">Нагрузочное устройство</div>
                 </div>
               </div>
@@ -1048,7 +1048,7 @@ export default function Home() {
           <Separator className="mb-8" />
 
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
-            <div>© 2025 НМ-100. Все права защищены.</div>
+            <div>© 2025 {device.name}. Все права защищены.</div>
             <div className="flex gap-6">
               <button className="hover:text-foreground transition-colors">
                 Политика конфиденциальности
