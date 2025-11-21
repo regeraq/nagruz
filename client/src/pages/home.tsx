@@ -549,7 +549,7 @@ export default function Home() {
 
       <section id="delivery" className="py-24 md:py-32 bg-muted/30">
         <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
+          <div className="text-center mb-16 scroll-animate">
             <Badge variant="secondary" className="mb-4" data-testid="badge-delivery-section">
               Комплектация
             </Badge>
@@ -561,7 +561,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 animate-fade-up">
+          <div className="grid md:grid-cols-2 gap-8 scroll-animate">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -627,7 +627,7 @@ export default function Home() {
 
       <section id="documentation" className="py-24 md:py-32">
         <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
+          <div className="text-center mb-16 scroll-animate">
             <Badge variant="secondary" className="mb-4" data-testid="badge-docs-section">
               Соответствие
             </Badge>
@@ -639,7 +639,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 animate-fade-up">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 scroll-animate">
             {[
               { title: "ГОСТ РФ", desc: "Соответствие ГОСТам" },
               { title: "Безопасность", desc: "Требования РФ" },
@@ -685,7 +685,7 @@ export default function Home() {
 
       <section id="applications" className="py-24 md:py-32 bg-muted/30">
         <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
+          <div className="text-center mb-16 scroll-animate">
             <Badge variant="secondary" className="mb-4" data-testid="badge-apps-section">
               Применение
             </Badge>
@@ -697,7 +697,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-up">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 scroll-animate">
             {[
               {
                 icon: Factory,
@@ -981,16 +981,6 @@ export default function Home() {
                     </div>
                   </div>
                   <Separator />
-                  <div className="flex items-start gap-3" data-testid="contact-address">
-                    <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <div className="text-sm font-medium">Адрес</div>
-                      <div className="text-sm text-muted-foreground" data-testid="text-address">
-                        Москва, ул. Промышленная, д. 1
-                      </div>
-                    </div>
-                  </div>
-                  <Separator />
                   <div className="flex items-start gap-3" data-testid="contact-telegram">
                     <Send className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
@@ -1004,6 +994,16 @@ export default function Home() {
                       >
                         @nu_equipment
                       </a>
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="flex items-start gap-3" data-testid="contact-address">
+                    <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div>
+                      <div className="text-sm font-medium">Адрес</div>
+                      <div className="text-sm text-muted-foreground" data-testid="text-address">
+                        Москва, ул. Промышленная, д. 1
+                      </div>
                     </div>
                   </div>
                 </CardContent>
