@@ -66,12 +66,11 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                 </div>
                 <div className="hidden md:block min-w-0 flex flex-col">
                   <div 
-                    className="text-sm font-semibold text-foreground truncate transition-all duration-300 h-5 overflow-hidden"
-                    key={deviceName}
+                    className="text-sm font-semibold text-foreground w-14 transition-opacity duration-300"
                   >
                     {deviceName}
                   </div>
-                  <div className="text-xs text-muted-foreground font-medium truncate h-4 overflow-hidden">Нагрузочное устройство</div>
+                  <div className="text-xs text-muted-foreground font-medium whitespace-nowrap">Нагрузочное устройство</div>
                 </div>
               </button>
               
