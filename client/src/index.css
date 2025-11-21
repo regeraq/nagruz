@@ -835,6 +835,45 @@
     transform: translateX(4px);
   }
 
+  /* Delivery items (packaging) */
+  [data-testid^="delivery-"] {
+    transition: all 0.3s ease;
+  }
+
+  [data-testid^="delivery-"]:hover {
+    transform: translateX(6px);
+    color: hsl(var(--primary));
+  }
+
+  /* Certification cards */
+  [data-testid^="cert-"] {
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  [data-testid^="cert-"]:hover {
+    transform: translateY(-8px) scale(1.05);
+    box-shadow: 0 16px 40px rgba(26, 148, 255, 0.3);
+  }
+
+  /* Application items (сферы применения) */
+  [data-testid^="app-"] {
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  [data-testid^="app-"]:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 16px 40px rgba(26, 148, 255, 0.25);
+  }
+
+  /* Documentation list items */
+  [data-testid^="doc-item-"] {
+    transition: all 0.3s ease;
+  }
+
+  [data-testid^="doc-item-"]:hover {
+    transform: translateX(4px);
+  }
+
   /* Smooth scrolling */
   html {
     scroll-behavior: smooth;
