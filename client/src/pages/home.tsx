@@ -183,7 +183,7 @@ export default function Home() {
       });
     }, observerOptions);
 
-    document.querySelectorAll(".scroll-animate").forEach(el => {
+    document.querySelectorAll(".scroll-animate, .scroll-animate-arrow").forEach(el => {
       observer.observe(el);
     });
 
@@ -254,7 +254,7 @@ export default function Home() {
               size="lg" 
               onClick={scrollToContact}
               data-testid="button-hero-cta-primary"
-              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold group overflow-hidden"
+              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold group"
             >
               Получить спецификацию
               <ArrowRight className="ml-2 h-5 w-5 transition-all duration-300 group-hover:translate-x-2 group-hover:-rotate-12 scroll-animate-arrow" />
@@ -320,7 +320,7 @@ export default function Home() {
             </div>
             
             <div className="w-full flex justify-center animate-fade-up" style={{ animationDelay: "0.3s" }}>
-              <PowerGauge maxPower={parseInt(device.maxPower.split(" ")[0])} deviceName={device.name} />
+              <PowerGauge maxPower={parseInt(device.maxPower.split(" ")[0])} />
             </div>
           </div>
         </div>

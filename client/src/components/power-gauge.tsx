@@ -2,10 +2,9 @@ import { useEffect, useRef } from 'react';
 
 interface PowerGaugeProps {
   maxPower: number;
-  deviceName: string;
 }
 
-export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
+export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const needleAngleRef = useRef<number>(0);
@@ -177,10 +176,7 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
         className="drop-shadow-2xl drop-shadow-primary/50"
       />
 
-      <div className="text-center space-y-2">
-        <div className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-          {deviceName}
-        </div>
+      <div className="text-center">
         <div className="text-4xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-primary via-tech-cyan to-primary animate-gradient-shift">
           {maxPower} кВт
         </div>
