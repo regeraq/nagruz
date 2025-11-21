@@ -307,14 +307,13 @@ export default function Home() {
                 ].map((param, idx) => (
                   <div 
                     key={idx} 
-                    className="flex items-center gap-3 text-foreground scroll-animate group/param"
+                    className="flex items-center gap-3 text-foreground scroll-animate"
                     data-testid={`param-${idx}`}
                   >
                     <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0 transition-all duration-300 hover:scale-110 hover:bg-primary/20 hover:shadow-lg hover:shadow-primary/30 cursor-pointer group">
                       <param.icon className="h-5 w-5 text-primary transition-transform duration-300 group-hover:rotate-12" />
                     </div>
                     <span className="font-medium">{param.label}</span>
-                    <ArrowRight className="h-4 w-4 text-primary/40 transition-all duration-300 group-hover/param:translate-x-1 group-hover/param:-rotate-12 group-hover/param:text-primary/80 ml-auto opacity-0 group-hover/param:opacity-100 scroll-animate-arrow" />
                   </div>
                 ))}
               </div>

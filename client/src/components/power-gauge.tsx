@@ -170,10 +170,10 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
   }, [maxPower]);
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/50 hover:shadow-primary/50 transition-all duration-500 group">
+    <div className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/50 hover:shadow-primary/50 transition-all duration-500 group hover:scale-105 hover:shadow-primary/60 cursor-pointer">
       <canvas
         ref={canvasRef}
-        className="drop-shadow-2xl drop-shadow-primary/50"
+        className="drop-shadow-2xl drop-shadow-primary/50 transition-all duration-300 group-hover:drop-shadow-[0_0_20px_rgba(26,148,255,0.8)]"
       />
 
       <div className="text-center">
