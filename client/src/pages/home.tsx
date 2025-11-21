@@ -549,7 +549,7 @@ export default function Home() {
 
       <section id="delivery" className="py-24 md:py-32 bg-muted/30">
         <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-delivery-section">
               Комплектация
             </Badge>
@@ -627,7 +627,7 @@ export default function Home() {
 
       <section id="documentation" className="py-24 md:py-32">
         <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-docs-section">
               Соответствие
             </Badge>
@@ -685,7 +685,7 @@ export default function Home() {
 
       <section id="applications" className="py-24 md:py-32 bg-muted/30">
         <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-apps-section">
               Применение
             </Badge>
@@ -749,7 +749,7 @@ export default function Home() {
       </section>
 
       <section id="about" className="py-24 md:py-32">
-        <div className="max-w-4xl mx-auto px-6 md:px-8 text-center">
+        <div className="max-w-4xl mx-auto px-6 md:px-8 text-center animate-fade-up">
           <Badge variant="secondary" className="mb-4" data-testid="badge-about-section">
             О компании
           </Badge>
@@ -783,7 +783,7 @@ export default function Home() {
 
       <section id="contact" className="py-24 md:py-32 bg-muted/30">
         <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-contact-section">
               Контакты
             </Badge>
