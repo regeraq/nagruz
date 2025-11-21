@@ -64,15 +64,14 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                 <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center flex-shrink-0">
                   <span className="text-primary-foreground font-bold text-xl font-mono">НУ</span>
                 </div>
-                <div className="hidden md:block min-w-0">
+                <div className="hidden md:block min-w-0 flex flex-col">
                   <div 
-                    className="text-sm font-semibold text-foreground truncate transition-all duration-300"
+                    className="text-sm font-semibold text-foreground truncate transition-all duration-300 h-5 overflow-hidden"
                     key={deviceName}
-                    style={{ animation: 'deviceSwitch 0.3s ease-out' }}
                   >
                     {deviceName}
                   </div>
-                  <div className="text-xs text-muted-foreground font-medium truncate">Нагрузочное устройство</div>
+                  <div className="text-xs text-muted-foreground font-medium truncate h-4 overflow-hidden">Нагрузочное устройство</div>
                 </div>
               </button>
               
