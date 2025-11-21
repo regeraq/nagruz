@@ -231,17 +231,17 @@ export default function Home() {
               size="lg" 
               onClick={scrollToContact}
               data-testid="button-hero-cta-primary"
-              className="text-base px-8 h-12 hover:scale-105 active:scale-95 transition-transform duration-200"
+              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold"
             >
               Получить спецификацию
-              <ArrowRight className="ml-2 h-5 w-5" />
+              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </Button>
             <Button 
               size="lg" 
               variant="outline"
               onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
               data-testid="button-hero-cta-secondary"
-              className="text-base px-8 h-12 hover:scale-105 active:scale-95 transition-transform duration-200"
+              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80"
             >
               Технические характеристики
             </Button>
