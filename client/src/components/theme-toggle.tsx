@@ -25,12 +25,12 @@ export function ThemeToggle() {
       size="icon"
       onClick={toggleTheme}
       data-testid="button-theme-toggle"
-      className="rounded-md"
+      className="rounded-md flex items-center justify-center h-9 w-9"
     >
       {theme === "light" ? (
-        <Moon className="h-5 w-5" />
+        <Moon className="h-5 w-5 flex-shrink-0" />
       ) : (
-        <Sun className="h-5 w-5" />
+        <Sun className="h-5 w-5 flex-shrink-0" />
       )}
       <span className="sr-only">Переключить тему</span>
     </Button>

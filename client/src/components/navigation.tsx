@@ -64,7 +64,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                 <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
                   <span className="text-primary-foreground font-bold text-xl font-mono">НУ</span>
                 </div>
-                <div className="hidden md:block max-w-[140px]">
+                <div className="hidden md:block w-[160px]">
                   <div 
                     className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden text-ellipsis transition-all duration-300"
                     key={deviceName}
@@ -72,7 +72,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                   >
                     {deviceName}
                   </div>
-                  <div className="text-xs text-muted-foreground font-medium whitespace-nowrap">Нагрузочное устройство</div>
+                  <div className="text-xs text-muted-foreground font-medium whitespace-nowrap overflow-hidden text-ellipsis">Нагрузочное устройство</div>
                 </div>
               </button>
               
