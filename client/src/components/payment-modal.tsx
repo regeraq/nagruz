@@ -36,6 +36,9 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("idle");
   const [timeLeft, setTimeLeft] = useState(15 * 60);
   const [cryptoAddress, setCryptoAddress] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const { toast } = useToast();
 
   const { data: cryptoRates, isLoading: ratesLoading } = useQuery<CryptoRates>({
@@ -59,6 +62,9 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       setPaymentStatus("idle");
       setTimeLeft(15 * 60);
       setCryptoAddress("");
+      setCustomerName("");
+      setCustomerEmail("");
+      setCustomerPhone("");
     }
   }, [isOpen]);
 
@@ -151,6 +157,15 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const handlePayment = () => {
     if (paymentStatus === "processing") return;
 
+    if (!customerName.trim() || !customerEmail.trim() || !customerPhone.trim()) {
+      toast({
+        title: "Ошибка",
+        description: "Пожалуйста, заполните все контактные данные",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setPaymentStatus("processing");
 
     const orderData = {
@@ -162,6 +177,9 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       promoCode: null,
       paymentMethod,
       paymentStatus: "pending",
+      customerName,
+      customerEmail,
+      customerPhone,
       paymentDetails: JSON.stringify({
         method: paymentMethod,
         cryptoAddress: cryptoAddress || undefined,
@@ -278,6 +296,30 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Ваши контактные данные</Label>
+                <Input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Ваше имя"
+                  data-testid="input-customer-name"
+                />
+                <Input
+                  type="email"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  placeholder="Ваш email"
+                  data-testid="input-customer-email"
+                />
+                <Input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  placeholder="+7 (___) ___-__-__"
+                  maxLength={11}
+                  data-testid="input-customer-phone"
+                />
               </div>
 
               <Separator />

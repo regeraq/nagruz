@@ -89,8 +89,9 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   createdAt: true,
 }).extend({
   quantity: z.number().min(1, "Минимальное количество - 1").max(99, "Максимальное количество - 99"),
-  customerEmail: z.string().email("Введите корректный email").optional(),
-  customerPhone: z.string().min(10, "Введите корректный номер телефона").optional(),
+  customerName: z.string().min(2, "Имя должно содержать минимум 2 символа"),
+  customerEmail: z.string().email("Введите корректный email"),
+  customerPhone: z.string().min(10, "Введите корректный номер телефона"),
 });
 
 export type InsertOrder = z.infer<typeof insertOrderSchema>;

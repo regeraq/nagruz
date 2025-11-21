@@ -284,6 +284,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ownerEmailHtml = `
         <h2>Новый заказ</h2>
         <p><strong>ID заказа:</strong> ${order.id}</p>
+        <h3>Контактные данные:</h3>
+        <p><strong>Имя:</strong> ${order.customerName || 'Не указано'}</p>
+        <p><strong>Email:</strong> ${order.customerEmail || 'Не указано'}</p>
+        <p><strong>Телефон:</strong> ${order.customerPhone || 'Не указано'}</p>
+        <h3>Детали заказа:</h3>
         <p><strong>Товар:</strong> ${product.name}</p>
         <p><strong>Артикул:</strong> ${product.sku}</p>
         <p><strong>Количество:</strong> ${order.quantity}</p>
