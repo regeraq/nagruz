@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertContactSubmissionSchema } from "@shared/schema";
+import { insertContactSubmissionSchema, insertOrderSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -108,6 +108,180 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: "Ошибка при получении заявки",
+      });
+    }
+  });
+
+  app.get("/api/products", async (req, res) => {
+    try {
+      const products = await storage.getProducts();
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      res.status(500).json({
+        success: false,
+        message: "Ошибка при получении товаров",
+      });
+    }
+  });
+
+  app.get("/api/products/:id", async (req, res) => {
+    try {
+      const product = await storage.getProduct(req.params.id);
+      
+      if (!product) {
+        res.status(404).json({
+          success: false,
+          message: "Товар не найден",
+        });
+        return;
+      }
+      
+      res.json(product);
+    } catch (error) {
+      console.error("Error fetching product:", error);
+      res.status(500).json({
+        success: false,
+        message: "Ошибка при получении товара",
+      });
+    }
+  });
+
+  app.post("/api/promo/validate", async (req, res) => {
+    try {
+      const { code } = req.body;
+      
+      if (!code || typeof code !== 'string') {
+        res.status(400).json({
+          success: false,
+          message: "Промокод не указан",
+        });
+        return;
+      }
+      
+      const promo = await storage.validatePromoCode(code);
+      
+      if (!promo) {
+        res.status(404).json({
+          success: false,
+          message: "Промокод недействителен или истек",
+        });
+        return;
+      }
+      
+      res.json({
+        success: true,
+        discountPercent: promo.discountPercent,
+        code: promo.code,
+      });
+    } catch (error) {
+      console.error("Error validating promo code:", error);
+      res.status(500).json({
+        success: false,
+        message: "Ошибка при проверке промокода",
+      });
+    }
+  });
+
+  app.post("/api/orders", async (req, res) => {
+    try {
+      const validatedData = insertOrderSchema.parse(req.body);
+      
+      const product = await storage.getProduct(validatedData.productId);
+      if (!product) {
+        res.status(404).json({
+          success: false,
+          message: "Товар не найден",
+        });
+        return;
+      }
+
+      const reservedUntil = new Date();
+      reservedUntil.setMinutes(reservedUntil.getMinutes() + 15);
+
+      const orderData = {
+        ...validatedData,
+        reservedUntil,
+      };
+
+      const order = await storage.createOrder(orderData);
+      
+      res.status(201).json({
+        success: true,
+        message: "Заказ успешно создан",
+        order,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          success: false,
+          message: "Ошибка валидации данных",
+          errors: error.errors,
+        });
+      } else {
+        console.error("Error creating order:", error);
+        res.status(500).json({
+          success: false,
+          message: "Произошла ошибка при создании заказа",
+        });
+      }
+    }
+  });
+
+  app.get("/api/orders/:id", async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.id);
+      
+      if (!order) {
+        res.status(404).json({
+          success: false,
+          message: "Заказ не найден",
+        });
+        return;
+      }
+      
+      res.json(order);
+    } catch (error) {
+      console.error("Error fetching order:", error);
+      res.status(500).json({
+        success: false,
+        message: "Ошибка при получении заказа",
+      });
+    }
+  });
+
+  app.patch("/api/orders/:id/status", async (req, res) => {
+    try {
+      const { status, paymentDetails } = req.body;
+      
+      if (!status || typeof status !== 'string') {
+        res.status(400).json({
+          success: false,
+          message: "Статус не указан",
+        });
+        return;
+      }
+
+      const order = await storage.updateOrderStatus(req.params.id, status, paymentDetails);
+      
+      if (!order) {
+        res.status(404).json({
+          success: false,
+          message: "Заказ не найден",
+        });
+        return;
+      }
+      
+      res.json({
+        success: true,
+        message: "Статус заказа обновлен",
+        order,
+      });
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      res.status(500).json({
+        success: false,
+        message: "Ошибка при обновлении статуса заказа",
       });
     }
   });
