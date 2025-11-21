@@ -7,8 +7,6 @@ interface PowerGaugeProps {
 export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
-  const needleAngleRef = useRef<number>(0);
-  const isHoveredRef = useRef(false);
   const hoverAnimationRef = useRef<number>(0);
   const hoverCyclesRef = useRef<number>(0);
 
@@ -35,7 +33,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     let animationStep = 0;
     const totalSteps = 50;
 
-    const drawGauge = (angle: number, hoverOffset: number = 0) => {
+    const drawGauge = (angle: number) => {
       // Clear canvas
       ctx.clearRect(0, 0, size, size);
 
@@ -99,13 +97,13 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         }
       }
 
-      // Draw needle with hover animation
-      const needleAngleRad = (angle + hoverOffset) * (Math.PI / 180);
+      // Draw needle
+      const needleAngleRad = angle * (Math.PI / 180);
       const needleLength = radius - 50;
 
-      // Needle glow (subtle on hover)
-      ctx.strokeStyle = hoverOffset !== 0 ? 'rgba(26, 148, 255, 0.25)' : 'rgba(26, 148, 255, 0.15)';
-      ctx.lineWidth = hoverOffset !== 0 ? 14 : 12;
+      // Needle glow
+      ctx.strokeStyle = 'rgba(26, 148, 255, 0.15)';
+      ctx.lineWidth = 12;
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
@@ -117,7 +115,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
 
       // Main needle
       ctx.strokeStyle = 'hsl(210, 100%, 55%)';
-      ctx.lineWidth = hoverOffset !== 0 ? 5 : 4;
+      ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
       ctx.lineTo(
@@ -127,7 +125,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       ctx.stroke();
 
       // Center circle glow
-      ctx.fillStyle = hoverOffset !== 0 ? 'rgba(26, 148, 255, 0.3)' : 'rgba(26, 148, 255, 0.2)';
+      ctx.fillStyle = 'rgba(26, 148, 255, 0.2)';
       ctx.beginPath();
       ctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
       ctx.fill();
@@ -145,32 +143,27 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     };
 
     const animate = () => {
-      animationStep++;
-      const progress = animationStep / totalSteps;
-      const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out
-
-      currentAngle = -135 + (targetAngle - (-135)) * easeProgress;
-      needleAngleRef.current = currentAngle;
-
-      // Calculate hover animation - replay needle animation like on device switch
-      let displayAngle = currentAngle;
-      if (hoverCyclesRef.current > 0) {
+      // Initial load animation
+      if (animationStep < totalSteps) {
+        animationStep++;
+        const progress = animationStep / totalSteps;
+        const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out
+        currentAngle = -135 + (targetAngle - (-135)) * easeProgress;
+        drawGauge(currentAngle);
+        animationRef.current = requestAnimationFrame(animate);
+      }
+      // Hover replay animation
+      else if (hoverCyclesRef.current > 0) {
         const hoverProgress = hoverAnimationRef.current / totalSteps;
-        const hoverEase = 1 - Math.pow(1 - hoverProgress, 3); // Same ease out
-        // Animate from -135 to target angle
-        const hoverAnimAngle = -135 + (targetAngle - (-135)) * hoverEase;
-        displayAngle = hoverAnimAngle;
+        const hoverEase = 1 - Math.pow(1 - hoverProgress, 3);
+        const hoverAngle = -135 + (targetAngle - (-135)) * hoverEase;
+        drawGauge(hoverAngle);
         hoverAnimationRef.current++;
-        
+
         if (hoverAnimationRef.current >= totalSteps) {
           hoverCyclesRef.current = 0;
           hoverAnimationRef.current = 0;
         }
-      }
-
-      drawGauge(displayAngle, 0);
-
-      if (animationStep < totalSteps || hoverCyclesRef.current > 0) {
         animationRef.current = requestAnimationFrame(animate);
       }
     };
@@ -192,11 +185,12 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     <div 
       className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/20 hover:shadow-primary/40 transition-all duration-700 group hover:scale-105 hover:shadow-primary/50 cursor-pointer"
       onMouseEnter={() => {
-        hoverCyclesRef.current = 1;
         hoverAnimationRef.current = 0;
+        hoverCyclesRef.current = 1;
       }}
       onMouseLeave={() => {
-        // No need to reset, animation will stop after cycles complete
+        hoverCyclesRef.current = 0;
+        hoverAnimationRef.current = 0;
       }}
     >
       <canvas
