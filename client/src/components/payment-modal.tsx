@@ -31,12 +31,10 @@ type PaymentStatus = "idle" | "processing" | "success" | "error";
 
 export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const [quantity, setQuantity] = useState(1);
-  const [promoCode, setPromoCode] = useState("");
   const [discount, setDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("idle");
   const [timeLeft, setTimeLeft] = useState(15 * 60);
-  const [cardNumber, setCardNumber] = useState("");
   const [cryptoAddress, setCryptoAddress] = useState("");
   const { toast } = useToast();
 
@@ -57,36 +55,13 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   useEffect(() => {
     if (isOpen) {
       setQuantity(1);
-      setPromoCode("");
       setDiscount(0);
       setPaymentStatus("idle");
       setTimeLeft(15 * 60);
-      setCardNumber("");
       setCryptoAddress("");
     }
   }, [isOpen]);
 
-  const validatePromoMutation = useMutation({
-    mutationFn: async (code: string) => {
-      return await apiRequest("POST", "/api/promo/validate", { code });
-    },
-    onSuccess: (response: any) => {
-      setDiscount(response.discountPercent);
-      toast({
-        title: "Промокод применен!",
-        description: `Скидка ${response.discountPercent}% активирована`,
-        variant: "default",
-      });
-    },
-    onError: (error: any) => {
-      setDiscount(0);
-      toast({
-        title: "Ошибка промокода",
-        description: error.message || "Промокод недействителен или истек",
-        variant: "destructive",
-      });
-    },
-  });
 
   const createOrderMutation = useMutation({
     mutationFn: async (orderData: any) => {
@@ -172,75 +147,31 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
     setQuantity((prev) => Math.min(99, Math.max(1, prev + delta)));
   };
 
-  const handleApplyPromo = () => {
-    if (promoCode.trim()) {
-      validatePromoMutation.mutate(promoCode.trim());
-    }
-  };
 
-  const handlePayment = async () => {
+  const handlePayment = () => {
     if (paymentStatus === "processing") return;
 
     setPaymentStatus("processing");
 
-    try {
-      if (["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod)) {
-        // Криптовалютный платеж через NOWPayments
-        const response = await apiRequest("POST", "/api/payment/crypto", {
-          amount: finalAmount,
-          currency: paymentMethod.toUpperCase(),
-          orderId: `${product.id}-${Date.now()}`,
-          description: `Покупка ${product.name} (кол-во: ${quantity})`,
-        });
+    const orderData = {
+      productId: product.id,
+      quantity,
+      totalAmount: totalAmount.toString(),
+      discountAmount: discountAmount.toString(),
+      finalAmount: finalAmount.toString(),
+      promoCode: null,
+      paymentMethod,
+      paymentStatus: "pending",
+      paymentDetails: JSON.stringify({
+        method: paymentMethod,
+        cryptoAddress: cryptoAddress || undefined,
+        cryptoAmount: ["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) ? getCryptoAmount() : undefined,
+      }),
+    };
 
-        if (response.paymentUrl) {
-          window.location.href = response.paymentUrl;
-          return;
-        }
-      } else {
-        // Рублевый платеж через русский сервис
-        const response = await apiRequest("POST", "/api/payment/rub", {
-          amount: finalAmount * 100, // в копейках
-          paymentMethod,
-          productId: product.id,
-          quantity,
-          cardNumber: cardNumber || undefined,
-        });
-
-        if (response.paymentUrl) {
-          window.location.href = response.paymentUrl;
-          return;
-        }
-      }
-
-      // Если платежный шлюз не сработал, создаем заказ локально
-      const orderData = {
-        productId: product.id,
-        quantity,
-        totalAmount: totalAmount.toString(),
-        discountAmount: discountAmount.toString(),
-        finalAmount: finalAmount.toString(),
-        promoCode: discount > 0 ? promoCode : null,
-        paymentMethod,
-        paymentStatus: "pending",
-        paymentDetails: JSON.stringify({
-          method: paymentMethod,
-          cardNumber: cardNumber ? `****${cardNumber.slice(-4)}` : undefined,
-          cryptoAddress: cryptoAddress || undefined,
-          cryptoAmount: ["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) ? getCryptoAmount() : undefined,
-        }),
-      };
-
+    setTimeout(() => {
       createOrderMutation.mutate(orderData);
-    } catch (error) {
-      console.error("Payment error:", error);
-      setPaymentStatus("error");
-      toast({
-        title: "Ошибка платежа",
-        description: "Не удалось инициировать платеж. Попробуйте еще раз.",
-        variant: "destructive",
-      });
-    }
+    }, 1500);
   };
 
   const getPaymentMethodIcon = (method: PaymentMethod) => {
@@ -349,34 +280,6 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <Label>Промокод</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                    placeholder="Введите промокод"
-                    data-testid="input-promo-code"
-                  />
-                  <Button
-                    onClick={handleApplyPromo}
-                    disabled={!promoCode.trim() || validatePromoMutation.isPending}
-                    data-testid="button-apply-promo"
-                  >
-                    {validatePromoMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      "Применить"
-                    )}
-                  </Button>
-                </div>
-                {discount > 0 && (
-                  <Badge variant="secondary" data-testid="badge-discount-active">
-                    Скидка {discount}% активирована
-                  </Badge>
-                )}
-              </div>
-
               <Separator />
 
               <div className="space-y-2 text-sm">
@@ -472,19 +375,6 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 </div>
               </RadioGroup>
 
-              {paymentMethod === "card" && (
-                <div className="mt-4 space-y-3 p-4 bg-muted/30 rounded-lg">
-                  <Label>Номер карты</Label>
-                  <Input
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16))}
-                    placeholder="0000 0000 0000 0000"
-                    maxLength={16}
-                    data-testid="input-card-number"
-                  />
-                  <p className="text-xs text-muted-foreground">Комиссия: 2%</p>
-                </div>
-              )}
 
               {["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) && (
                 <div className="mt-4 space-y-3 p-4 bg-muted/30 rounded-lg">

@@ -4,6 +4,38 @@ import { storage } from "./storage";
 import { insertContactSubmissionSchema, insertOrderSchema } from "@shared/schema";
 import { z } from "zod";
 
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const OWNER_EMAIL = process.env.OWNER_EMAIL || "owner@example.com";
+
+async function sendEmail(to: string, subject: string, html: string) {
+  if (!RESEND_API_KEY) {
+    console.warn("RESEND_API_KEY not configured");
+    return { success: false, message: "Email service not configured" };
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: "noreply@example.com",
+        to,
+        subject,
+        html,
+      }),
+    });
+
+    const data = await response.json();
+    return { success: response.ok, data };
+  } catch (error) {
+    console.error("Error sending email:", error);
+    return { success: false, error };
+  }
+}
+
 async function getCryptoRates(): Promise<{ btc: number; eth: number; usdt: number; ltc: number }> {
   try {
     const response = await fetch(
@@ -84,6 +116,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const submission = await storage.createContactSubmission(validatedData);
+      
+      const ownerEmailHtml = `
+        <h2>Новая коммерческое предложение</h2>
+        <p><strong>Имя:</strong> ${validatedData.name}</p>
+        <p><strong>Email:</strong> ${validatedData.email}</p>
+        <p><strong>Телефон:</strong> ${validatedData.phone}</p>
+        <p><strong>Компания:</strong> ${validatedData.company || 'Не указана'}</p>
+        <p><strong>Сообщение:</strong></p>
+        <p>${validatedData.message.replace(/\n/g, '<br>')}</p>
+        ${validatedData.fileName ? `<p><strong>Файл:</strong> ${validatedData.fileName}</p>` : ''}
+      `;
+
+      await sendEmail(OWNER_EMAIL, `Новое коммерческое предложение от ${validatedData.name}`, ownerEmailHtml);
       
       res.status(201).json({
         success: true,
@@ -235,6 +280,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const order = await storage.createOrder(orderData);
+
+      const ownerEmailHtml = `
+        <h2>Новый заказ</h2>
+        <p><strong>ID заказа:</strong> ${order.id}</p>
+        <p><strong>Товар:</strong> ${product.name}</p>
+        <p><strong>Артикул:</strong> ${product.sku}</p>
+        <p><strong>Количество:</strong> ${order.quantity}</p>
+        <p><strong>Сумма:</strong> ${order.finalAmount} РУБ</p>
+        <p><strong>Способ оплаты:</strong> ${order.paymentMethod}</p>
+        <p><strong>Статус:</strong> ${order.paymentStatus}</p>
+        <p><strong>Зарезервировано до:</strong> ${order.reservedUntil.toLocaleString('ru-RU')}</p>
+      `;
+
+      await sendEmail(OWNER_EMAIL, `Новый заказ #${order.id}`, ownerEmailHtml);
       
       res.status(201).json({
         success: true,
@@ -316,146 +375,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/payment/crypto", async (req, res) => {
-    try {
-      const { amount, currency, orderId, description } = req.body;
-
-      if (!amount || !currency) {
-        res.status(400).json({
-          success: false,
-          message: "Не указана сумма или валюта",
-        });
-        return;
-      }
-
-      // Создаем платеж через NOWPayments API
-      const nowPaymentsResponse = await fetch("https://api.nowpayments.io/v1/invoice", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": process.env.NOWPAYMENTS_API_KEY || "",
-        },
-        body: JSON.stringify({
-          price_amount: amount,
-          price_currency: "rub",
-          order_id: orderId,
-          order_description: description,
-          ipn_callback_url: `${process.env.SITE_URL || 'http://localhost:5000'}/api/payment/crypto/webhook`,
-          success_url: `${process.env.SITE_URL || 'http://localhost:5000'}/?payment=success`,
-          cancel_url: `${process.env.SITE_URL || 'http://localhost:5000'}/?payment=cancelled`,
-        }),
-      });
-
-      const paymentData = await nowPaymentsResponse.json();
-
-      if (paymentData.invoice_url) {
-        res.json({
-          success: true,
-          paymentUrl: paymentData.invoice_url,
-          invoiceId: paymentData.id,
-        });
-      } else {
-        throw new Error("Failed to create NOWPayments invoice");
-      }
-    } catch (error) {
-      console.error("Error creating crypto payment:", error);
-      res.status(500).json({
-        success: false,
-        message: "Ошибка при создании платежа. Пожалуйста, попробуйте позже.",
-      });
-    }
-  });
-
-  app.post("/api/payment/rub", async (req, res) => {
-    try {
-      const { amount, paymentMethod, productId, quantity } = req.body;
-
-      if (!amount) {
-        res.status(400).json({
-          success: false,
-          message: "Не указана сумма",
-        });
-        return;
-      }
-
-      // Для демонстрации: создаём локальный ордер
-      // В боевом варианте нужна интеграция с Yandex.Kassa, Sberbank, или другим русским сервисом
-      const orderId = `order-${Date.now()}`;
-
-      if (process.env.YANDEX_SHOP_ID && process.env.YANDEX_SHOP_PASSWORD) {
-        // Yandex.Kassa интеграция
-        const yandexResponse = await fetch("https://payment.yandex.net/api/v3/payments", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Basic ${Buffer.from(`${process.env.YANDEX_SHOP_ID}:${process.env.YANDEX_SHOP_PASSWORD}`).toString('base64')}`,
-            "Idempotence-Key": orderId,
-          },
-          body: JSON.stringify({
-            amount: {
-              value: (amount / 100).toFixed(2),
-              currency: "RUB",
-            },
-            payment_method_data: {
-              type: paymentMethod === "card" ? "card" : "bank_card",
-            },
-            confirmation: {
-              type: "redirect",
-              return_url: `${process.env.SITE_URL || 'http://localhost:5000'}/?payment=success`,
-            },
-            description: `Заказ ${orderId}`,
-          }),
-        });
-
-        const yandexData = await yandexResponse.json();
-        if (yandexData.confirmation?.confirmation_url) {
-          res.json({
-            success: true,
-            paymentUrl: yandexData.confirmation.confirmation_url,
-            paymentId: yandexData.id,
-          });
-          return;
-        }
-      }
-
-      // Fallback: возвращаем QR для SBP или другого способа
-      res.json({
-        success: true,
-        message: "Платеж инициирован",
-        orderId,
-        amount: amount / 100,
-        paymentUrl: `${process.env.SITE_URL || 'http://localhost:5000'}/?order=${orderId}`,
-      });
-    } catch (error) {
-      console.error("Error creating RUB payment:", error);
-      res.status(500).json({
-        success: false,
-        message: "Ошибка при создании платежа в рублях",
-      });
-    }
-  });
-
-  app.post("/api/payment/crypto/webhook", async (req, res) => {
-    try {
-      const { order_id, payment_status, amount_paid } = req.body;
-
-      console.log("NOWPayments webhook received:", {
-        order_id,
-        payment_status,
-        amount_paid,
-      });
-
-      if (payment_status === "finished") {
-        // Обновляем статус заказа
-        res.json({ success: true });
-      } else {
-        res.json({ success: true });
-      }
-    } catch (error) {
-      console.error("Error processing webhook:", error);
-      res.status(500).json({ success: false });
-    }
-  });
 
   const httpServer = createServer(app);
 
