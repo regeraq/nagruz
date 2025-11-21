@@ -267,15 +267,6 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
             <Button 
               size="lg" 
-              onClick={handleBuyClick}
-              data-testid="button-hero-buy"
-              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0 animate-pulse-border"
-            >
-              <ShoppingCart className="mr-2 h-5 w-5 transition-all duration-300 group-hover:rotate-12" />
-              Купить
-            </Button>
-            <Button 
-              size="lg" 
               onClick={scrollToContact}
               data-testid="button-hero-cta-primary"
               className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold group"
@@ -415,6 +406,18 @@ export default function Home() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+
+          <div className="mt-16 flex justify-center">
+            <Button 
+              size="lg" 
+              onClick={handleBuyClick}
+              data-testid="button-benefits-buy"
+              className="text-base px-10 h-12 magnetic-btn shadow-lg shadow-green-600/40 hover:shadow-green-600/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
+            >
+              <ShoppingCart className="mr-2 h-5 w-5 transition-all duration-300 group-hover:rotate-12" />
+              Купить {device.name}
+            </Button>
           </div>
         </div>
       </section>

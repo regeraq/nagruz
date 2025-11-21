@@ -283,20 +283,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const order = await storage.createOrder(orderData);
 
       const ownerEmailHtml = `
-        <h2>Новый заказ</h2>
-        <p><strong>ID заказа:</strong> ${order.id}</p>
-        <h3>Контактные данные:</h3>
-        <p><strong>Имя:</strong> ${order.customerName || 'Не указано'}</p>
-        <p><strong>Email:</strong> ${order.customerEmail || 'Не указано'}</p>
-        <p><strong>Телефон:</strong> ${order.customerPhone || 'Не указано'}</p>
-        <h3>Детали заказа:</h3>
-        <p><strong>Товар:</strong> ${product.name}</p>
-        <p><strong>Артикул:</strong> ${product.sku}</p>
-        <p><strong>Количество:</strong> ${order.quantity}</p>
-        <p><strong>Сумма:</strong> ${order.finalAmount} РУБ</p>
-        <p><strong>Способ оплаты:</strong> ${order.paymentMethod}</p>
-        <p><strong>Статус:</strong> ${order.paymentStatus}</p>
-        <p><strong>Зарезервировано до:</strong> ${order.reservedUntil ? order.reservedUntil.toLocaleString('ru-RU') : 'Не установлено'}</p>
+        <div style="font-family: Arial, sans-serif; color: #333;">
+          <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">Новый заказ</h2>
+          
+          <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <p style="margin: 5px 0;"><strong>ID заказа:</strong> <code style="background: #eee; padding: 3px 6px;">${order.id}</code></p>
+          </div>
+          
+          <h3 style="color: #1a1a1a; margin-top: 20px;">Контактные данные клиента:</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li style="padding: 5px 0;"><strong>Имя:</strong> ${order.customerName || 'Не указано'}</li>
+            <li style="padding: 5px 0;"><strong>Email:</strong> ${order.customerEmail || 'Не указано'}</li>
+            <li style="padding: 5px 0;"><strong>Телефон:</strong> ${order.customerPhone || 'Не указано'}</li>
+          </ul>
+          
+          <h3 style="color: #1a1a1a; margin-top: 20px;">Детали заказа:</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr style="background: #f0f0f0;">
+              <td style="padding: 8px; border: 1px solid #ddd;"><strong>Параметр</strong></td>
+              <td style="padding: 8px; border: 1px solid #ddd;"><strong>Значение</strong></td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border: 1px solid #ddd;">Товар</td>
+              <td style="padding: 8px; border: 1px solid #ddd;">${product.name}</td>
+            </tr>
+            <tr style="background: #fafafa;">
+              <td style="padding: 8px; border: 1px solid #ddd;">Артикул</td>
+              <td style="padding: 8px; border: 1px solid #ddd;">${product.sku}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border: 1px solid #ddd;">Количество</td>
+              <td style="padding: 8px; border: 1px solid #ddd;">${order.quantity} шт.</td>
+            </tr>
+            <tr style="background: #fafafa;">
+              <td style="padding: 8px; border: 1px solid #ddd;">Сумма</td>
+              <td style="padding: 8px; border: 1px solid #ddd;"><strong>${order.finalAmount} РУБ</strong></td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border: 1px solid #ddd;">Способ оплаты</td>
+              <td style="padding: 8px; border: 1px solid #ddd;">${order.paymentMethod}</td>
+            </tr>
+            <tr style="background: #fafafa;">
+              <td style="padding: 8px; border: 1px solid #ddd;">Статус</td>
+              <td style="padding: 8px; border: 1px solid #ddd;">${order.paymentStatus}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border: 1px solid #ddd;">Резервация до</td>
+              <td style="padding: 8px; border: 1px solid #ddd;">${order.reservedUntil ? new Date(order.reservedUntil).toLocaleString('ru-RU') : 'Не установлено'}</td>
+            </tr>
+          </table>
+          
+          <p style="margin-top: 20px; color: #666; font-size: 12px;">
+            Это автоматическое письмо. Пожалуйста, свяжитесь с клиентом по предоставленным контактным данным.
+          </p>
+        </div>
       `;
 
       await sendEmail(OWNER_EMAIL, `Новый заказ #${order.id}`, ownerEmailHtml);
