@@ -593,6 +593,18 @@ export default function Home() {
               </Card>
             </TabsContent>
           </Tabs>
+          
+          <div className="flex justify-center mt-12 animate-fade-up">
+            <Button 
+              size="lg" 
+              onClick={handleBuyClick}
+              data-testid="button-specifications-buy"
+              className="text-base px-10 h-12 shadow-lg shadow-green-600/40 hover:shadow-green-600/70 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
+            >
+              <ShoppingCart className="mr-2 h-5 w-5 transition-all duration-300 group-hover:rotate-12" />
+              Заказать {device.name}
+            </Button>
+          </div>
         </div>
       </section>
 
