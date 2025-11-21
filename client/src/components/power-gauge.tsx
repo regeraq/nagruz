@@ -10,6 +10,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const needleAngleRef = useRef<number>(0);
   const isHoveredRef = useRef(false);
   const hoverAnimationRef = useRef<number>(0);
+  const hoverCyclesRef = useRef<number>(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -151,17 +152,22 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       currentAngle = -135 + (targetAngle - (-135)) * easeProgress;
       needleAngleRef.current = currentAngle;
 
-      // Calculate hover offset (oscillation)
-      const hoverOffset = isHoveredRef.current 
-        ? Math.sin(hoverAnimationRef.current * 0.08) * 6 
-        : 0;
+      // Calculate hover offset (oscillation) - 2 cycles only
+      let hoverOffset = 0;
+      if (hoverCyclesRef.current > 0) {
+        hoverOffset = Math.sin(hoverAnimationRef.current * 0.08) * 6;
+        hoverAnimationRef.current++;
+        
+        // 2 complete cycles = 2 * 2π ≈ 157 frames (at 0.08 rate)
+        if (hoverAnimationRef.current > 157) {
+          hoverCyclesRef.current = 0;
+          hoverAnimationRef.current = 0;
+        }
+      }
 
       drawGauge(currentAngle, hoverOffset);
 
-      if (animationStep < totalSteps || isHoveredRef.current) {
-        if (isHoveredRef.current) {
-          hoverAnimationRef.current++;
-        }
+      if (animationStep < totalSteps || hoverCyclesRef.current > 0) {
         animationRef.current = requestAnimationFrame(animate);
       }
     };
@@ -183,12 +189,11 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     <div 
       className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/20 hover:shadow-primary/40 transition-all duration-700 group hover:scale-105 hover:shadow-primary/50 cursor-pointer"
       onMouseEnter={() => {
-        isHoveredRef.current = true;
+        hoverCyclesRef.current = 1;
         hoverAnimationRef.current = 0;
       }}
       onMouseLeave={() => {
-        isHoveredRef.current = false;
-        hoverAnimationRef.current = 0;
+        // No need to reset, animation will stop after cycles complete
       }}
     >
       <canvas
