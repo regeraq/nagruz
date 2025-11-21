@@ -152,20 +152,24 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       currentAngle = -135 + (targetAngle - (-135)) * easeProgress;
       needleAngleRef.current = currentAngle;
 
-      // Calculate hover offset (oscillation) - 2 cycles only
+      // Calculate hover offset - replay animation like on device switch
       let hoverOffset = 0;
       if (hoverCyclesRef.current > 0) {
-        hoverOffset = Math.sin(hoverAnimationRef.current * 0.08) * 6;
+        const hoverProgress = hoverAnimationRef.current / totalSteps;
+        const hoverEase = 1 - Math.pow(1 - hoverProgress, 3); // Same ease out
+        // Animate from start to end (same as initial animation)
+        hoverOffset = (targetAngle - (-135)) * hoverEase;
         hoverAnimationRef.current++;
         
-        // 2 complete cycles = 2 * 2π ≈ 157 frames (at 0.08 rate)
-        if (hoverAnimationRef.current > 157) {
+        if (hoverAnimationRef.current >= totalSteps) {
           hoverCyclesRef.current = 0;
           hoverAnimationRef.current = 0;
         }
       }
 
-      drawGauge(currentAngle, hoverOffset);
+      // When hovering, use animated angle; otherwise use current angle
+      const displayAngle = hoverCyclesRef.current > 0 ? (-135 + hoverOffset) : currentAngle;
+      drawGauge(displayAngle, 0);
 
       if (animationStep < totalSteps || hoverCyclesRef.current > 0) {
         animationRef.current = requestAnimationFrame(animate);
