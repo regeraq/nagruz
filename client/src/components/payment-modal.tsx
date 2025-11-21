@@ -154,6 +154,13 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   };
 
 
+  const handleProposal = () => {
+    onClose();
+    setTimeout(() => {
+      document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+  };
+
   const handlePayment = () => {
     if (paymentStatus === "processing") return;
 
@@ -443,6 +450,14 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
               data-testid="button-back-to-shopping"
             >
               Вернуться к покупкам
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleProposal}
+              className="flex-1"
+              data-testid="button-request-proposal"
+            >
+              Коммерческое предложение
             </Button>
             <Button
               onClick={handlePayment}
