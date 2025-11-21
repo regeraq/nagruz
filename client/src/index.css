@@ -470,4 +470,227 @@
   .card-hover:hover {
     transform: translateY(-6px) scale(1.01);
   }
+
+  /* ====== ULTRA PREMIUM ANIMATIONS ====== */
+
+  /* Liquid swipe animation */
+  @keyframes liquidSwipe {
+    0% {
+      transform: translateX(-100%) skewX(-45deg);
+      opacity: 0;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(100%) skewX(-45deg);
+      opacity: 0;
+    }
+  }
+
+  /* Blur in animation */
+  @keyframes blurIn {
+    from {
+      filter: blur(10px);
+      opacity: 0;
+    }
+    to {
+      filter: blur(0);
+      opacity: 1;
+    }
+  }
+
+  /* Neon glow pulse */
+  @keyframes neonPulse {
+    0%, 100% {
+      text-shadow: 0 0 10px rgba(26, 148, 255, 0.5), 0 0 20px rgba(26, 148, 255, 0.3);
+    }
+    50% {
+      text-shadow: 0 0 20px rgba(26, 148, 255, 0.8), 0 0 40px rgba(26, 148, 255, 0.5);
+    }
+  }
+
+  /* Shimmer text */
+  @keyframes shimmerText {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+
+  /* Rotate in 3D */
+  @keyframes rotateIn3D {
+    from {
+      transform: rotateX(90deg) rotateY(0deg);
+      opacity: 0;
+    }
+    to {
+      transform: rotateX(0) rotateY(0deg);
+      opacity: 1;
+    }
+  }
+
+  /* Bounce elastic */
+  @keyframes bounceElastic {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    25% {
+      transform: translateY(-15px);
+    }
+    50% {
+      transform: translateY(-30px);
+    }
+    75% {
+      transform: translateY(-15px);
+    }
+  }
+
+  /* Glass morphism blur effect */
+  @keyframes glassMorphIn {
+    from {
+      backdrop-filter: blur(0px);
+      opacity: 0;
+    }
+    to {
+      backdrop-filter: blur(10px);
+      opacity: 1;
+    }
+  }
+
+  /* Gradient shift animation */
+  @keyframes gradientShift {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  /* Premium utility classes */
+  .animate-liquid-swipe {
+    animation: liquidSwipe 2s ease-in-out;
+  }
+
+  .animate-blur-in {
+    animation: blurIn 0.8s ease-out;
+  }
+
+  .animate-neon-pulse {
+    animation: neonPulse 2s ease-in-out infinite;
+  }
+
+  .animate-shimmer {
+    animation: shimmerText 3s linear infinite;
+    background-size: 200% 100%;
+  }
+
+  .animate-rotate-3d {
+    animation: rotateIn3D 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .animate-bounce-elastic {
+    animation: bounceElastic 2.5s ease-in-out infinite;
+  }
+
+  .animate-glass-morph {
+    animation: glassMorphIn 0.8s ease-out;
+  }
+
+  .animate-gradient-shift {
+    animation: gradientShift 4s ease infinite;
+    background-size: 200% 200%;
+  }
+
+  /* Enhanced blur effect */
+  .blur-premium {
+    backdrop-filter: blur(12px);
+    background: rgba(10, 14, 39, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Premium shadow */
+  .shadow-premium {
+    box-shadow: 
+      0 0 20px rgba(26, 148, 255, 0.3),
+      0 0 40px rgba(26, 148, 255, 0.1);
+  }
+
+  /* Spotlight effect on hover */
+  .spotlight {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .spotlight::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(26, 148, 255, 0.3) 0%, transparent 70%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .spotlight:hover::before {
+    opacity: 1;
+  }
+
+  /* Smooth page load */
+  .page-load {
+    animation: pageIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Text gradient animation */
+  .text-gradient-animated {
+    background: linear-gradient(90deg, #1a94ff, #00d4ff, #1a94ff);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradientShift 3s ease infinite;
+  }
+
+  /* Enhanced transitions for all interactive elements */
+  button, [role="button"] {
+    position: relative;
+    overflow: hidden;
+  }
+
+  button::before, [role="button"]::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  button:active::before, [role="button"]:active::before {
+    width: 300px;
+    height: 300px;
+    animation: ripple 0.6s ease-out;
+  }
+
+  @keyframes ripple {
+    0% {
+      opacity: 0.5;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
 }

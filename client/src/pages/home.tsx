@@ -20,6 +20,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Navigation } from "@/components/navigation";
+import { Visualization3D } from "@/components/3d-visualization";
 
 const navLinks = [
   { label: "Главная", id: "hero" },
@@ -183,7 +184,7 @@ export default function Home() {
       />
       <section
         id="hero"
-        className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-background via-background to-primary/5"
+        className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-background via-background to-primary/5 page-load"
       >
         <div className="absolute inset-0 bg-grid-pattern opacity-30 animate-fade-up" />
         
@@ -291,17 +292,8 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="relative">
-              <div className="aspect-square bg-gradient-to-br from-primary/20 to-tech-cyan/20 rounded-xl overflow-hidden border border-border relative hover:border-primary/50 transition-all duration-500 hover:shadow-lg hover:shadow-primary/20">
-                <div className="absolute inset-0 bg-grid-pattern opacity-20" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center p-8 group">
-                    <Gauge className="h-32 w-32 text-primary mx-auto mb-4 group-hover:animate-float transition-transform duration-500" />
-                    <div className="text-6xl font-bold font-mono text-primary mb-2 group-hover:scale-105 transition-transform duration-300">{device.maxPower.split(" ")[0]}</div>
-                    <div className="text-xl font-medium text-muted-foreground">кВт</div>
-                  </div>
-                </div>
-              </div>
+            <div className="relative animate-blur-in" style={{ animationDelay: "0.3s" }}>
+              <Visualization3D />
             </div>
           </div>
         </div>
