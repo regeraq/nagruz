@@ -22,7 +22,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
 
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
+      setIsScrolled(window.scrollY > 0);
     };
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
@@ -47,7 +47,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           isScrolled
             ? "bg-background/95 backdrop-blur-md border-b border-border shadow-sm"
-            : "bg-transparent"
+            : "bg-background/50 backdrop-blur-sm"
         }`}
       >
         <nav className="max-w-7xl mx-auto px-6 md:px-8">
@@ -65,7 +65,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
               
               <div className="hidden md:flex items-center gap-1 bg-muted/30 rounded-md p-1">
                 <Button
-                  variant={selectedDevice === "nu-100" ? "secondary" : "ghost"}
+                  variant={selectedDevice === "nu-100" ? "default" : "ghost"}
                   onClick={() => onDeviceChange?.("nu-100")}
                   data-testid="button-device-nu-100"
                   className="min-w-16 h-8 text-xs font-semibold"
@@ -73,7 +73,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                   НУ-100
                 </Button>
                 <Button
-                  variant={selectedDevice === "nu-30" ? "secondary" : "ghost"}
+                  variant={selectedDevice === "nu-30" ? "default" : "ghost"}
                   onClick={() => onDeviceChange?.("nu-30")}
                   data-testid="button-device-nu-30"
                   className="min-w-14 h-8 text-xs font-semibold"
