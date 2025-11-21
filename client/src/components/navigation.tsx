@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -59,13 +59,13 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                 data-testid="link-logo"
               >
                 <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary-foreground font-bold text-xl font-mono">НУ</span>
+                  <Gauge className="w-5 h-5 text-primary-foreground" />
                 </div>
               </button>
               
               <div className="hidden md:flex items-center gap-1 bg-muted/30 rounded-md p-1">
                 <Button
-                  variant={selectedDevice === "nu-100" ? "default" : "ghost"}
+                  variant={selectedDevice === "nu-100" ? "secondary" : "ghost"}
                   onClick={() => onDeviceChange?.("nu-100")}
                   data-testid="button-device-nu-100"
                   className="min-w-16 h-8 text-xs font-semibold"
@@ -73,7 +73,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                   НУ-100
                 </Button>
                 <Button
-                  variant={selectedDevice === "nu-30" ? "default" : "ghost"}
+                  variant={selectedDevice === "nu-30" ? "secondary" : "ghost"}
                   onClick={() => onDeviceChange?.("nu-30")}
                   data-testid="button-device-nu-30"
                   className="min-w-14 h-8 text-xs font-semibold"
