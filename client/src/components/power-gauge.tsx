@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from 'react';
 
 interface PowerGaugeProps {
   maxPower: number;
@@ -6,177 +6,192 @@ interface PowerGaugeProps {
 
 export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>();
-  const needleAngleRef = useRef(0);
-  const targetAngleRef = useRef(0);
+  const animationFrameRef = useRef<number>();
+  const needleAngleRef = useRef<number>(-135);
+  const hoverStepRef = useRef<number>(0);
+  const isHoveringRef = useRef<boolean>(false);
+  const isInitialLoadRef = useRef<boolean>(true);
+  const loadStepRef = useRef<number>(0);
 
   useEffect(() => {
+    // Reset animation state on power change
+    isInitialLoadRef.current = true;
+    loadStepRef.current = 0;
+    hoverStepRef.current = 0;
+    
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = 280;
-    const height = 200;
-    const centerX = width / 2;
-    const centerY = height * 0.75;
-    const radius = 100;
+    const size = 300;
+    canvas.width = size;
+    canvas.height = size;
 
-    // Calculate target angle (from -90 to 90 degrees for half circle)
-    const targetAngle = (-90 + (maxPower / (maxPower * 2)) * 180) * (Math.PI / 180);
-    targetAngleRef.current = targetAngle;
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const radius = 120;
 
-    const drawGauge = (needleAngle: number) => {
-      // Clear canvas with gradient background
-      const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-      bgGradient.addColorStop(0, "hsl(210, 42%, 98%)");
-      bgGradient.addColorStop(1, "hsl(210, 42%, 96%)");
+    // Calculate target angle for current power level (0-150 scale)
+    const targetAngle = -135 + (maxPower / 150) * 270;
+    const totalSteps = 50;
+
+    const drawGauge = (angle: number) => {
+      ctx.clearRect(0, 0, size, size);
+
+      const bgGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius + 20);
+      bgGradient.addColorStop(0, 'rgba(26, 148, 255, 0.02)');
+      bgGradient.addColorStop(1, 'rgba(26, 148, 255, 0.05)');
       ctx.fillStyle = bgGradient;
-      ctx.fillRect(0, 0, width, height);
-
-      // Draw outer circle shadow
-      ctx.shadowColor = "rgba(26, 148, 255, 0.2)";
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetY = 8;
-
-      // Draw gauge circle
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-      ctx.strokeStyle = "rgba(26, 148, 255, 0.3)";
-      ctx.lineWidth = 3;
+      ctx.arc(centerX, centerY, radius + 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(26, 148, 255, 0.4)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.shadowColor = "transparent";
-
-      // Draw gauge arc background
+      ctx.strokeStyle = 'rgba(26, 148, 255, 0.2)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius - 8, (-90 * Math.PI) / 180, (90 * Math.PI) / 180);
-      ctx.strokeStyle = "rgba(200, 200, 200, 0.4)";
-      ctx.lineWidth = 12;
-      ctx.lineCap = "round";
+      ctx.arc(centerX, centerY, radius - 40, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Draw colored arc (0 to max)
-      const arcGradient = ctx.createConicGradient((-90 * Math.PI) / 180, centerX, centerY);
-      arcGradient.addColorStop(0, "hsl(142, 72%, 42%)"); // Green
-      arcGradient.addColorStop(0.7, "hsl(43, 88%, 58%)"); // Yellow
-      arcGradient.addColorStop(1, "hsl(0, 84%, 52%)"); // Red
+      const minAngle = (-135 * Math.PI) / 180;
+      const maxAngle = (135 * Math.PI) / 180;
 
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius - 8, (-90 * Math.PI) / 180, needleAngle);
-      ctx.strokeStyle = arcGradient;
-      ctx.lineWidth = 12;
-      ctx.lineCap = "round";
-      ctx.stroke();
+      for (let i = 0; i <= 150; i += 10) {
+        const scaleAngle = minAngle + ((i / 150) * (maxAngle - minAngle));
+        const isMainTick = i % 50 === 0;
+        const tickLength = isMainTick ? 20 : 10;
+        const tickWidth = isMainTick ? 2 : 1;
 
-      // Draw tick marks
-      for (let i = 0; i <= 10; i++) {
-        const angle = (-90 + (i / 10) * 180) * (Math.PI / 180);
-        const isMainTick = i % 2 === 0;
-        const tickLength = isMainTick ? 16 : 8;
+        const x1 = centerX + Math.cos(scaleAngle) * (radius - 5);
+        const y1 = centerY + Math.sin(scaleAngle) * (radius - 5);
+        const x2 = centerX + Math.cos(scaleAngle) * (radius - 5 - tickLength);
+        const y2 = centerY + Math.sin(scaleAngle) * (radius - 5 - tickLength);
 
-        const x1 = centerX + Math.cos(angle) * (radius - 3);
-        const y1 = centerY + Math.sin(angle) * (radius - 3);
-        const x2 = centerX + Math.cos(angle) * (radius - 3 - tickLength);
-        const y2 = centerY + Math.sin(angle) * (radius - 3 - tickLength);
-
-        ctx.strokeStyle = isMainTick ? "rgba(26, 30, 44, 0.8)" : "rgba(26, 30, 44, 0.4)";
-        ctx.lineWidth = isMainTick ? 2 : 1;
-        ctx.lineCap = "round";
+        ctx.strokeStyle = isMainTick ? 'rgba(26, 148, 255, 0.8)' : 'rgba(26, 148, 255, 0.5)';
+        ctx.lineWidth = tickWidth;
+        ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
 
-        // Draw numbers
         if (isMainTick) {
-          const numX = centerX + Math.cos(angle) * (radius - 35);
-          const numY = centerY + Math.sin(angle) * (radius - 35);
-          ctx.fillStyle = "rgba(26, 30, 44, 0.7)";
-          ctx.font = "bold 13px IBM Plex Mono";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(String(Math.round((i / 10) * maxPower)), numX, numY);
+          const numX = centerX + Math.cos(scaleAngle) * (radius - 50);
+          const numY = centerY + Math.sin(scaleAngle) * (radius - 50);
+          ctx.fillStyle = 'rgba(26, 148, 255, 0.9)';
+          ctx.font = 'bold 16px IBM Plex Mono';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(i.toString(), numX, numY);
         }
       }
 
-      // Draw needle shadow
-      ctx.shadowColor = "rgba(26, 148, 255, 0.4)";
-      ctx.shadowBlur = 8;
-      ctx.strokeStyle = "rgba(26, 148, 255, 0.3)";
-      ctx.lineWidth = 6;
+      const needleAngleRad = (angle * Math.PI) / 180;
+      const needleLength = radius - 50;
+
+      ctx.strokeStyle = 'rgba(26, 148, 255, 0.15)';
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
       ctx.lineTo(
-        centerX + Math.cos(needleAngle) * (radius - 20),
-        centerY + Math.sin(needleAngle) * (radius - 20)
+        centerX + Math.cos(needleAngleRad) * needleLength,
+        centerY + Math.sin(needleAngleRad) * needleLength
       );
       ctx.stroke();
 
-      ctx.shadowColor = "transparent";
-
-      // Draw needle
-      ctx.strokeStyle = "hsl(210, 100%, 52%)";
+      ctx.strokeStyle = 'hsl(210, 100%, 55%)';
       ctx.lineWidth = 4;
-      ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
       ctx.lineTo(
-        centerX + Math.cos(needleAngle) * (radius - 20),
-        centerY + Math.sin(needleAngle) * (radius - 20)
+        centerX + Math.cos(needleAngleRad) * needleLength,
+        centerY + Math.sin(needleAngleRad) * needleLength
       );
       ctx.stroke();
 
-      // Draw center circle
+      ctx.fillStyle = 'rgba(26, 148, 255, 0.2)';
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 10, 0, 2 * Math.PI);
-      ctx.fillStyle = "hsl(210, 100%, 52%)";
+      ctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
       ctx.fill();
 
+      ctx.fillStyle = 'hsl(210, 100%, 55%)';
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 6, 0, 2 * Math.PI);
-      ctx.fillStyle = "hsl(210, 42%, 98%)";
+      ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
       ctx.fill();
 
-      // Draw kW label
-      ctx.fillStyle = "rgba(100, 100, 100, 0.8)";
-      ctx.font = "12px IBM Plex Sans";
-      ctx.textAlign = "center";
-      ctx.fillText("кВт", centerX, centerY + radius + 30);
+      ctx.fillStyle = 'rgba(10, 14, 39, 1)';
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+      ctx.fill();
     };
+
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
     const animate = () => {
-      // Smooth animation towards target angle
-      const angleDiff = targetAngleRef.current - needleAngleRef.current;
-      if (Math.abs(angleDiff) > 0.01) {
-        needleAngleRef.current += angleDiff * 0.1;
-      } else {
-        needleAngleRef.current = targetAngleRef.current;
+      let angle = needleAngleRef.current;
+      let shouldContinue = false;
+
+      if (isHoveringRef.current && hoverStepRef.current < totalSteps) {
+        shouldContinue = true;
+        const progress = hoverStepRef.current / totalSteps;
+        angle = -135 + (targetAngle - (-135)) * easeOutCubic(progress);
+        hoverStepRef.current++;
+      } else if (isInitialLoadRef.current && loadStepRef.current < totalSteps) {
+        shouldContinue = true;
+        const progress = loadStepRef.current / totalSteps;
+        angle = -135 + (targetAngle - (-135)) * easeOutCubic(progress);
+        needleAngleRef.current = angle;
+        loadStepRef.current++;
+      } else if (isInitialLoadRef.current) {
+        isInitialLoadRef.current = false;
+        needleAngleRef.current = targetAngle;
       }
 
-      drawGauge(needleAngleRef.current);
-      animationRef.current = requestAnimationFrame(animate);
+      drawGauge(angle);
+
+      if (shouldContinue) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+      }
     };
 
-    canvas.width = width;
-    canvas.height = height;
     animate();
 
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
     };
   }, [maxPower]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full">
+    <div
+      className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/20 hover:shadow-primary/40 transition-all duration-700 group hover:scale-105 hover:shadow-primary/50 cursor-pointer"
+      onMouseEnter={() => {
+        isHoveringRef.current = true;
+        hoverStepRef.current = 0;
+      }}
+      onMouseLeave={() => {
+        isHoveringRef.current = false;
+      }}
+    >
       <canvas
         ref={canvasRef}
-        className="rounded-lg drop-shadow-lg hover:drop-shadow-xl transition-all duration-300 animate-fade-up"
-        style={{ animationDelay: "0.3s" }}
+        className="drop-shadow-2xl drop-shadow-primary/50 transition-all duration-300 group-hover:drop-shadow-[0_0_20px_rgba(26,148,255,0.8)]"
       />
+
+      <div className="text-center">
+        <div className="text-4xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-primary via-tech-cyan to-primary animate-gradient-shift">
+          {maxPower} кВт
+        </div>
+      </div>
     </div>
   );
 }
