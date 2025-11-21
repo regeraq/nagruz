@@ -4,7 +4,37 @@ import { storage } from "./storage";
 import { insertContactSubmissionSchema, insertOrderSchema } from "@shared/schema";
 import { z } from "zod";
 
+async function getCryptoRates(): Promise<{ btc: number; eth: number; usdt: number; ltc: number }> {
+  try {
+    const response = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,litecoin&vs_currencies=rub'
+    );
+    const data = await response.json();
+    return {
+      btc: data.bitcoin.rub || 0,
+      eth: data.ethereum.rub || 0,
+      usdt: data.tether.rub || 0,
+      ltc: data.litecoin.rub || 0,
+    };
+  } catch (error) {
+    console.error("Error fetching crypto rates:", error);
+    return { btc: 0, eth: 0, usdt: 0, ltc: 0 };
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.get("/api/crypto-rates", async (req, res) => {
+    try {
+      const rates = await getCryptoRates();
+      res.json(rates);
+    } catch (error) {
+      console.error("Error fetching crypto rates:", error);
+      res.status(500).json({
+        success: false,
+        message: "Ошибка при получении курсов криптовалют",
+      });
+    }
+  });
   app.post("/api/contact", async (req, res) => {
     try {
       const validatedData = insertContactSubmissionSchema.parse(req.body);

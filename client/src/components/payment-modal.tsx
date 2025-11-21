@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { X, Plus, Minus, CreditCard, Smartphone, Coins, QrCode, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { X, Plus, Minus, CreditCard, QrCode, Clock, CheckCircle2, AlertCircle, Loader2, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Product } from "@shared/schema";
@@ -18,16 +18,14 @@ interface PaymentModalProps {
   product: Product | null;
 }
 
-type PaymentMethod = 
-  | "card" 
-  | "yoomoney" 
-  | "sbp" 
-  | "qiwi" 
-  | "mobile" 
-  | "bitcoin" 
-  | "ethereum" 
-  | "usdt" 
-  | "litecoin";
+interface CryptoRates {
+  btc: number;
+  eth: number;
+  usdt: number;
+  ltc: number;
+}
+
+type PaymentMethod = "card" | "sbp" | "bitcoin" | "ethereum" | "usdt" | "litecoin";
 
 type PaymentStatus = "idle" | "processing" | "success" | "error";
 
@@ -40,8 +38,12 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const [timeLeft, setTimeLeft] = useState(15 * 60);
   const [cardNumber, setCardNumber] = useState("");
   const [cryptoAddress, setCryptoAddress] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
   const { toast } = useToast();
+
+  const { data: cryptoRates, isLoading: ratesLoading } = useQuery<CryptoRates>({
+    queryKey: ['/api/crypto-rates'],
+    enabled: isOpen && ["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod),
+  });
 
   useEffect(() => {
     if (isOpen && timeLeft > 0) {
@@ -61,7 +63,6 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       setTimeLeft(15 * 60);
       setCardNumber("");
       setCryptoAddress("");
-      setPhoneNumber("");
     }
   }, [isOpen]);
 
@@ -116,6 +117,37 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const discountAmount = (totalAmount * discount) / 100;
   const finalAmount = totalAmount - discountAmount;
 
+  const getCryptoAmount = () => {
+    if (!cryptoRates) return 0;
+    switch (paymentMethod) {
+      case "bitcoin":
+        return finalAmount / cryptoRates.btc;
+      case "ethereum":
+        return finalAmount / cryptoRates.eth;
+      case "usdt":
+        return finalAmount / cryptoRates.usdt;
+      case "litecoin":
+        return finalAmount / cryptoRates.ltc;
+      default:
+        return 0;
+    }
+  };
+
+  const getCryptoSymbol = () => {
+    switch (paymentMethod) {
+      case "bitcoin":
+        return "BTC";
+      case "ethereum":
+        return "ETH";
+      case "usdt":
+        return "USDT";
+      case "litecoin":
+        return "LTC";
+      default:
+        return "";
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -128,6 +160,12 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       currency: 'RUB',
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  const formatCrypto = (amount: number) => {
+    if (amount === 0) return "0";
+    if (amount < 0.0001) return amount.toExponential(4);
+    return amount.toFixed(8).replace(/\.?0+$/, '');
   };
 
   const handleQuantityChange = (delta: number) => {
@@ -158,7 +196,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
         method: paymentMethod,
         cardNumber: cardNumber ? `****${cardNumber.slice(-4)}` : undefined,
         cryptoAddress: cryptoAddress || undefined,
-        phoneNumber: phoneNumber || undefined,
+        cryptoAmount: ["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) ? getCryptoAmount() : undefined,
       }),
     };
 
@@ -169,24 +207,31 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
   const getPaymentMethodIcon = (method: PaymentMethod) => {
     switch (method) {
-      case "card": return <CreditCard className="w-5 h-5" />;
-      case "mobile": return <Smartphone className="w-5 h-5" />;
-      case "bitcoin": return <SiBitcoin className="w-5 h-5" />;
-      case "ethereum": return <SiEthereum className="w-5 h-5" />;
-      case "usdt": return <Coins className="w-5 h-5" />;
-      case "litecoin": return <SiLitecoin className="w-5 h-5" />;
-      default: return <QrCode className="w-5 h-5" />;
+      case "card":
+        return <CreditCard className="w-5 h-5" />;
+      case "sbp":
+        return <QrCode className="w-5 h-5" />;
+      case "bitcoin":
+        return <SiBitcoin className="w-5 h-5 text-orange-500" />;
+      case "ethereum":
+        return <SiEthereum className="w-5 h-5 text-blue-500" />;
+      case "usdt":
+        return <TrendingUp className="w-5 h-5 text-green-500" />;
+      case "litecoin":
+        return <TrendingUp className="w-5 h-5 text-gray-500" />;
+      default:
+        return <CreditCard className="w-5 h-5" />;
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-scale">
-      <div 
+      <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
         data-testid="modal-overlay"
       />
-      
+
       <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-card/95 backdrop-blur-xl border border-card-border rounded-xl shadow-2xl animate-fade-scale">
         <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-xl border-b border-card-border p-6">
           <div className="flex items-start justify-between">
@@ -197,7 +242,10 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
               <div className="flex items-center gap-2 mt-2">
                 <Clock className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground" data-testid="text-timer">
-                  Резерв: <span className={timeLeft < 60 ? "text-destructive font-semibold" : ""}>{formatTime(timeLeft)}</span>
+                  Резерв:{" "}
+                  <span className={timeLeft < 60 ? "text-destructive font-semibold" : ""}>
+                    {formatTime(timeLeft)}
+                  </span>
                 </span>
               </div>
             </div>
@@ -218,7 +266,9 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
             <div className="space-y-4">
               <div className="flex gap-4 p-4 bg-muted/30 rounded-lg" data-testid="card-product-info">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg" data-testid="text-product-name">{product.name}</h3>
+                  <h3 className="font-semibold text-lg" data-testid="text-product-name">
+                    {product.name}
+                  </h3>
                   <p className="text-sm text-muted-foreground mt-1" data-testid="text-product-sku">
                     Артикул: {product.sku}
                   </p>
@@ -305,14 +355,26 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 <Separator />
                 <div className="flex justify-between text-lg font-semibold" data-testid="price-total">
                   <span>Итого:</span>
-                  <span className="font-mono">{formatPrice(finalAmount)}</span>
+                  <span className="font-mono">
+                    {["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) ? (
+                      <span>
+                        {ratesLoading ? (
+                          <Loader2 className="w-4 h-4 inline animate-spin" />
+                        ) : (
+                          `${formatCrypto(getCryptoAmount())} ${getCryptoSymbol()}`
+                        )}
+                      </span>
+                    ) : (
+                      formatPrice(finalAmount)
+                    )}
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className="space-y-4">
               <Label>Способ оплаты</Label>
-              
+
               <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-card">
@@ -327,35 +389,11 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                     </Label>
                   </div>
 
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-yoomoney">
-                    <RadioGroupItem value="yoomoney" id="yoomoney" />
-                    <Label htmlFor="yoomoney" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      <Coins className="w-5 h-5" />
-                      <span>ЮMoney</span>
-                    </Label>
-                  </div>
-
                   <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-sbp">
                     <RadioGroupItem value="sbp" id="sbp" />
                     <Label htmlFor="sbp" className="flex-1 flex items-center gap-2 cursor-pointer">
                       <QrCode className="w-5 h-5" />
                       <span>СБП (QR-код)</span>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-qiwi">
-                    <RadioGroupItem value="qiwi" id="qiwi" />
-                    <Label htmlFor="qiwi" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      <Smartphone className="w-5 h-5" />
-                      <span>QIWI Кошелек</span>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-mobile">
-                    <RadioGroupItem value="mobile" id="mobile" />
-                    <Label htmlFor="mobile" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      <Smartphone className="w-5 h-5" />
-                      <span>Мобильный платеж</span>
                     </Label>
                   </div>
 
@@ -381,8 +419,8 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                   <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-usdt">
                     <RadioGroupItem value="usdt" id="usdt" />
                     <Label htmlFor="usdt" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      <Coins className="w-5 h-5 text-green-500" />
-                      <span>USDT (TRC-20 / ERC-20)</span>
+                      <TrendingUp className="w-5 h-5 text-green-500" />
+                      <span>USDT (Tether)</span>
                     </Label>
                   </div>
 
@@ -406,40 +444,20 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                     maxLength={16}
                     data-testid="input-card-number"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Комиссия: 2%
-                  </p>
+                  <p className="text-xs text-muted-foreground">Комиссия: 2%</p>
                 </div>
               )}
 
               {["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) && (
                 <div className="mt-4 space-y-3 p-4 bg-muted/30 rounded-lg">
-                  <Label>Адрес кошелька</Label>
+                  <Label>Адрес {getCryptoSymbol()} кошелька</Label>
                   <Input
                     value={cryptoAddress}
                     onChange={(e) => setCryptoAddress(e.target.value)}
-                    placeholder="Введите адрес вашего кошелька"
+                    placeholder={`Введите адрес вашего ${getCryptoSymbol()} кошелька`}
                     data-testid="input-crypto-address"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Комиссия сети: ~0.5%
-                  </p>
-                </div>
-              )}
-
-              {["qiwi", "mobile"].includes(paymentMethod) && (
-                <div className="mt-4 space-y-3 p-4 bg-muted/30 rounded-lg">
-                  <Label>Номер телефона</Label>
-                  <Input
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                    placeholder="+7 (___) ___-__-__"
-                    maxLength={11}
-                    data-testid="input-phone-number"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Комиссия: 1.5%
-                  </p>
+                  <p className="text-xs text-muted-foreground">Комиссия сети: ~0.5%</p>
                 </div>
               )}
             </div>
