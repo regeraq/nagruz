@@ -21,7 +21,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Navigation } from "@/components/navigation";
-import deviceImage from "@assets/image_1763675434884.png";
+import { PowerGauge } from "@/components/power-gauge";
 
 const navLinks = [
   { label: "Главная", id: "hero" },
@@ -296,45 +296,24 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="relative h-80 w-full flex items-center justify-center group">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/40 via-primary/20 to-tech-cyan/40 rounded-2xl blur-3xl group-hover:blur-2xl transition-all duration-500 opacity-60 group-hover:opacity-100" />
-              
-              <div className="relative bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl rounded-2xl border border-primary/30 p-8 shadow-2xl shadow-primary/30 overflow-hidden group-hover:border-primary/50 transition-all duration-500">
-                <div className="absolute inset-0 bg-grid-pattern opacity-10" />
-                
-                <div className="relative flex items-center gap-8">
-                  <div className="flex-shrink-0">
-                    <img 
-                      src={deviceImage} 
-                      alt={device.name}
-                      className="h-64 object-contain filter drop-shadow-2xl drop-shadow-primary/50 group-hover:scale-110 transition-transform duration-500 animate-float"
-                    />
-                  </div>
-                  
-                  <div className="flex-1 space-y-6">
-                    <div className="space-y-2">
-                      <div className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Максимальная мощность</div>
-                      <div className="relative">
-                        <div className="text-7xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-primary via-tech-cyan to-primary animate-gradient-shift">
-                          <span className="counter" data-target={parseInt(device.maxPower.split(" ")[0])}>0</span>
-                        </div>
-                        <div className="text-2xl font-semibold text-primary mt-2">кВт</div>
-                      </div>
+            <div className="grid md:grid-cols-2 gap-8 w-full">
+              <div className="animate-fade-up" style={{ animationDelay: "0.3s" }}>
+                <PowerGauge maxPower={parseInt(device.maxPower.split(" ")[0])} deviceName={device.name} />
+              </div>
+              <div className="animate-fade-up" style={{ animationDelay: "0.4s" }}>
+                <div className="space-y-4 p-6 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 h-full flex flex-col justify-center">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                      <span className="text-muted-foreground">{device.steps}</span>
                     </div>
-                    
-                    <div className="space-y-3 pt-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                        <span className="text-muted-foreground">{device.steps}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-tech-cyan animate-pulse" style={{ animationDelay: "0.2s" }} />
-                        <span className="text-muted-foreground">{device.voltage}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-chart-3 animate-pulse" style={{ animationDelay: "0.4s" }} />
-                        <span className="text-muted-foreground">{device.minVoltage}</span>
-                      </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-tech-cyan animate-pulse" style={{ animationDelay: "0.2s" }} />
+                      <span className="text-muted-foreground">{device.voltage}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-chart-3 animate-pulse" style={{ animationDelay: "0.4s" }} />
+                      <span className="text-muted-foreground">{device.minVoltage}</span>
                     </div>
                   </div>
                 </div>
