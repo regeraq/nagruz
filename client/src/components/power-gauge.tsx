@@ -152,13 +152,14 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       currentAngle = -135 + (targetAngle - (-135)) * easeProgress;
       needleAngleRef.current = currentAngle;
 
-      // Calculate hover offset - replay animation like on device switch
-      let hoverOffset = 0;
+      // Calculate hover animation - replay needle animation like on device switch
+      let displayAngle = currentAngle;
       if (hoverCyclesRef.current > 0) {
         const hoverProgress = hoverAnimationRef.current / totalSteps;
         const hoverEase = 1 - Math.pow(1 - hoverProgress, 3); // Same ease out
-        // Animate from start to end (same as initial animation)
-        hoverOffset = (targetAngle - (-135)) * hoverEase;
+        // Animate from -135 to target angle
+        const hoverAnimAngle = -135 + (targetAngle - (-135)) * hoverEase;
+        displayAngle = hoverAnimAngle;
         hoverAnimationRef.current++;
         
         if (hoverAnimationRef.current >= totalSteps) {
@@ -167,8 +168,6 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         }
       }
 
-      // When hovering, use animated angle; otherwise use current angle
-      const displayAngle = hoverCyclesRef.current > 0 ? (-135 + hoverOffset) : currentAngle;
       drawGauge(displayAngle, 0);
 
       if (animationStep < totalSteps || hoverCyclesRef.current > 0) {
