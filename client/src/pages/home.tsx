@@ -249,16 +249,16 @@ export default function Home() {
           </p>
           
           <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-12 animate-fade-up" style={{ animationDelay: "0.3s" }}>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 hover-elevate cursor-pointer" data-testid="kpi-power">
+            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-power">
               <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power" key={selectedDevice}>{parseInt(device.power)}</span>
               <span className="font-mono text-xs sm:text-sm font-semibold">кВт</span>
             </div>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 hover-elevate cursor-pointer" data-testid="kpi-steps">
+            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-steps">
               <Zap className="h-4 sm:h-5 w-4 sm:w-5 text-tech-cyan" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-steps">{device.steps}</span>
             </div>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-chart-3/50 transition-all duration-300 hover-elevate cursor-pointer" data-testid="kpi-voltage">
+            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-chart-3/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-voltage">
               <Cable className="h-4 sm:h-5 w-4 sm:w-5 text-chart-3" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-voltage">{device.voltage}</span>
             </div>

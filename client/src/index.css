@@ -777,3 +777,19 @@ html.dark body::before {
     transform: translateX(0) scale(1);
   }
 }
+
+/* Hover animation for KPI blocks - fade up effect on hover */
+@keyframes hoverFadeUp {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(-8px);
+  }
+}
+
+.hover-fade-up-animation:hover {
+  animation: hoverFadeUp 0.4s ease-out forwards;
+}
