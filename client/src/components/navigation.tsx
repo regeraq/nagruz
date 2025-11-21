@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, X, Gauge } from "lucide-react";
+import { Menu, X, Gauge, ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -19,14 +19,20 @@ const navLinks = [
 export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: NavigationProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 0);
+      setShowScrollTop(window.scrollY > 300);
     };
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -99,6 +105,17 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
 
             <div className="flex items-center gap-2">
               <ThemeToggle />
+              {showScrollTop && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={scrollToTop}
+                  data-testid="button-scroll-top"
+                  className="hidden md:flex"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+              )}
               <Button
                 onClick={() => scrollToSection("contact")}
                 data-testid="button-cta-header"

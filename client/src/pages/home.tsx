@@ -3,7 +3,7 @@ import { useCounter } from "@/hooks/use-counter";
 import { 
   Zap, Shield, Gauge, Thermometer, Cable, FileCheck, 
   Factory, Battery, Cpu, CheckCircle2, Download, ArrowRight,
-  Phone, Mail, MapPin, Upload, X, Loader2
+  Phone, Mail, MapPin, Upload, X, Loader2, Send
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -561,7 +561,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-2 gap-8 animate-fade-up">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -639,7 +639,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 animate-fade-up">
             {[
               { title: "ГОСТ РФ", desc: "Соответствие ГОСТам" },
               { title: "Безопасность", desc: "Требования РФ" },
@@ -697,7 +697,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-up">
             {[
               {
                 icon: Factory,
@@ -988,6 +988,22 @@ export default function Home() {
                       <div className="text-sm text-muted-foreground" data-testid="text-address">
                         Москва, ул. Промышленная, д. 1
                       </div>
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="flex items-start gap-3" data-testid="contact-telegram">
+                    <Send className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div>
+                      <div className="text-sm font-medium">Telegram</div>
+                      <a 
+                        href="https://t.me/nu_equipment" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
+                        data-testid="link-telegram"
+                      >
+                        @nu_equipment
+                      </a>
                     </div>
                   </div>
                 </CardContent>
