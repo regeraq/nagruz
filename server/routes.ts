@@ -290,7 +290,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         <p><strong>Сумма:</strong> ${order.finalAmount} РУБ</p>
         <p><strong>Способ оплаты:</strong> ${order.paymentMethod}</p>
         <p><strong>Статус:</strong> ${order.paymentStatus}</p>
-        <p><strong>Зарезервировано до:</strong> ${order.reservedUntil.toLocaleString('ru-RU')}</p>
+        <p><strong>Зарезервировано до:</strong> ${order.reservedUntil ? order.reservedUntil.toLocaleString('ru-RU') : 'Не установлено'}</p>
       `;
 
       await sendEmail(OWNER_EMAIL, `Новый заказ #${order.id}`, ownerEmailHtml);

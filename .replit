@@ -44,3 +44,9 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_mem_db:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+RESEND_API_KEY = "re_jmJxivBq_ARSkz9HVT2uWVujswYCC1QFt"
+OWNER_EMAIL = "rostext@gmail.com"
