@@ -9,8 +9,12 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const animationRef = useRef<number>();
   const hoverAnimationRef = useRef<number>(0);
   const hoverCyclesRef = useRef<number>(0);
+  const initialAnimationDoneRef = useRef(false);
 
   useEffect(() => {
+    // Reset on maxPower change
+    initialAnimationDoneRef.current = false;
+    
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -25,16 +29,13 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     const centerY = size / 2;
     const radius = 120;
 
-    // Calculate target angle (0-100% = -135° to 135°)
+    // Calculate target angle based on power
     const percent = Math.min(100, (maxPower / 150) * 100);
-    const targetAngle = -135 + (percent / 100) * 270; // -135 to 135 degrees
+    const targetAngle = -135 + (percent / 100) * 270;
 
-    let currentAngle = -135;
-    let animationStep = 0;
     const totalSteps = 50;
 
     const drawGauge = (angle: number) => {
-      // Clear canvas
       ctx.clearRect(0, 0, size, size);
 
       // Background gradient
@@ -142,16 +143,17 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       ctx.fill();
     };
 
+    let animationStep = 0;
     const animate = () => {
       // Initial load animation
-      if (animationStep < totalSteps) {
+      if (!initialAnimationDoneRef.current && animationStep < totalSteps) {
         animationStep++;
         const progress = animationStep / totalSteps;
-        const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out
-        currentAngle = -135 + (targetAngle - (-135)) * easeProgress;
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        const currentAngle = -135 + (targetAngle - (-135)) * easeProgress;
         drawGauge(currentAngle);
         animationRef.current = requestAnimationFrame(animate);
-      }
+      } 
       // Hover replay animation
       else if (hoverCyclesRef.current > 0) {
         const hoverProgress = hoverAnimationRef.current / totalSteps;
@@ -168,9 +170,27 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       }
     };
 
+    // Mark initial animation as done after completion
+    const checkInitialDone = () => {
+      if (animationStep >= totalSteps) {
+        initialAnimationDoneRef.current = true;
+        const finalAngle = targetAngle;
+        drawGauge(finalAngle);
+      }
+    };
+
     // Start animation after delay
     const timer = setTimeout(() => {
       animate();
+      // Check periodically if initial animation is done
+      const checkInterval = setInterval(() => {
+        checkInitialDone();
+        if (initialAnimationDoneRef.current) {
+          clearInterval(checkInterval);
+        }
+      }, 50);
+      
+      return () => clearInterval(checkInterval);
     }, 200);
 
     return () => {
