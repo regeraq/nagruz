@@ -269,20 +269,20 @@ export default function Home() {
               size="lg" 
               onClick={scrollToContact}
               data-testid="button-hero-cta-primary"
-              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold group"
+              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold arrow-button"
             >
               Получить спецификацию
-              <ArrowRight className="ml-2 h-5 w-5 arrow-bounce-animation scroll-animate-arrow" />
+              <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
             </Button>
             <Button 
               size="lg" 
               variant="outline"
               onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
               data-testid="button-hero-cta-secondary"
-              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80 group"
+              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80 arrow-button"
             >
               Технические характеристики
-              <ArrowRight className="ml-2 h-5 w-5 arrow-bounce-animation" />
+              <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
             </Button>
           </div>
 
