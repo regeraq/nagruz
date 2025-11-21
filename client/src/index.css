@@ -14,13 +14,7 @@ html {
 }
 
 html.dark {
-  background: linear-gradient(135deg,
-    hsl(220, 25%, 8%) 0%,
-    hsl(210, 20%, 9%) 25%,
-    hsl(220, 25%, 10%) 50%,
-    hsl(215, 25%, 9%) 75%,
-    hsl(220, 25%, 8%) 100%);
-  background-attachment: fixed;
+  background-color: hsl(220, 25%, 8%);
 }
 
 /* LIGHT MODE */
@@ -200,6 +194,9 @@ html.dark {
 
   body {
     @apply font-sans antialiased text-foreground;
+  }
+
+  html body {
     background: linear-gradient(135deg, 
       hsl(210, 40%, 98%) 0%,
       hsl(220, 30%, 97%) 25%,
@@ -207,6 +204,11 @@ html.dark {
       hsl(200, 40%, 97%) 75%,
       hsl(210, 40%, 98%) 100%);
     background-attachment: fixed;
+  }
+
+  html.dark body {
+    background: hsl(220, 25%, 8%);
+    background-attachment: unset;
   }
 }
 
