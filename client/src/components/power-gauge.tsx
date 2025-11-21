@@ -6,27 +6,31 @@ interface PowerGaugeProps {
 }
 
 export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
-  const needleRef = useRef<SVGLineElement>(null);
+  const centerX = 200;
+  const centerY = 180;
+  const radius = 130;
+  
+  const needleRef = useRef<SVGGElement>(null);
 
   useEffect(() => {
     if (!needleRef.current) return;
 
     // Animate needle from 0 to current power
-    let currentAngle = -90; // Start at 0
-    const targetAngle = -90 + (maxPower / 150) * 180; // Max 150kW = 180 degrees
+    // 0 kW = -90 deg (left), 150 kW = 90 deg (right)
+    let currentAngle = -90;
+    const targetAngle = -90 + (maxPower / 150) * 180;
     const steps = 60;
     let step = 0;
 
     const animate = () => {
       step++;
       const progress = step / steps;
-      const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
       const angle = currentAngle + (targetAngle - currentAngle) * easeProgress;
       
       const needle = needleRef.current;
       if (needle) {
-        needle.style.transform = `rotate(${angle}deg)`;
-        needle.style.transformOrigin = 'center';
+        needle.setAttribute('transform', `rotate(${angle} ${centerX} ${centerY})`);
       }
 
       if (step < steps) {
@@ -34,24 +38,19 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
       }
     };
 
-    // Delay animation start
     const timer = setTimeout(() => {
       animate();
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [maxPower]);
-
-  const centerX = 200;
-  const centerY = 170;
-  const radius = 130;
+  }, [maxPower, centerX, centerY]);
 
   return (
     <div className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/50 hover:shadow-primary/50 transition-all duration-500 group max-w-2xl">
       <svg
         width="400"
-        height="340"
-        viewBox="0 0 400 340"
+        height="360"
+        viewBox="0 0 400 360"
         className="drop-shadow-2xl drop-shadow-primary/50"
       >
         {/* Background circle */}
