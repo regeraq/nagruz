@@ -265,25 +265,29 @@ export default function Home() {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
-            <Button 
-              size="lg" 
-              onClick={scrollToContact}
-              data-testid="button-hero-cta-primary"
-              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold arrow-button"
-            >
-              Получить спецификацию
-              <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline"
-              onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
-              data-testid="button-hero-cta-secondary"
-              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80 arrow-button"
-            >
-              Технические характеристики
-              <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
-            </Button>
+            <div className="arrow-button">
+              <Button 
+                size="lg" 
+                onClick={scrollToContact}
+                data-testid="button-hero-cta-primary"
+                className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold"
+              >
+                Получить спецификацию
+                <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
+              </Button>
+            </div>
+            <div className="arrow-button">
+              <Button 
+                size="lg" 
+                variant="outline"
+                onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
+                data-testid="button-hero-cta-secondary"
+                className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80"
+              >
+                Технические характеристики
+                <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
+              </Button>
+            </div>
           </div>
 
           <div className="mt-12 flex justify-center animate-fade-up" style={{ animationDelay: "0.5s" }}>

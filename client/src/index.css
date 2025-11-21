@@ -799,26 +799,17 @@ html.dark body::before {
   animation: kpiHoverFloat 0.5s ease-out forwards !important;
 }
 
-/* Arrow bounce animation for buttons */
-@keyframes slideArrow {
+/* Arrow animation keyframes */
+@keyframes arrowBounce {
   0%, 100% {
     transform: translateX(0px);
   }
   50% {
-    transform: translateX(6px);
+    transform: translateX(8px);
   }
 }
 
-@keyframes rotateArrow {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.8;
-  }
-}
-
-/* Animate arrow when button is hovered - works with any button container */
+/* Arrow animation container - hover on wrapper */
 .arrow-button:hover .animated-arrow {
-  animation: slideArrow 0.4s ease-in-out infinite;
+  animation: arrowBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
 }
