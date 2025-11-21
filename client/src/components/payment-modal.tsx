@@ -178,31 +178,69 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
     }
   };
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     if (paymentStatus === "processing") return;
 
     setPaymentStatus("processing");
 
-    const orderData = {
-      productId: product.id,
-      quantity,
-      totalAmount: totalAmount.toString(),
-      discountAmount: discountAmount.toString(),
-      finalAmount: finalAmount.toString(),
-      promoCode: discount > 0 ? promoCode : null,
-      paymentMethod,
-      paymentStatus: "pending",
-      paymentDetails: JSON.stringify({
-        method: paymentMethod,
-        cardNumber: cardNumber ? `****${cardNumber.slice(-4)}` : undefined,
-        cryptoAddress: cryptoAddress || undefined,
-        cryptoAmount: ["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) ? getCryptoAmount() : undefined,
-      }),
-    };
+    try {
+      if (["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod)) {
+        // Криптовалютный платеж через NOWPayments
+        const response = await apiRequest("POST", "/api/payment/crypto", {
+          amount: finalAmount,
+          currency: paymentMethod.toUpperCase(),
+          orderId: `${product.id}-${Date.now()}`,
+          description: `Покупка ${product.name} (кол-во: ${quantity})`,
+        });
 
-    setTimeout(() => {
+        if (response.paymentUrl) {
+          window.location.href = response.paymentUrl;
+          return;
+        }
+      } else {
+        // Рублевый платеж через русский сервис
+        const response = await apiRequest("POST", "/api/payment/rub", {
+          amount: finalAmount * 100, // в копейках
+          paymentMethod,
+          productId: product.id,
+          quantity,
+          cardNumber: cardNumber || undefined,
+        });
+
+        if (response.paymentUrl) {
+          window.location.href = response.paymentUrl;
+          return;
+        }
+      }
+
+      // Если платежный шлюз не сработал, создаем заказ локально
+      const orderData = {
+        productId: product.id,
+        quantity,
+        totalAmount: totalAmount.toString(),
+        discountAmount: discountAmount.toString(),
+        finalAmount: finalAmount.toString(),
+        promoCode: discount > 0 ? promoCode : null,
+        paymentMethod,
+        paymentStatus: "pending",
+        paymentDetails: JSON.stringify({
+          method: paymentMethod,
+          cardNumber: cardNumber ? `****${cardNumber.slice(-4)}` : undefined,
+          cryptoAddress: cryptoAddress || undefined,
+          cryptoAmount: ["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) ? getCryptoAmount() : undefined,
+        }),
+      };
+
       createOrderMutation.mutate(orderData);
-    }, 1500);
+    } catch (error) {
+      console.error("Payment error:", error);
+      setPaymentStatus("error");
+      toast({
+        title: "Ошибка платежа",
+        description: "Не удалось инициировать платеж. Попробуйте еще раз.",
+        variant: "destructive",
+      });
+    }
   };
 
   const getPaymentMethodIcon = (method: PaymentMethod) => {
