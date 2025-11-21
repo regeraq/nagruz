@@ -7,14 +7,11 @@ interface PowerGaugeProps {
 export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number>();
-  
-  // Track final needle angle after initial load animation
-  const finalAngleRef = useRef<number>(-135);
-  
-  // Hover animation state
-  const isHoveringRef = useRef(false);
-  const hoverStepRef = useRef(0);
-  const lastMaxPowerRef = useRef(maxPower);
+  const needleAngleRef = useRef<number>(-135);
+  const hoverStepRef = useRef<number>(0);
+  const isHoveringRef = useRef<boolean>(false);
+  const isInitialLoadRef = useRef<boolean>(true);
+  const loadStepRef = useRef<number>(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -31,17 +28,13 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     const centerY = size / 2;
     const radius = 120;
 
-    // Calculate target angle for this power level
     const percent = Math.min(100, (maxPower / 150) * 100);
     const targetAngle = -135 + (percent / 100) * 270;
-
     const totalSteps = 50;
 
-    // Draw gauge with needle at specific angle
     const drawGauge = (angle: number) => {
       ctx.clearRect(0, 0, size, size);
 
-      // Background gradient
       const bgGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius + 20);
       bgGradient.addColorStop(0, 'rgba(26, 148, 255, 0.02)');
       bgGradient.addColorStop(1, 'rgba(26, 148, 255, 0.05)');
@@ -50,23 +43,20 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       ctx.arc(centerX, centerY, radius + 20, 0, Math.PI * 2);
       ctx.fill();
 
-      // Outer circle
       ctx.strokeStyle = 'rgba(26, 148, 255, 0.4)';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Inner circle
       ctx.strokeStyle = 'rgba(26, 148, 255, 0.2)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius - 40, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Draw scale (0 to 150)
-      const minAngle = -135 * (Math.PI / 180);
-      const maxAngle = 135 * (Math.PI / 180);
+      const minAngle = (-135 * Math.PI) / 180;
+      const maxAngle = (135 * Math.PI) / 180;
 
       for (let i = 0; i <= 150; i += 10) {
         const scaleAngle = minAngle + ((i / 150) * (maxAngle - minAngle));
@@ -87,12 +77,9 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         ctx.lineTo(x2, y2);
         ctx.stroke();
 
-        // Draw numbers for main ticks
         if (isMainTick) {
-          const numAngle = scaleAngle;
-          const numX = centerX + Math.cos(numAngle) * (radius - 50);
-          const numY = centerY + Math.sin(numAngle) * (radius - 50);
-
+          const numX = centerX + Math.cos(scaleAngle) * (radius - 50);
+          const numY = centerY + Math.sin(scaleAngle) * (radius - 50);
           ctx.fillStyle = 'rgba(26, 148, 255, 0.9)';
           ctx.font = 'bold 16px IBM Plex Mono';
           ctx.textAlign = 'center';
@@ -101,11 +88,9 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         }
       }
 
-      // Draw needle
-      const needleAngleRad = angle * (Math.PI / 180);
+      const needleAngleRad = (angle * Math.PI) / 180;
       const needleLength = radius - 50;
 
-      // Needle glow
       ctx.strokeStyle = 'rgba(26, 148, 255, 0.15)';
       ctx.lineWidth = 12;
       ctx.lineCap = 'round';
@@ -117,7 +102,6 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       );
       ctx.stroke();
 
-      // Main needle
       ctx.strokeStyle = 'hsl(210, 100%, 55%)';
       ctx.lineWidth = 4;
       ctx.beginPath();
@@ -128,13 +112,11 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       );
       ctx.stroke();
 
-      // Center circle glow
       ctx.fillStyle = 'rgba(26, 148, 255, 0.2)';
       ctx.beginPath();
       ctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
       ctx.fill();
 
-      // Center circle
       ctx.fillStyle = 'hsl(210, 100%, 55%)';
       ctx.beginPath();
       ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
@@ -146,78 +128,36 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       ctx.fill();
     };
 
-    // Easing function
-    const easeOut = (progress: number) => 1 - Math.pow(1 - progress, 3);
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
-    // Main animation loop
     const animate = () => {
+      let angle = needleAngleRef.current;
       let shouldContinue = false;
-      let angleToDisplay = finalAngleRef.current;
 
-      // Check if we should animate hover
       if (isHoveringRef.current && hoverStepRef.current < totalSteps) {
         shouldContinue = true;
-        const hoverProgress = hoverStepRef.current / totalSteps;
-        const hoverEase = easeOut(hoverProgress);
-        // Animate from -135 to target angle
-        angleToDisplay = -135 + (targetAngle - (-135)) * hoverEase;
+        const progress = hoverStepRef.current / totalSteps;
+        angle = -135 + (targetAngle - (-135)) * easeOutCubic(progress);
         hoverStepRef.current++;
-      }
-      // Check if power changed and we need to re-animate on load
-      else if (lastMaxPowerRef.current !== maxPower && finalAngleRef.current !== targetAngle) {
+      } else if (isInitialLoadRef.current && loadStepRef.current < totalSteps) {
         shouldContinue = true;
-        // Smoothly update final angle toward target
-        let currentStep = 0;
-        const maxLoadSteps = totalSteps;
-        const loadAnimate = () => {
-          currentStep++;
-          const loadProgress = currentStep / maxLoadSteps;
-          const loadEase = easeOut(loadProgress);
-          const loadAngle = -135 + (targetAngle - (-135)) * loadEase;
-          angleToDisplay = loadAngle;
-          
-          if (currentStep >= maxLoadSteps) {
-            finalAngleRef.current = targetAngle;
-            lastMaxPowerRef.current = maxPower;
-          } else {
-            animationFrameRef.current = requestAnimationFrame(loadAnimate);
-          }
-          drawGauge(loadAngle);
-        };
-        loadAnimate();
-        return;
+        const progress = loadStepRef.current / totalSteps;
+        angle = -135 + (targetAngle - (-135)) * easeOutCubic(progress);
+        needleAngleRef.current = angle;
+        loadStepRef.current++;
+      } else if (isInitialLoadRef.current) {
+        isInitialLoadRef.current = false;
+        needleAngleRef.current = targetAngle;
       }
 
-      drawGauge(angleToDisplay);
+      drawGauge(angle);
 
       if (shouldContinue) {
         animationFrameRef.current = requestAnimationFrame(animate);
       }
     };
 
-    // Start with initial angle draw
-    drawGauge(finalAngleRef.current);
-
-    // If power changed or first load, animate to target
-    if (lastMaxPowerRef.current !== maxPower || finalAngleRef.current === -135) {
-      let loadStep = 0;
-      const loadAnimate = () => {
-        loadStep++;
-        const progress = loadStep / totalSteps;
-        const ease = easeOut(progress);
-        const angle = -135 + (targetAngle - (-135)) * ease;
-        finalAngleRef.current = angle;
-        drawGauge(angle);
-
-        if (loadStep < totalSteps) {
-          animationFrameRef.current = requestAnimationFrame(loadAnimate);
-        } else {
-          finalAngleRef.current = targetAngle;
-          lastMaxPowerRef.current = maxPower;
-        }
-      };
-      loadAnimate();
-    }
+    animate();
 
     return () => {
       if (animationFrameRef.current) {
@@ -227,7 +167,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
   }, [maxPower]);
 
   return (
-    <div 
+    <div
       className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/20 hover:shadow-primary/40 transition-all duration-700 group hover:scale-105 hover:shadow-primary/50 cursor-pointer"
       onMouseEnter={() => {
         isHoveringRef.current = true;
@@ -235,7 +175,6 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       }}
       onMouseLeave={() => {
         isHoveringRef.current = false;
-        hoverStepRef.current = 0;
       }}
     >
       <canvas
