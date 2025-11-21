@@ -832,3 +832,30 @@
     color: hsl(var(--primary-foreground));
   }
 }
+
+/* GRADIENT BACKGROUND - LIGHT THEME ONLY */
+html:not(.dark) {
+  background: linear-gradient(135deg, 
+    hsl(210, 40%, 98%) 0%,
+    hsl(220, 30%, 97%) 25%,
+    hsl(210, 35%, 98%) 50%,
+    hsl(200, 40%, 97%) 75%,
+    hsl(210, 40%, 98%) 100%) !important;
+  background-attachment: fixed !important;
+  min-height: 100vh !important;
+}
+
+html:not(.dark) body {
+  background: transparent !important;
+}
+
+/* DARK THEME - CLEAN BACKGROUND */
+html.dark {
+  background: hsl(220, 25%, 8%) !important;
+  background-attachment: unset !important;
+  min-height: 100vh !important;
+}
+
+html.dark body {
+  background: transparent !important;
+}
