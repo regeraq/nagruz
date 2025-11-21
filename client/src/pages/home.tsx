@@ -272,7 +272,7 @@ export default function Home() {
               className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold group"
             >
               Получить спецификацию
-              <ArrowRight className="ml-2 h-5 w-5 transition-all duration-300 group-hover:translate-x-2 group-hover:-rotate-12 scroll-animate-arrow" />
+              <ArrowRight className="ml-2 h-5 w-5 arrow-bounce-animation scroll-animate-arrow" />
             </Button>
             <Button 
               size="lg" 
