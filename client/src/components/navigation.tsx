@@ -55,26 +55,35 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
       >
         <nav className="max-w-7xl mx-auto px-6 md:px-8">
           <div className="flex items-center justify-between h-16 md:h-20">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0">
               <button
                 onClick={() => scrollToSection("hero")}
-                className="flex items-center gap-2 hover-elevate active-elevate-2 rounded-md px-2 py-1"
+                className="flex items-center gap-3 hover-elevate active-elevate-2 rounded-md px-2 py-1"
                 data-testid="link-logo"
               >
                 <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary-foreground font-bold text-lg font-mono">НУ</span>
+                  <span className="text-primary-foreground font-bold text-xl font-mono">НУ</span>
+                </div>
+                <div className="hidden md:block min-w-0">
+                  <div 
+                    className="text-sm font-semibold text-foreground truncate transition-opacity duration-300"
+                    key={deviceName}
+                  >
+                    {deviceName}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-medium truncate">Нагрузочное устройство</div>
                 </div>
               </button>
               
               <div className="relative flex-shrink-0">
                 <Button
                   variant="ghost"
+                  size="icon"
                   onClick={() => onDeviceChange && setIsDeviceMenuOpen(!isDeviceMenuOpen)}
                   data-testid="button-device-menu"
-                  className="h-9 px-2 flex items-center gap-1 text-sm font-semibold"
+                  className="h-9 w-9"
                 >
-                  <span>{deviceName}</span>
-                  <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                  <ChevronDown className="h-4 w-4" />
                 </Button>
                 
                 {isDeviceMenuOpen && onDeviceChange && (
