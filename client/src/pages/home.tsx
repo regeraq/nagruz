@@ -296,28 +296,8 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="grid md:grid-cols-2 gap-8 w-full">
-              <div className="animate-fade-up" style={{ animationDelay: "0.3s" }}>
-                <PowerGauge maxPower={parseInt(device.maxPower.split(" ")[0])} deviceName={device.name} />
-              </div>
-              <div className="animate-fade-up" style={{ animationDelay: "0.4s" }}>
-                <div className="space-y-4 p-6 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 h-full flex flex-col justify-center">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                      <span className="text-muted-foreground">{device.steps}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-tech-cyan animate-pulse" style={{ animationDelay: "0.2s" }} />
-                      <span className="text-muted-foreground">{device.voltage}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-chart-3 animate-pulse" style={{ animationDelay: "0.4s" }} />
-                      <span className="text-muted-foreground">{device.minVoltage}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="w-full flex justify-center animate-fade-up" style={{ animationDelay: "0.3s" }}>
+              <PowerGauge maxPower={parseInt(device.maxPower.split(" ")[0])} deviceName={device.name} />
             </div>
           </div>
         </div>

@@ -45,24 +45,34 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
   const radius = 120;
 
   return (
-    <div className="flex flex-col items-center justify-center gap-4 p-6 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/50 hover:shadow-primary/50 transition-all duration-500 group">
+    <div className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/50 hover:shadow-primary/50 transition-all duration-500 group max-w-2xl">
       <svg
-        width="300"
-        height="280"
-        viewBox="0 0 300 280"
+        width="400"
+        height="340"
+        viewBox="0 0 400 340"
         className="drop-shadow-2xl drop-shadow-primary/50"
       >
         {/* Background circle */}
         <circle cx={centerX} cy={centerY} r={radius} fill="rgba(26, 148, 255, 0.05)" stroke="hsl(var(--primary))" strokeWidth="2" opacity="0.3" />
 
+        {/* Gradient ring */}
+        <defs>
+          <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.2" />
+            <stop offset="50%" stopColor="hsl(var(--tech-cyan))" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.1" />
+          </linearGradient>
+        </defs>
+        <circle cx={centerX} cy={centerY} r={radius - 5} fill="none" stroke="url(#gaugeGradient)" strokeWidth="8" />
+
         {/* Major tick marks */}
         {[...Array(7)].map((_, i) => {
           const angle = -90 + (i / 6) * 180;
           const rad = (angle * Math.PI) / 180;
-          const x1 = centerX + Math.cos(rad) * (radius - 10);
-          const y1 = centerY + Math.sin(rad) * (radius - 10);
-          const x2 = centerX + Math.cos(rad) * (radius - 25);
-          const y2 = centerY + Math.sin(rad) * (radius - 25);
+          const x1 = centerX + Math.cos(rad) * (radius - 8);
+          const y1 = centerY + Math.sin(rad) * (radius - 8);
+          const x2 = centerX + Math.cos(rad) * (radius - 28);
+          const y2 = centerY + Math.sin(rad) * (radius - 28);
           
           return (
             <line
@@ -72,8 +82,9 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
               x2={x2}
               y2={y2}
               stroke="hsl(var(--primary))"
-              strokeWidth="2"
-              opacity="0.6"
+              strokeWidth="3"
+              opacity="0.8"
+              strokeLinecap="round"
             />
           );
         })}
@@ -83,8 +94,8 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
           if (i % 5 === 0) return null;
           const angle = -90 + (i / 30) * 180;
           const rad = (angle * Math.PI) / 180;
-          const x1 = centerX + Math.cos(rad) * (radius - 12);
-          const y1 = centerY + Math.sin(rad) * (radius - 12);
+          const x1 = centerX + Math.cos(rad) * (radius - 10);
+          const y1 = centerY + Math.sin(rad) * (radius - 10);
           const x2 = centerX + Math.cos(rad) * (radius - 20);
           const y2 = centerY + Math.sin(rad) * (radius - 20);
           
@@ -96,8 +107,9 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
               x2={x2}
               y2={y2}
               stroke="hsl(var(--primary))"
-              strokeWidth="1"
-              opacity="0.4"
+              strokeWidth="1.5"
+              opacity="0.5"
+              strokeLinecap="round"
             />
           );
         })}
@@ -106,8 +118,8 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
         {[0, 25, 50, 75, 100, 125, 150].map((num, i) => {
           const angle = -90 + (i / 6) * 180;
           const rad = (angle * Math.PI) / 180;
-          const x = centerX + Math.cos(rad) * (radius - 50);
-          const y = centerY + Math.sin(rad) * (radius - 50);
+          const x = centerX + Math.cos(rad) * (radius - 55);
+          const y = centerY + Math.sin(rad) * (radius - 55);
           
           return (
             <text
@@ -115,11 +127,13 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
               x={x}
               y={y}
               textAnchor="middle"
-              dy="0.3em"
-              fontSize="14"
-              fontWeight="bold"
-              fill="hsl(var(--muted-foreground))"
-              fontFamily="monospace"
+              dy="0.4em"
+              fontSize="18"
+              fontWeight="700"
+              fill="hsl(var(--primary))"
+              fontFamily="'IBM Plex Mono', monospace"
+              opacity="0.9"
+              letterSpacing="1"
             >
               {num}
             </text>
@@ -132,23 +146,39 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
           x1={centerX}
           y1={centerY}
           x2={centerX}
-          y2={centerY - (radius - 40)}
+          y2={centerY - (radius - 45)}
           stroke="hsl(var(--primary))"
-          strokeWidth="3"
+          strokeWidth="4"
           strokeLinecap="round"
           style={{ transition: 'none' }}
         />
 
+        {/* Needle glow */}
+        <line
+          ref={needleRef}
+          x1={centerX}
+          y1={centerY}
+          x2={centerX}
+          y2={centerY - (radius - 45)}
+          stroke="hsl(var(--primary))"
+          strokeWidth="8"
+          strokeLinecap="round"
+          style={{ transition: 'none', opacity: 0.2 }}
+        />
+
+        {/* Needle center circle glow */}
+        <circle cx={centerX} cy={centerY} r="12" fill="hsl(var(--primary))" opacity="0.2" />
+
         {/* Needle center circle */}
         <circle cx={centerX} cy={centerY} r="8" fill="hsl(var(--primary))" />
-        <circle cx={centerX} cy={centerY} r="5" fill="hsl(var(--background))" />
+        <circle cx={centerX} cy={centerY} r="4" fill="hsl(var(--background))" />
       </svg>
 
-      <div className="text-center space-y-1">
+      <div className="text-center space-y-2">
         <div className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
           {deviceName}
         </div>
-        <div className="text-2xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-primary via-tech-cyan to-primary">
+        <div className="text-4xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-primary via-tech-cyan to-primary animate-gradient-shift">
           {maxPower} кВт
         </div>
       </div>
