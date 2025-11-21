@@ -254,10 +254,10 @@ export default function Home() {
               size="lg" 
               onClick={scrollToContact}
               data-testid="button-hero-cta-primary"
-              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold"
+              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold group overflow-hidden"
             >
               Получить спецификацию
-              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="ml-2 h-5 w-5 transition-all duration-300 group-hover:translate-x-2 group-hover:-rotate-12 scroll-animate-arrow" />
             </Button>
             <Button 
               size="lg" 
