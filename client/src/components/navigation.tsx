@@ -55,34 +55,34 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
       >
         <nav className="max-w-7xl mx-auto px-6 md:px-8">
           <div className="flex items-center justify-between h-16 md:h-20">
-            <div className="flex items-center gap-3 relative">
+            <div className="flex items-center gap-0">
               <button
                 onClick={() => scrollToSection("hero")}
-                className="flex items-center gap-3 hover-elevate active-elevate-2 rounded-md px-2 py-1 -ml-2"
+                className="flex items-center gap-3 hover-elevate active-elevate-2 rounded-md px-2 py-1"
                 data-testid="link-logo"
               >
-                <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
+                <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center flex-shrink-0">
                   <span className="text-primary-foreground font-bold text-xl font-mono">НУ</span>
                 </div>
-                <div className="hidden md:block w-[160px]">
+                <div className="hidden md:block min-w-0">
                   <div 
-                    className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden text-ellipsis transition-all duration-300"
+                    className="text-sm font-semibold text-foreground truncate transition-all duration-300"
                     key={deviceName}
                     style={{ animation: 'deviceSwitch 0.3s ease-out' }}
                   >
                     {deviceName}
                   </div>
-                  <div className="text-xs text-muted-foreground font-medium whitespace-nowrap overflow-hidden text-ellipsis">Нагрузочное устройство</div>
+                  <div className="text-xs text-muted-foreground font-medium truncate">Нагрузочное устройство</div>
                 </div>
               </button>
               
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => onDeviceChange && setIsDeviceMenuOpen(!isDeviceMenuOpen)}
                   data-testid="button-device-menu"
-                  className="h-auto px-2"
+                  className="h-9 w-9"
                 >
                   <ChevronDown className="h-4 w-4" />
                 </Button>
