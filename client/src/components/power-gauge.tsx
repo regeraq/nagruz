@@ -14,6 +14,11 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const loadStepRef = useRef<number>(0);
 
   useEffect(() => {
+    // Reset animation state on power change
+    isInitialLoadRef.current = true;
+    loadStepRef.current = 0;
+    hoverStepRef.current = 0;
+    
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -28,8 +33,8 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     const centerY = size / 2;
     const radius = 120;
 
-    const percent = Math.min(100, (maxPower / 150) * 100);
-    const targetAngle = -135 + (percent / 100) * 270;
+    // Calculate target angle for current power level (0-150 scale)
+    const targetAngle = -135 + (maxPower / 150) * 270;
     const totalSteps = 50;
 
     const drawGauge = (angle: number) => {
