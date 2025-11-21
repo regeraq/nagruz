@@ -35,14 +35,16 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
     };
 
     // Delay animation start
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       animate();
     }, 300);
+
+    return () => clearTimeout(timer);
   }, [maxPower]);
 
-  const centerX = 150;
-  const centerY = 150;
-  const radius = 120;
+  const centerX = 200;
+  const centerY = 170;
+  const radius = 130;
 
   return (
     <div className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/50 hover:shadow-primary/50 transition-all duration-500 group max-w-2xl">
@@ -140,31 +142,30 @@ export function PowerGauge({ maxPower, deviceName }: PowerGaugeProps) {
           );
         })}
 
-        {/* Needle */}
-        <line
-          ref={needleRef}
-          x1={centerX}
-          y1={centerY}
-          x2={centerX}
-          y2={centerY - (radius - 45)}
-          stroke="hsl(var(--primary))"
-          strokeWidth="4"
-          strokeLinecap="round"
-          style={{ transition: 'none' }}
-        />
-
         {/* Needle glow */}
-        <line
-          ref={needleRef}
-          x1={centerX}
-          y1={centerY}
-          x2={centerX}
-          y2={centerY - (radius - 45)}
-          stroke="hsl(var(--primary))"
-          strokeWidth="8"
-          strokeLinecap="round"
-          style={{ transition: 'none', opacity: 0.2 }}
-        />
+        <g ref={needleRef}>
+          <line
+            x1={centerX}
+            y1={centerY}
+            x2={centerX}
+            y2={centerY - (radius - 45)}
+            stroke="hsl(var(--primary))"
+            strokeWidth="8"
+            strokeLinecap="round"
+            opacity="0.2"
+          />
+          
+          {/* Needle */}
+          <line
+            x1={centerX}
+            y1={centerY}
+            x2={centerX}
+            y2={centerY - (radius - 45)}
+            stroke="hsl(var(--primary))"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+        </g>
 
         {/* Needle center circle glow */}
         <circle cx={centerX} cy={centerY} r="12" fill="hsl(var(--primary))" opacity="0.2" />
