@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from "react";
 
 interface PowerGaugeProps {
   maxPower: number;
@@ -6,191 +6,126 @@ interface PowerGaugeProps {
 
 export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationFrameRef = useRef<number>();
-  const needleAngleRef = useRef<number>(-135);
-  const hoverStepRef = useRef<number>(0);
-  const isHoveringRef = useRef<boolean>(false);
-  const isInitialLoadRef = useRef<boolean>(true);
-  const loadStepRef = useRef<number>(0);
+  const animationRef = useRef<number>();
+  const needleAngleRef = useRef(0);
 
   useEffect(() => {
-    // Reset animation state on power change
-    isInitialLoadRef.current = true;
-    loadStepRef.current = 0;
-    hoverStepRef.current = 0;
-    
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const size = 300;
-    canvas.width = size;
-    canvas.height = size;
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(width, height) / 2 - 20;
 
-    const centerX = size / 2;
-    const centerY = size / 2;
-    const radius = 120;
+    const animate = () => {
+      // Clear canvas
+      ctx.fillStyle = "hsl(var(--card))";
+      ctx.fillRect(0, 0, width, height);
 
-    // Calculate target angle for current power level (0-150 scale)
-    const targetAngle = -135 + (maxPower / 150) * 270;
-    const totalSteps = 50;
-
-    const drawGauge = (angle: number) => {
-      ctx.clearRect(0, 0, size, size);
-
-      const bgGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius + 20);
-      bgGradient.addColorStop(0, 'rgba(26, 148, 255, 0.02)');
-      bgGradient.addColorStop(1, 'rgba(26, 148, 255, 0.05)');
-      ctx.fillStyle = bgGradient;
+      // Draw gauge background
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius + 20, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = 'rgba(26, 148, 255, 0.4)';
+      ctx.arc(centerX, centerY, radius, Math.PI, 2 * Math.PI);
+      ctx.strokeStyle = "hsl(var(--card-border))";
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.strokeStyle = 'rgba(26, 148, 255, 0.2)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius - 40, 0, Math.PI * 2);
-      ctx.stroke();
+      // Draw gauge segments with glow
+      const segments = 10;
+      for (let i = 0; i <= segments; i++) {
+        const angle = Math.PI + (Math.PI * i) / segments;
+        const x1 = centerX + Math.cos(angle) * (radius - 15);
+        const y1 = centerY + Math.sin(angle) * (radius - 15);
+        const x2 = centerX + Math.cos(angle) * radius;
+        const y2 = centerY + Math.sin(angle) * radius;
 
-      const minAngle = (-135 * Math.PI) / 180;
-      const maxAngle = (135 * Math.PI) / 180;
-
-      for (let i = 0; i <= 150; i += 10) {
-        const scaleAngle = minAngle + ((i / 150) * (maxAngle - minAngle));
-        const isMainTick = i % 50 === 0;
-        const tickLength = isMainTick ? 20 : 10;
-        const tickWidth = isMainTick ? 2 : 1;
-
-        const x1 = centerX + Math.cos(scaleAngle) * (radius - 5);
-        const y1 = centerY + Math.sin(scaleAngle) * (radius - 5);
-        const x2 = centerX + Math.cos(scaleAngle) * (radius - 5 - tickLength);
-        const y2 = centerY + Math.sin(scaleAngle) * (radius - 5 - tickLength);
-
-        ctx.strokeStyle = isMainTick ? 'rgba(26, 148, 255, 0.8)' : 'rgba(26, 148, 255, 0.5)';
-        ctx.lineWidth = tickWidth;
-        ctx.lineCap = 'round';
+        // Color gradient based on position
+        const hue = 200 + (i / segments) * 50;
+        ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
+        ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
-
-        if (isMainTick) {
-          const numX = centerX + Math.cos(scaleAngle) * (radius - 50);
-          const numY = centerY + Math.sin(scaleAngle) * (radius - 50);
-          ctx.fillStyle = 'rgba(26, 148, 255, 0.9)';
-          ctx.font = 'bold 16px IBM Plex Mono';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(i.toString(), numX, numY);
-        }
       }
 
-      const needleAngleRad = (angle * Math.PI) / 180;
-      const needleLength = radius - 50;
-
-      ctx.strokeStyle = 'rgba(26, 148, 255, 0.15)';
-      ctx.lineWidth = 12;
-      ctx.lineCap = 'round';
+      // Draw center circle
       ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.lineTo(
-        centerX + Math.cos(needleAngleRad) * needleLength,
-        centerY + Math.sin(needleAngleRad) * needleLength
-      );
+      ctx.arc(centerX, centerY, 15, 0, 2 * Math.PI);
+      ctx.fillStyle = "hsl(var(--primary))";
+      ctx.fill();
+      ctx.strokeStyle = "hsl(var(--card))";
+      ctx.lineWidth = 2;
       ctx.stroke();
 
-      ctx.strokeStyle = 'hsl(210, 100%, 55%)';
+      // Animate needle
+      needleAngleRef.current += 0.02;
+      if (needleAngleRef.current > 1) {
+        needleAngleRef.current = 0;
+      }
+
+      const needleAngle = Math.PI + needleAngleRef.current * Math.PI;
+      const needleLength = radius - 10;
+      const needleX = centerX + Math.cos(needleAngle) * needleLength;
+      const needleY = centerY + Math.sin(needleAngle) * needleLength;
+
+      // Draw needle with glow
+      ctx.shadowColor = "hsl(var(--primary) / 0.6)";
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = "hsl(var(--primary))";
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
-      ctx.lineTo(
-        centerX + Math.cos(needleAngleRad) * needleLength,
-        centerY + Math.sin(needleAngleRad) * needleLength
-      );
+      ctx.lineTo(needleX, needleY);
       ctx.stroke();
+      ctx.shadowColor = "transparent";
 
-      ctx.fillStyle = 'rgba(26, 148, 255, 0.2)';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
-      ctx.fill();
+      // Draw labels
+      ctx.fillStyle = "hsl(var(--foreground))";
+      ctx.font = "14px IBM Plex Sans";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
 
-      ctx.fillStyle = 'hsl(210, 100%, 55%)';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = 'rgba(10, 14, 39, 1)';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
-      ctx.fill();
-    };
-
-    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-
-    const animate = () => {
-      let angle = needleAngleRef.current;
-      let shouldContinue = false;
-
-      if (isHoveringRef.current && hoverStepRef.current < totalSteps) {
-        shouldContinue = true;
-        const progress = hoverStepRef.current / totalSteps;
-        angle = -135 + (targetAngle - (-135)) * easeOutCubic(progress);
-        hoverStepRef.current++;
-      } else if (isInitialLoadRef.current && loadStepRef.current < totalSteps) {
-        shouldContinue = true;
-        const progress = loadStepRef.current / totalSteps;
-        angle = -135 + (targetAngle - (-135)) * easeOutCubic(progress);
-        needleAngleRef.current = angle;
-        loadStepRef.current++;
-      } else if (isInitialLoadRef.current) {
-        isInitialLoadRef.current = false;
-        needleAngleRef.current = targetAngle;
+      const labels = ["0", `${Math.round(maxPower / 2)}`, `${maxPower}`];
+      for (let i = 0; i < labels.length; i++) {
+        const angle = Math.PI + (Math.PI * i) / 2;
+        const x = centerX + Math.cos(angle) * (radius + 30);
+        const y = centerY + Math.sin(angle) * (radius + 30);
+        ctx.fillText(labels[i], x, y);
       }
 
-      drawGauge(angle);
+      // Draw kW label
+      ctx.font = "bold 16px IBM Plex Sans";
+      ctx.fillText("кВт", centerX, centerY + radius + 60);
 
-      if (shouldContinue) {
-        animationFrameRef.current = requestAnimationFrame(animate);
-      }
+      animationRef.current = requestAnimationFrame(animate);
     };
 
     animate();
 
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
       }
     };
   }, [maxPower]);
 
   return (
-    <div
-      className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/20 hover:shadow-primary/40 transition-all duration-700 group hover:scale-105 hover:shadow-primary/50 cursor-pointer"
-      onMouseEnter={() => {
-        isHoveringRef.current = true;
-        hoverStepRef.current = 0;
-      }}
-      onMouseLeave={() => {
-        isHoveringRef.current = false;
-      }}
-    >
+    <div className="flex flex-col items-center justify-center w-full">
       <canvas
         ref={canvasRef}
-        className="drop-shadow-2xl drop-shadow-primary/50 transition-all duration-300 group-hover:drop-shadow-[0_0_20px_rgba(26,148,255,0.8)]"
+        width={300}
+        height={200}
+        className="rounded-lg border border-card-border bg-card/50 animate-fade-up"
+        style={{ animationDelay: "0.3s" }}
       />
-
-      <div className="text-center">
-        <div className="text-4xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-primary via-tech-cyan to-primary animate-gradient-shift">
-          {maxPower} кВт
-        </div>
+      <div className="mt-6 text-center">
+        <p className="text-sm text-muted-foreground">Максимальная мощность</p>
+        <p className="text-2xl font-bold text-primary">{maxPower} кВт</p>
       </div>
     </div>
   );
