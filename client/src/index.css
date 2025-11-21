@@ -180,7 +180,6 @@
 
   body {
     @apply font-sans antialiased text-foreground;
-    background: transparent;
   }
 }
 
@@ -833,25 +832,19 @@
   }
 }
 
-/* Ensure full height layout */
-html, body, #root {
-  height: 100%;
-  width: 100%;
-}
-
-/* GRADIENT BACKGROUND FOR LIGHT THEME */
+/* GRADIENT BACKGROUND - LIGHT THEME */
 body {
   background: linear-gradient(135deg, 
     hsl(210, 40%, 98%) 0%,
     hsl(220, 30%, 97%) 25%,
     hsl(210, 35%, 98%) 50%,
     hsl(200, 40%, 97%) 75%,
-    hsl(210, 40%, 98%) 100%) !important;
-  background-attachment: fixed !important;
-  min-height: 100vh;
+    hsl(210, 40%, 98%) 100%);
+  background-attachment: fixed;
 }
 
 /* DARK THEME - SOLID BACKGROUND */
 html.dark body {
-  background: hsl(220, 25%, 8%) !important;
+  background: hsl(220, 25%, 8%);
+  background-attachment: unset;
 }
