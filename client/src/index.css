@@ -779,17 +779,22 @@ html.dark body::before {
 }
 
 /* Hover animation for KPI blocks - fade up effect on hover */
-@keyframes hoverFadeUp {
+@keyframes kpiHoverFloat {
   0% {
-    opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
   100% {
-    opacity: 1;
-    transform: translateY(-8px);
+    transform: translateY(-12px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
   }
 }
 
+.hover-fade-up-animation {
+  position: relative;
+  transition: all 0.3s ease-out;
+}
+
 .hover-fade-up-animation:hover {
-  animation: hoverFadeUp 0.4s ease-out forwards;
+  animation: kpiHoverFloat 0.5s ease-out forwards !important;
 }
