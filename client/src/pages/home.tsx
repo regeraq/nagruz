@@ -293,7 +293,7 @@ export default function Home() {
               className="text-base px-12 h-12 magnetic-btn shadow-lg shadow-green-600/40 hover:shadow-green-600/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
             >
               <ShoppingCart className="mr-2 h-5 w-5 transition-all duration-300 group-hover:rotate-12" />
-              Купить {device.name}
+              Купить
             </Button>
           </div>
           
@@ -428,7 +428,7 @@ export default function Home() {
               className="text-base px-10 h-12 magnetic-btn shadow-lg shadow-green-600/40 hover:shadow-green-600/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
             >
               <ShoppingCart className="mr-2 h-5 w-5 transition-all duration-300 group-hover:rotate-12" />
-              Купить {device.name}
+              Купить
             </Button>
           </div>
         </div>
