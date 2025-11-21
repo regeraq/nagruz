@@ -799,16 +799,18 @@ html.dark body::before {
   animation: kpiHoverFloat 0.5s ease-out forwards !important;
 }
 
-/* Arrow bounce animation - continuous when button is hovered */
-@keyframes arrowBounce {
+/* Arrow bounce animation - works on all buttons */
+@keyframes arrowBounceSlide {
   0%, 100% {
-    transform: translateX(0) rotate(0deg);
+    transform: translateX(0px) rotate(0deg);
   }
   50% {
     transform: translateX(8px) rotate(-12deg);
   }
 }
 
-.group:hover .arrow-bounce-animation {
-  animation: arrowBounce 0.6s ease-in-out infinite;
+/* Apply animation when button is hovered */
+button:has(.arrow-bounce-animation):hover .arrow-bounce-animation,
+[role="button"]:has(.arrow-bounce-animation):hover .arrow-bounce-animation {
+  animation: arrowBounceSlide 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite !important;
 }

@@ -279,9 +279,10 @@ export default function Home() {
               variant="outline"
               onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
               data-testid="button-hero-cta-secondary"
-              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80"
+              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80 group"
             >
               Технические характеристики
+              <ArrowRight className="ml-2 h-5 w-5 arrow-bounce-animation" />
             </Button>
           </div>
 
