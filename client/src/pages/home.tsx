@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   Zap, Shield, Gauge, Thermometer, Cable, FileCheck, 
   Factory, Battery, Cpu, CheckCircle2, Download, ArrowRight,
@@ -153,6 +153,28 @@ export default function Home() {
     document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Scroll animation hook
+  useEffect(() => {
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: "0px 0px -50px 0px"
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("visible");
+        }
+      });
+    }, observerOptions);
+
+    document.querySelectorAll(".scroll-animate").forEach(el => {
+      observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="min-h-screen">
       <Navigation 
@@ -163,48 +185,48 @@ export default function Home() {
         id="hero"
         className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-background via-background to-primary/5"
       >
-        <div className="absolute inset-0 bg-grid-pattern opacity-30" />
+        <div className="absolute inset-0 bg-grid-pattern opacity-30 animate-fade-up" />
         
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
         
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-8 py-32 md:py-40 text-center">
           <Badge 
             variant="secondary" 
-            className="mb-6 text-sm font-medium px-4 py-2"
+            className="mb-6 text-sm font-medium px-4 py-2 animate-fade-scale"
             data-testid="badge-new-equipment"
           >
             Новое оборудование 2025 года
           </Badge>
           
-          <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70" data-testid="heading-hero">
+          <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 animate-fade-up" style={{ animationDelay: "0.1s" }} data-testid="heading-hero">
             {device.name}
           </h1>
           
-          <p className="text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-4xl mx-auto mb-8 leading-relaxed" data-testid="text-hero-description">
+          <p className="text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-4xl mx-auto mb-8 leading-relaxed animate-fade-up" style={{ animationDelay: "0.2s" }} data-testid="text-hero-description">
             {device.description}
           </p>
           
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-12">
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-power">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-12 animate-fade-up" style={{ animationDelay: "0.3s" }}>
+            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-1" data-testid="kpi-power">
               <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power">{device.power}</span>
             </div>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-steps">
+            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 hover:-translate-y-1" data-testid="kpi-steps">
               <Zap className="h-4 sm:h-5 w-4 sm:w-5 text-tech-cyan" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-steps">{device.steps}</span>
             </div>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border" data-testid="kpi-voltage">
+            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-chart-3/50 transition-all duration-300 hover:-translate-y-1" data-testid="kpi-voltage">
               <Cable className="h-4 sm:h-5 w-4 sm:w-5 text-chart-3" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-voltage">{device.voltage}</span>
             </div>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
             <Button 
               size="lg" 
               onClick={scrollToContact}
               data-testid="button-hero-cta-primary"
-              className="text-base px-8 h-12"
+              className="text-base px-8 h-12 hover:scale-105 active:scale-95 transition-transform duration-200"
             >
               Получить спецификацию
               <ArrowRight className="ml-2 h-5 w-5" />
@@ -214,19 +236,19 @@ export default function Home() {
               variant="outline"
               onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
               data-testid="button-hero-cta-secondary"
-              className="text-base px-8 h-12"
+              className="text-base px-8 h-12 hover:scale-105 active:scale-95 transition-transform duration-200"
             >
               Технические характеристики
             </Button>
           </div>
           
-          <div className="mt-16 text-xs text-muted-foreground uppercase tracking-wider">
+          <div className="mt-16 text-xs text-muted-foreground uppercase tracking-wider animate-float">
             Прокрутите вниз
           </div>
         </div>
       </section>
 
-      <section id="purpose" className="py-24 md:py-32">
+      <section id="purpose" className="py-24 md:py-32 scroll-animate">
         <div className="max-w-7xl mx-auto px-6 md:px-8">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
@@ -270,12 +292,12 @@ export default function Home() {
             </div>
             
             <div className="relative">
-              <div className="aspect-square bg-gradient-to-br from-primary/20 to-tech-cyan/20 rounded-xl overflow-hidden border border-border relative">
+              <div className="aspect-square bg-gradient-to-br from-primary/20 to-tech-cyan/20 rounded-xl overflow-hidden border border-border relative hover:border-primary/50 transition-all duration-500 hover:shadow-lg hover:shadow-primary/20">
                 <div className="absolute inset-0 bg-grid-pattern opacity-20" />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center p-8">
-                    <Gauge className="h-32 w-32 text-primary mx-auto mb-4" />
-                    <div className="text-6xl font-bold font-mono text-primary mb-2">100</div>
+                  <div className="text-center p-8 group">
+                    <Gauge className="h-32 w-32 text-primary mx-auto mb-4 group-hover:animate-float transition-transform duration-500" />
+                    <div className="text-6xl font-bold font-mono text-primary mb-2 group-hover:scale-105 transition-transform duration-300">{device.maxPower.split(" ")[0]}</div>
                     <div className="text-xl font-medium text-muted-foreground">кВт</div>
                   </div>
                 </div>
@@ -285,9 +307,9 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="benefits" className="py-24 md:py-32 bg-muted/30">
+      <section id="benefits" className="py-24 md:py-32 bg-muted/30 scroll-animate">
         <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-benefits-section">
               Преимущества
             </Badge>
@@ -334,7 +356,7 @@ export default function Home() {
             ].map((benefit, idx) => (
               <Card 
                 key={idx} 
-                className="hover-elevate transition-all duration-300"
+                className="hover-elevate transition-all duration-300 card-hover stagger-item hover:shadow-lg hover:shadow-primary/10 border-border/50 hover:border-primary/30"
                 data-testid={`card-benefit-${idx}`}
               >
                 <CardHeader>
@@ -354,9 +376,9 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="specifications" className="py-24 md:py-32">
+      <section id="specifications" className="py-24 md:py-32 scroll-animate">
         <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-specs-section">
               Характеристики
             </Badge>
