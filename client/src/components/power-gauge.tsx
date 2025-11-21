@@ -9,7 +9,6 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const animationRef = useRef<number>();
   const needleAngleRef = useRef(0);
   const targetAngleRef = useRef(0);
-  const isAnimatingRef = useRef(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -31,20 +30,20 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     const drawGauge = (needleAngle: number) => {
       // Clear canvas with gradient background
       const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-      bgGradient.addColorStop(0, "hsl(var(--card))");
-      bgGradient.addColorStop(1, "hsl(var(--background))");
+      bgGradient.addColorStop(0, "hsl(210, 42%, 98%)");
+      bgGradient.addColorStop(1, "hsl(210, 42%, 96%)");
       ctx.fillStyle = bgGradient;
       ctx.fillRect(0, 0, width, height);
 
       // Draw outer circle shadow
-      ctx.shadowColor = "hsl(var(--primary) / 0.2)";
+      ctx.shadowColor = "rgba(26, 148, 255, 0.2)";
       ctx.shadowBlur = 20;
       ctx.shadowOffsetY = 8;
 
       // Draw gauge circle
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-      ctx.strokeStyle = "hsl(var(--primary) / 0.3)";
+      ctx.strokeStyle = "rgba(26, 148, 255, 0.3)";
       ctx.lineWidth = 3;
       ctx.stroke();
 
@@ -53,16 +52,16 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       // Draw gauge arc background
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius - 8, (-90 * Math.PI) / 180, (90 * Math.PI) / 180);
-      ctx.strokeStyle = "hsl(var(--muted) / 0.4)";
+      ctx.strokeStyle = "rgba(200, 200, 200, 0.4)";
       ctx.lineWidth = 12;
       ctx.lineCap = "round";
       ctx.stroke();
 
       // Draw colored arc (0 to max)
       const arcGradient = ctx.createConicGradient((-90 * Math.PI) / 180, centerX, centerY);
-      arcGradient.addColorStop(0, "hsl(142 72% 42%)"); // Green
-      arcGradient.addColorStop(0.7, "hsl(43 88% 58%)"); // Yellow
-      arcGradient.addColorStop(1, "hsl(0 84% 52%)"); // Red
+      arcGradient.addColorStop(0, "hsl(142, 72%, 42%)"); // Green
+      arcGradient.addColorStop(0.7, "hsl(43, 88%, 58%)"); // Yellow
+      arcGradient.addColorStop(1, "hsl(0, 84%, 52%)"); // Red
 
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius - 8, (-90 * Math.PI) / 180, needleAngle);
@@ -82,7 +81,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         const x2 = centerX + Math.cos(angle) * (radius - 3 - tickLength);
         const y2 = centerY + Math.sin(angle) * (radius - 3 - tickLength);
 
-        ctx.strokeStyle = isMainTick ? "hsl(var(--foreground) / 0.8)" : "hsl(var(--foreground) / 0.4)";
+        ctx.strokeStyle = isMainTick ? "rgba(26, 30, 44, 0.8)" : "rgba(26, 30, 44, 0.4)";
         ctx.lineWidth = isMainTick ? 2 : 1;
         ctx.lineCap = "round";
         ctx.beginPath();
@@ -94,7 +93,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         if (isMainTick) {
           const numX = centerX + Math.cos(angle) * (radius - 35);
           const numY = centerY + Math.sin(angle) * (radius - 35);
-          ctx.fillStyle = "hsl(var(--foreground) / 0.7)";
+          ctx.fillStyle = "rgba(26, 30, 44, 0.7)";
           ctx.font = "bold 13px IBM Plex Mono";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -103,9 +102,9 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       }
 
       // Draw needle shadow
-      ctx.shadowColor = "hsl(var(--primary) / 0.4)";
+      ctx.shadowColor = "rgba(26, 148, 255, 0.4)";
       ctx.shadowBlur = 8;
-      ctx.strokeStyle = "hsl(var(--primary) / 0.3)";
+      ctx.strokeStyle = "rgba(26, 148, 255, 0.3)";
       ctx.lineWidth = 6;
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
@@ -118,7 +117,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       ctx.shadowColor = "transparent";
 
       // Draw needle
-      ctx.strokeStyle = "hsl(var(--primary))";
+      ctx.strokeStyle = "hsl(210, 100%, 52%)";
       ctx.lineWidth = 4;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -132,16 +131,16 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       // Draw center circle
       ctx.beginPath();
       ctx.arc(centerX, centerY, 10, 0, 2 * Math.PI);
-      ctx.fillStyle = "hsl(var(--primary))";
+      ctx.fillStyle = "hsl(210, 100%, 52%)";
       ctx.fill();
 
       ctx.beginPath();
       ctx.arc(centerX, centerY, 6, 0, 2 * Math.PI);
-      ctx.fillStyle = "hsl(var(--card))";
+      ctx.fillStyle = "hsl(210, 42%, 98%)";
       ctx.fill();
 
       // Draw kW label
-      ctx.fillStyle = "hsl(var(--muted-foreground))";
+      ctx.fillStyle = "rgba(100, 100, 100, 0.8)";
       ctx.font = "12px IBM Plex Sans";
       ctx.textAlign = "center";
       ctx.fillText("кВт", centerX, centerY + radius + 30);
@@ -151,11 +150,9 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       // Smooth animation towards target angle
       const angleDiff = targetAngleRef.current - needleAngleRef.current;
       if (Math.abs(angleDiff) > 0.01) {
-        isAnimatingRef.current = true;
         needleAngleRef.current += angleDiff * 0.1;
       } else {
         needleAngleRef.current = targetAngleRef.current;
-        isAnimatingRef.current = false;
       }
 
       drawGauge(needleAngleRef.current);
