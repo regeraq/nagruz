@@ -21,7 +21,7 @@ async function sendEmail(to: string, subject: string, html: string) {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "noreply@example.com",
+        from: "onboarding@resend.dev",
         to,
         subject,
         html,
@@ -29,6 +29,7 @@ async function sendEmail(to: string, subject: string, html: string) {
     });
 
     const data = await response.json();
+    console.log("Email sent:", { to, subject, success: response.ok, data });
     return { success: response.ok, data };
   } catch (error) {
     console.error("Error sending email:", error);
