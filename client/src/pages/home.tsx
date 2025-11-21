@@ -188,11 +188,9 @@ export default function Home() {
       />
       <section
         id="hero"
-        className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-background via-background to-primary/5 page-load"
+        className="relative min-h-screen flex items-center justify-center overflow-hidden page-load"
       >
         <div className="absolute inset-0 bg-grid-pattern opacity-30 animate-fade-up" />
-        
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
         
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-8 py-32 md:py-40 text-center">
           <Badge 
