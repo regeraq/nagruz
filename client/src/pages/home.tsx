@@ -3,7 +3,7 @@ import { useCounter } from "@/hooks/use-counter";
 import { 
   Zap, Shield, Gauge, Thermometer, Cable, FileCheck, 
   Factory, Battery, Cpu, CheckCircle2, Download, ArrowRight,
-  Phone, Mail, MapPin, Upload, X, Loader2, Send, ArrowUp
+  Phone, Mail, MapPin, Upload, X, Loader2, Send, ArrowUp, ShoppingCart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,13 +15,14 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertContactSubmissionSchema, type InsertContactSubmission } from "@shared/schema";
+import { insertContactSubmissionSchema, type InsertContactSubmission, type Product } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Navigation } from "@/components/navigation";
 import { PowerGauge } from "@/components/power-gauge";
+import { PaymentModal } from "@/components/payment-modal";
 
 const navLinks = [
   { label: "Главная", id: "hero" },
@@ -82,8 +83,14 @@ export default function Home() {
   const [selectedDevice, setSelectedDevice] = useState<"nu-100" | "nu-30">("nu-100");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const device = devices[selectedDevice];
   const { toast } = useToast();
+
+  const { data: products } = useQuery<Product[]>({
+    queryKey: ['/api/products'],
+  });
 
   useEffect(() => {
     const handleScroll = () => {
@@ -168,6 +175,14 @@ export default function Home() {
     document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleBuyClick = () => {
+    const product = products?.find(p => p.id === selectedDevice);
+    if (product) {
+      setSelectedProduct(product);
+      setPaymentModalOpen(true);
+    }
+  };
+
   // Scroll animation hook
   useEffect(() => {
     const observerOptions = {
@@ -250,6 +265,15 @@ export default function Home() {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
+            <Button 
+              size="lg" 
+              onClick={handleBuyClick}
+              data-testid="button-hero-buy"
+              className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0 animate-pulse-border"
+            >
+              <ShoppingCart className="mr-2 h-5 w-5 transition-all duration-300 group-hover:rotate-12" />
+              Купить
+            </Button>
             <Button 
               size="lg" 
               onClick={scrollToContact}
@@ -1109,6 +1133,12 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      <PaymentModal
+        isOpen={paymentModalOpen}
+        onClose={() => setPaymentModalOpen(false)}
+        product={selectedProduct}
+      />
     </div>
   );
 }
