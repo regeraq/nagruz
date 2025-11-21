@@ -55,7 +55,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
       >
         <nav className="max-w-7xl mx-auto px-6 md:px-8">
           <div className="flex items-center justify-between h-16 md:h-20">
-            <div className="flex items-center gap-1 relative">
+            <div className="flex items-center gap-3 relative">
               <button
                 onClick={() => scrollToSection("hero")}
                 className="flex items-center gap-3 hover-elevate active-elevate-2 rounded-md px-2 py-1 -ml-2"
@@ -64,9 +64,15 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                 <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
                   <span className="text-primary-foreground font-bold text-xl font-mono">НУ</span>
                 </div>
-                <div className="hidden md:block">
-                  <div className="text-sm font-semibold text-foreground">{deviceName}</div>
-                  <div className="text-xs text-muted-foreground font-medium">Нагрузочное устройство</div>
+                <div className="hidden md:block max-w-[140px]">
+                  <div 
+                    className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden text-ellipsis transition-all duration-300"
+                    key={deviceName}
+                    style={{ animation: 'deviceSwitch 0.3s ease-out' }}
+                  >
+                    {deviceName}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-medium whitespace-nowrap">Нагрузочное устройство</div>
                 </div>
               </button>
               
@@ -82,7 +88,11 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                 </Button>
                 
                 {isDeviceMenuOpen && onDeviceChange && (
-                  <div className="absolute top-full left-0 mt-1 bg-card border border-border rounded-md shadow-lg z-50 min-w-max" data-testid="device-menu">
+                  <div 
+                    className="absolute top-full left-0 mt-1 bg-card border border-border rounded-md shadow-lg z-50 min-w-max"
+                    data-testid="device-menu"
+                    style={{ animation: 'scaleIn 0.2s ease-out' }}
+                  >
                     <Button
                       variant={selectedDevice === "nu-100" ? "default" : "ghost"}
                       onClick={() => {
