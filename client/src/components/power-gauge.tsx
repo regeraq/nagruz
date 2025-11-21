@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface PowerGaugeProps {
   maxPower: number;
@@ -8,6 +8,8 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const needleAngleRef = useRef<number>(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const hoverAnimationRef = useRef<number>(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -32,7 +34,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     let animationStep = 0;
     const totalSteps = 50;
 
-    const drawGauge = (angle: number) => {
+    const drawGauge = (angle: number, hoverOffset: number = 0) => {
       // Clear canvas
       ctx.clearRect(0, 0, size, size);
 
@@ -96,13 +98,13 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         }
       }
 
-      // Draw needle
-      const needleAngleRad = angle * (Math.PI / 180);
+      // Draw needle with hover animation
+      const needleAngleRad = (angle + hoverOffset) * (Math.PI / 180);
       const needleLength = radius - 50;
 
-      // Needle glow
-      ctx.strokeStyle = 'rgba(26, 148, 255, 0.15)';
-      ctx.lineWidth = 12;
+      // Needle glow (more prominent on hover)
+      ctx.strokeStyle = hoverOffset !== 0 ? 'rgba(26, 148, 255, 0.4)' : 'rgba(26, 148, 255, 0.15)';
+      ctx.lineWidth = hoverOffset !== 0 ? 16 : 12;
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
@@ -114,7 +116,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
 
       // Main needle
       ctx.strokeStyle = 'hsl(210, 100%, 55%)';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = hoverOffset !== 0 ? 6 : 4;
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
       ctx.lineTo(
@@ -124,7 +126,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       ctx.stroke();
 
       // Center circle glow
-      ctx.fillStyle = 'rgba(26, 148, 255, 0.2)';
+      ctx.fillStyle = hoverOffset !== 0 ? 'rgba(26, 148, 255, 0.4)' : 'rgba(26, 148, 255, 0.2)';
       ctx.beginPath();
       ctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
       ctx.fill();
@@ -149,9 +151,17 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       currentAngle = -135 + (targetAngle - (-135)) * easeProgress;
       needleAngleRef.current = currentAngle;
 
-      drawGauge(currentAngle);
+      // Calculate hover offset (oscillation)
+      const hoverOffset = isHovered 
+        ? Math.sin(hoverAnimationRef.current * 0.08) * 8 
+        : 0;
 
-      if (animationStep < totalSteps) {
+      drawGauge(currentAngle, hoverOffset);
+
+      if (animationStep < totalSteps || isHovered) {
+        if (isHovered) {
+          hoverAnimationRef.current++;
+        }
         animationRef.current = requestAnimationFrame(animate);
       }
     };
@@ -167,10 +177,14 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [maxPower]);
+  }, [maxPower, isHovered]);
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/50 hover:shadow-primary/50 transition-all duration-500 group hover:scale-105 hover:shadow-primary/60 cursor-pointer">
+    <div 
+      className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/50 hover:shadow-primary/50 transition-all duration-500 group hover:scale-105 hover:shadow-primary/60 cursor-pointer"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <canvas
         ref={canvasRef}
         className="drop-shadow-2xl drop-shadow-primary/50 transition-all duration-300 group-hover:drop-shadow-[0_0_20px_rgba(26,148,255,0.8)]"
