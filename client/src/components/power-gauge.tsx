@@ -6,15 +6,17 @@ interface PowerGaugeProps {
 
 export function PowerGauge({ maxPower }: PowerGaugeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>();
-  const hoverAnimationRef = useRef<number>(0);
-  const hoverCyclesRef = useRef<number>(0);
-  const initialAnimationDoneRef = useRef(false);
+  const animationFrameRef = useRef<number>();
+  
+  // Track final needle angle after initial load animation
+  const finalAngleRef = useRef<number>(-135);
+  
+  // Hover animation state
+  const isHoveringRef = useRef(false);
+  const hoverStepRef = useRef(0);
+  const lastMaxPowerRef = useRef(maxPower);
 
   useEffect(() => {
-    // Reset on maxPower change
-    initialAnimationDoneRef.current = false;
-    
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -29,12 +31,13 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     const centerY = size / 2;
     const radius = 120;
 
-    // Calculate target angle based on power
+    // Calculate target angle for this power level
     const percent = Math.min(100, (maxPower / 150) * 100);
     const targetAngle = -135 + (percent / 100) * 270;
 
     const totalSteps = 50;
 
+    // Draw gauge with needle at specific angle
     const drawGauge = (angle: number) => {
       ctx.clearRect(0, 0, size, size);
 
@@ -143,60 +146,82 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       ctx.fill();
     };
 
-    let animationStep = 0;
+    // Easing function
+    const easeOut = (progress: number) => 1 - Math.pow(1 - progress, 3);
+
+    // Main animation loop
     const animate = () => {
-      // Initial load animation
-      if (!initialAnimationDoneRef.current && animationStep < totalSteps) {
-        animationStep++;
-        const progress = animationStep / totalSteps;
-        const easeProgress = 1 - Math.pow(1 - progress, 3);
-        const currentAngle = -135 + (targetAngle - (-135)) * easeProgress;
-        drawGauge(currentAngle);
-        animationRef.current = requestAnimationFrame(animate);
-      } 
-      // Hover replay animation
-      else if (hoverCyclesRef.current > 0) {
-        const hoverProgress = hoverAnimationRef.current / totalSteps;
-        const hoverEase = 1 - Math.pow(1 - hoverProgress, 3);
-        const hoverAngle = -135 + (targetAngle - (-135)) * hoverEase;
-        drawGauge(hoverAngle);
-        hoverAnimationRef.current++;
+      let shouldContinue = false;
+      let angleToDisplay = finalAngleRef.current;
 
-        if (hoverAnimationRef.current >= totalSteps) {
-          hoverCyclesRef.current = 0;
-          hoverAnimationRef.current = 0;
-        }
-        animationRef.current = requestAnimationFrame(animate);
+      // Check if we should animate hover
+      if (isHoveringRef.current && hoverStepRef.current < totalSteps) {
+        shouldContinue = true;
+        const hoverProgress = hoverStepRef.current / totalSteps;
+        const hoverEase = easeOut(hoverProgress);
+        // Animate from -135 to target angle
+        angleToDisplay = -135 + (targetAngle - (-135)) * hoverEase;
+        hoverStepRef.current++;
+      }
+      // Check if power changed and we need to re-animate on load
+      else if (lastMaxPowerRef.current !== maxPower && finalAngleRef.current !== targetAngle) {
+        shouldContinue = true;
+        // Smoothly update final angle toward target
+        let currentStep = 0;
+        const maxLoadSteps = totalSteps;
+        const loadAnimate = () => {
+          currentStep++;
+          const loadProgress = currentStep / maxLoadSteps;
+          const loadEase = easeOut(loadProgress);
+          const loadAngle = -135 + (targetAngle - (-135)) * loadEase;
+          angleToDisplay = loadAngle;
+          
+          if (currentStep >= maxLoadSteps) {
+            finalAngleRef.current = targetAngle;
+            lastMaxPowerRef.current = maxPower;
+          } else {
+            animationFrameRef.current = requestAnimationFrame(loadAnimate);
+          }
+          drawGauge(loadAngle);
+        };
+        loadAnimate();
+        return;
+      }
+
+      drawGauge(angleToDisplay);
+
+      if (shouldContinue) {
+        animationFrameRef.current = requestAnimationFrame(animate);
       }
     };
 
-    // Mark initial animation as done after completion
-    const checkInitialDone = () => {
-      if (animationStep >= totalSteps) {
-        initialAnimationDoneRef.current = true;
-        const finalAngle = targetAngle;
-        drawGauge(finalAngle);
-      }
-    };
+    // Start with initial angle draw
+    drawGauge(finalAngleRef.current);
 
-    // Start animation after delay
-    const timer = setTimeout(() => {
-      animate();
-      // Check periodically if initial animation is done
-      const checkInterval = setInterval(() => {
-        checkInitialDone();
-        if (initialAnimationDoneRef.current) {
-          clearInterval(checkInterval);
+    // If power changed or first load, animate to target
+    if (lastMaxPowerRef.current !== maxPower || finalAngleRef.current === -135) {
+      let loadStep = 0;
+      const loadAnimate = () => {
+        loadStep++;
+        const progress = loadStep / totalSteps;
+        const ease = easeOut(progress);
+        const angle = -135 + (targetAngle - (-135)) * ease;
+        finalAngleRef.current = angle;
+        drawGauge(angle);
+
+        if (loadStep < totalSteps) {
+          animationFrameRef.current = requestAnimationFrame(loadAnimate);
+        } else {
+          finalAngleRef.current = targetAngle;
+          lastMaxPowerRef.current = maxPower;
         }
-      }, 50);
-      
-      return () => clearInterval(checkInterval);
-    }, 200);
+      };
+      loadAnimate();
+    }
 
     return () => {
-      clearTimeout(timer);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
     };
   }, [maxPower]);
@@ -205,12 +230,12 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     <div 
       className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/20 hover:shadow-primary/40 transition-all duration-700 group hover:scale-105 hover:shadow-primary/50 cursor-pointer"
       onMouseEnter={() => {
-        hoverAnimationRef.current = 0;
-        hoverCyclesRef.current = 1;
+        isHoveringRef.current = true;
+        hoverStepRef.current = 0;
       }}
       onMouseLeave={() => {
-        hoverCyclesRef.current = 0;
-        hoverAnimationRef.current = 0;
+        isHoveringRef.current = false;
+        hoverStepRef.current = 0;
       }}
     >
       <canvas
