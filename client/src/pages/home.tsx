@@ -3,7 +3,7 @@ import { useCounter } from "@/hooks/use-counter";
 import { 
   Zap, Shield, Gauge, Thermometer, Cable, FileCheck, 
   Factory, Battery, Cpu, CheckCircle2, Download, ArrowRight,
-  Phone, Mail, MapPin, Upload, X, Loader2, Send
+  Phone, Mail, MapPin, Upload, X, Loader2, Send, ArrowUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,8 +81,21 @@ const devices = {
 export default function Home() {
   const [selectedDevice, setSelectedDevice] = useState<"nu-100" | "nu-30">("nu-100");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const device = devices[selectedDevice];
   const { toast } = useToast();
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 500);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const form = useForm<InsertContactSubmission>({
     resolver: zodResolver(insertContactSubmissionSchema),
@@ -186,6 +199,17 @@ export default function Home() {
         selectedDevice={selectedDevice} 
         onDeviceChange={setSelectedDevice}
       />
+      
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full shadow-lg shadow-primary/40 hover:shadow-primary/60 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 hover:-translate-y-1"
+          data-testid="button-scroll-top-floating"
+          aria-label="Вернуться в начало"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
       <section
         id="hero"
         className="relative min-h-screen flex items-center justify-center overflow-hidden page-load"
@@ -748,7 +772,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="about" className="py-24 md:py-32">
+      <section id="about" className="py-24 md:py-32 scroll-animate">
         <div className="max-w-4xl mx-auto px-6 md:px-8 text-center animate-fade-up">
           <Badge variant="secondary" className="mb-4" data-testid="badge-about-section">
             О компании
@@ -781,7 +805,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="contact" className="py-24 md:py-32 bg-muted/30">
+      <section id="contact" className="py-24 md:py-32 bg-muted/30 scroll-animate">
         <div className="max-w-6xl mx-auto px-6 md:px-8">
           <div className="text-center mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-contact-section">
