@@ -24,36 +24,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// ✅ ИСПРАВЛЕНИЕ 3: Rate limiting для различных endpoint'ов
-const contactLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 минута
-  max: 5, // 5 заявок в минуту
-  message: 'Слишком много заявок. Пожалуйста, подождите перед отправкой ещё одной.',
-  standardHeaders: false,
-  skip: (req) => req.path.startsWith('/api/products'),
-});
-
-const orderLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 минута
-  max: 10, // 10 заказов в минуту
-  message: 'Слишком много заказов. Пожалуйста, подождите перед созданием нового.',
-  standardHeaders: false,
-});
-
-const promoLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 минута
-  max: 20, // 20 проверок в минуту (защита от перебора)
-  message: 'Слишком много попыток проверки промокода.',
-  standardHeaders: false,
-});
-
-const cryptoRatesLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 минут
-  max: 10, // 10 запросов в 5 минут
-  message: 'Слишком много запросов курсов криптовалют.',
-  standardHeaders: false,
-});
-
 app.use(express.json({
   limit: '30mb',
   verify: (req, _res, buf) => {
@@ -62,7 +32,7 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false, limit: '30mb' }));
 
-// ✅ ИСПРАВЛЕНИЕ 4: Безопасное логирование (без PII)
+// ✅ ИСПРАВЛЕНИЕ 3: Безопасное логирование (без PII)
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -77,7 +47,7 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      // ✅ Логируем метаданные, но НЕ чувствительные данные
+      // Логируем метаданные, но НЕ чувствительные данные
       const isErrorResponse = res.statusCode >= 400;
       const shouldLog = isErrorResponse || req.method === 'POST' || req.method === 'PATCH';
 
@@ -134,6 +104,3 @@ app.use((req, res, next) => {
     log(`serving on port ${port}`);
   });
 })();
-
-// ✅ Экспортируем limiters для использования в routes.ts
-export { contactLimiter, orderLimiter, promoLimiter, cryptoRatesLimiter };

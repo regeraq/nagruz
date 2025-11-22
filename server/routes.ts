@@ -1,14 +1,43 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { insertContactSubmissionSchema, insertOrderSchema } from "@shared/schema";
 import { z } from "zod";
-import { contactLimiter, orderLimiter, promoLimiter, cryptoRatesLimiter } from "./index";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const OWNER_EMAIL = process.env.OWNER_EMAIL || "owner@example.com";
 
-// ✅ ИСПРАВЛЕНИЕ 5: Константы вместо magic numbers
+// ✅ Rate limiters
+const contactLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: 'Слишком много заявок. Пожалуйста, подождите перед отправкой ещё одной.',
+  standardHeaders: false,
+});
+
+const orderLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: 'Слишком много заказов. Пожалуйста, подождите перед созданием нового.',
+  standardHeaders: false,
+});
+
+const promoLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: 'Слишком много попыток проверки промокода.',
+  standardHeaders: false,
+});
+
+const cryptoRatesLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  message: 'Слишком много запросов курсов криптовалют.',
+  standardHeaders: false,
+});
+
+// ✅ Константы конфигурации
 const CONFIG = {
   MAX_FILE_SIZE_MB: 10,
   RESERVATION_TIME_MINUTES: 15,
@@ -20,12 +49,9 @@ const CONFIG = {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   ],
   ALLOWED_FILE_EXTENSIONS: ['.pdf', '.doc', '.docx', '.xls', '.xlsx'],
-  MAX_STRING_LENGTH: 1000,
-  MAX_NAME_LENGTH: 100,
-  MAX_EMAIL_LENGTH: 254,
 };
 
-// ✅ ИСПРАВЛЕНИЕ 6: XSS защита - экранирование HTML
+// ✅ XSS защита - экранирование HTML
 function escapeHtml(text: string): string {
   const map: { [key: string]: string } = {
     '&': '&amp;',
@@ -37,17 +63,17 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
-// ✅ ИСПРАВЛЕНИЕ 7: Маскирование email в логах
+// ✅ Маскирование email в логах
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
   if (!domain) return 'invalid-email';
   return `${local.slice(0, 2)}***@${domain}`;
 }
 
-// ✅ ИСПРАВЛЕНИЕ 8: Валидация email
+// ✅ Валидация email
 function isValidEmail(email: string): boolean {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email) && email.length <= CONFIG.MAX_EMAIL_LENGTH;
+  return re.test(email) && email.length <= 254;
 }
 
 async function sendEmail(to: string, subject: string, html: string) {
@@ -57,7 +83,6 @@ async function sendEmail(to: string, subject: string, html: string) {
   }
 
   try {
-    // ✅ Валидация email перед отправкой
     if (!isValidEmail(to)) {
       console.warn(`[EMAIL] Invalid recipient email: ${maskEmail(to)}`);
       return { success: false, message: "Invalid recipient email" };
@@ -112,7 +137,6 @@ async function getCryptoRates(): Promise<{ btc: number; eth: number; usdt: numbe
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // ✅ ИСПРАВЛЕНИЕ 9: Rate limiting на crypto-rates endpoint
   app.get("/api/crypto-rates", cryptoRatesLimiter, async (req, res) => {
     try {
       const rates = await getCryptoRates();
@@ -126,12 +150,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ✅ ИСПРАВЛЕНИЕ 10: Rate limiting + XSS защита на contact endpoint
   app.post("/api/contact", contactLimiter, async (req, res) => {
     try {
       const validatedData = insertContactSubmissionSchema.parse(req.body);
       
-      // Валидация файла
       if (validatedData.fileData && validatedData.fileName) {
         const dataUrlMatch = validatedData.fileData.match(/^data:([^;]+);base64,(.+)$/);
         const base64Data = dataUrlMatch ? dataUrlMatch[2] : validatedData.fileData;
@@ -169,7 +191,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const submission = await storage.createContactSubmission(validatedData);
       
-      // ✅ ИСПРАВЛЕНИЕ 11: Экранирование всех user inputs в email HTML
       const ownerEmailHtml = `
         <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
           <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">Новое коммерческое предложение</h2>
@@ -220,10 +241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ✅ ИСПРАВЛЕНИЕ 12: Защита от раскрытия данных (скрыл GET endpoint для контактов)
   app.get("/api/contact", async (req, res) => {
-    // TODO: Добавить проверку авторизации для админа
-    // Пока возвращаем 403 для защиты
     res.status(403).json({
       success: false,
       message: "Доступ запрещён"
@@ -231,7 +249,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/contact/:id", async (req, res) => {
-    // TODO: Добавить проверку авторизации
     res.status(403).json({
       success: false,
       message: "Доступ запрещён"
@@ -273,7 +290,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ✅ ИСПРАВЛЕНИЕ 13: Rate limiting на promo validate endpoint
   app.post("/api/promo/validate", promoLimiter, async (req, res) => {
     try {
       const { code } = req.body;
@@ -310,7 +326,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ✅ ИСПРАВЛЕНИЕ 14: Rate limiting на orders endpoint
   app.post("/api/orders", orderLimiter, async (req, res) => {
     try {
       const validatedData = insertOrderSchema.parse(req.body);
@@ -334,7 +349,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const order = await storage.createOrder(orderData);
 
-      // ✅ ИСПРАВЛЕНИЕ 15: Экранирование в email HTML для заказов
       const ownerEmailHtml = `
         <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
           <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">Новый заказ #${order.id}</h2>
