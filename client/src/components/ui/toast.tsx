@@ -1,5 +1,5 @@
 import * as ToastPrimitives from "@radix-ui/react-toast"
-import { cva, type VariantProps } from "class-variance-authority"
+import { cva } from "class-variance-authority"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -19,17 +19,12 @@ const toastVariants = cva(
   }
 )
 
-interface ToastProps extends React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root>, VariantProps<typeof toastVariants> {
-  className?: string
-}
-
-export const Toast = (props: ToastProps) => {
-  const { className, variant, ...rest } = props
-  return <ToastPrimitives.Root className={cn(toastVariants({ variant }), className)} {...rest} />
-}
+export const Toast = ({ className, variant, ...props }: any) => (
+  <ToastPrimitives.Root className={cn(toastVariants({ variant }), className)} {...props} />
+)
 Toast.displayName = "Toast"
 
-export const ToastAction = (props: React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action>) => (
+export const ToastAction = (props: any) => (
   <ToastPrimitives.Action
     className={cn(
       "inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive",
@@ -40,7 +35,7 @@ export const ToastAction = (props: React.ComponentPropsWithoutRef<typeof ToastPr
 )
 ToastAction.displayName = "ToastAction"
 
-export const ToastClose = (props: React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>) => (
+export const ToastClose = (props: any) => (
   <ToastPrimitives.Close
     className={cn(
       "absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600",
@@ -53,15 +48,12 @@ export const ToastClose = (props: React.ComponentPropsWithoutRef<typeof ToastPri
 )
 ToastClose.displayName = "ToastClose"
 
-export const ToastTitle = (props: React.ComponentPropsWithoutRef<typeof ToastPrimitives.Title>) => (
+export const ToastTitle = (props: any) => (
   <ToastPrimitives.Title className={cn("text-sm font-semibold", props.className)} {...props} />
 )
 ToastTitle.displayName = "ToastTitle"
 
-export const ToastDescription = (props: React.ComponentPropsWithoutRef<typeof ToastPrimitives.Description>) => (
+export const ToastDescription = (props: any) => (
   <ToastPrimitives.Description className={cn("text-sm opacity-90", props.className)} {...props} />
 )
 ToastDescription.displayName = "ToastDescription"
-
-export type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
-export type ToastActionElement = React.ReactElement<typeof ToastAction>
