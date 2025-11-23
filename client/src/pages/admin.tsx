@@ -1,3 +1,4 @@
+import { useLocation } from "wouter";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,7 @@ interface Product {
 }
 
 export default function Admin() {
+  const [, setLocation] = useLocation();
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editingStock, setEditingStock] = useState<number | null>(null);
@@ -226,6 +228,9 @@ export default function Admin() {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-bold">Админ-панель</h1>
           <Badge variant="outline" className="text-sm">
+        <Button variant="ghost" onClick={() => setLocation("/")}>
+          На главную
+        </Button>
             {userData?.role}
           </Badge>
         </div>

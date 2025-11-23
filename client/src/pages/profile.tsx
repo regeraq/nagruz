@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,7 @@ const profileSchema = z.object({
 type ProfileForm = z.infer<typeof profileSchema>;
 
 export default function Profile() {
+  const [, setLocation] = useLocation();
   const [isEditing, setIsEditing] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -108,6 +110,15 @@ export default function Profile() {
       phone: userData?.phone || "",
     },
   });
+  useEffect(() => {
+    if (userData) {
+      reset({
+        firstName: userData.firstName || "",
+        lastName: userData.lastName || "",
+        phone: userData.phone || "",
+      });
+    }
+  }, [userData, reset]);
 
   const updateProfile = useMutation({
     mutationFn: async (data: ProfileForm) => {
@@ -228,6 +239,10 @@ export default function Profile() {
                   </CardTitle>
                   <CardDescription>{userData.email}</CardDescription>
                 </div>
+              <Button variant="ghost" onClick={() => setLocation("/")}>
+                <User className="w-4 h-4 mr-2" />
+                На главную
+              </Button>
               </div>
               {!isEditing && (
                 <Button variant="outline" onClick={() => setIsEditing(true)}>

@@ -88,7 +88,7 @@ export default function Login() {
       });
 
       // Redirect to profile or home
-      setLocation("/profile");
+      setLocation("/");
       window.location.reload();
     } catch (err) {
       setError("Произошла ошибка при входе");

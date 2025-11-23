@@ -175,14 +175,21 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                     key={link.id}
                     variant="ghost"
                     onClick={() => {
-                      const element = document.getElementById(link.id);
-                      if (element) {
-                        const offset = 80;
-                        const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
-                        window.scrollTo({
-                          top: elementPosition - offset,
-                          behavior: "smooth",
-                        });
+                      if (location !== "/") {
+                        setLocation("/");
+                        setTimeout(() => {
+                          const el = document.getElementById(link.id);
+                          if (el) {
+                            const pos = el.getBoundingClientRect().top + window.pageYOffset - 80;
+                            window.scrollTo({ top: pos, behavior: "smooth" });
+                          }
+                        }, 100);
+                      } else {
+                        const el = document.getElementById(link.id);
+                        if (el) {
+                          const pos = el.getBoundingClientRect().top + window.pageYOffset - 80;
+                          window.scrollTo({ top: pos, behavior: "smooth" });
+                        }
                       }
                       setIsMobileMenuOpen(false);
                     }}
