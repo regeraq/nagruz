@@ -17,6 +17,11 @@ export interface IStorage {
   getOrder(id: string): Promise<any>;
   updateOrderStatus(id: string, status: string, details?: string): Promise<any>;
   createOrder(order: any): Promise<any>;
+  getUserOrders(userId: string): Promise<any[]>;
+  getAllOrders(): Promise<any[]>;
+  addToFavorites(userId: string, productId: string): Promise<any>;
+  removeFavorite(userId: string, productId: string): Promise<boolean>;
+  getUserFavorites(userId: string): Promise<any[]>;
   validatePromoCode(code: string): Promise<any>;
 }
 
@@ -26,6 +31,7 @@ export class MemStorage implements IStorage {
   private notifications = new Map();
   private contacts = new Map();
   private orders = new Map();
+  private favorites = new Map();
   private loginAttempts = new Map();
   private products = [
     {
@@ -168,6 +174,32 @@ export class MemStorage implements IStorage {
     const newOrder = { id, ...order, createdAt: new Date(), updatedAt: new Date() };
     this.orders.set(id, newOrder);
     return newOrder;
+  }
+
+  async getUserOrders(userId: string) {
+    return Array.from(this.orders.values()).filter((o: any) => o.userId === userId);
+  }
+
+  async getAllOrders() {
+    return Array.from(this.orders.values());
+  }
+
+  async addToFavorites(userId: string, productId: string) {
+    const key = `${userId}:${productId}`;
+    const product = this.products.find((p: any) => p.id === productId);
+    if (!product) return null;
+    const favorite = { userId, productId, product, createdAt: new Date() };
+    this.favorites.set(key, favorite);
+    return favorite;
+  }
+
+  async removeFavorite(userId: string, productId: string) {
+    const key = `${userId}:${productId}`;
+    return this.favorites.delete(key);
+  }
+
+  async getUserFavorites(userId: string) {
+    return Array.from(this.favorites.values()).filter((f: any) => f.userId === userId);
   }
 
   async validatePromoCode(code: string) {

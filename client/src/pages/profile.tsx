@@ -163,12 +163,12 @@ export default function Profile() {
   useEffect(() => {
     if (userData) {
       reset({
-        firstName: userData.firstName || "",
-        lastName: userData.lastName || "",
-        phone: userData.phone || "",
+        firstName: userData.firstName?.toString() || "",
+        lastName: userData.lastName?.toString() || "",
+        phone: userData.phone?.toString() || "",
       });
     }
-  }, [userData, reset]);
+  }, [userData?.id, reset]);
 
   const updateProfile = useMutation({
     mutationFn: async (data: ProfileForm) => {

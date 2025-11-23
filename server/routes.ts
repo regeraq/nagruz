@@ -656,8 +656,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
+          phone: user.phone,
           role: user.role,
           avatar: user.avatar,
+          isEmailVerified: user.isEmailVerified || false,
+          isPhoneVerified: user.isPhoneVerified || false,
+          createdAt: user.createdAt || new Date().toISOString(),
         },
       });
     } catch (error) {
@@ -833,6 +837,228 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ success: false, message: "Failed to delete products" });
     }
   });
+
+  // Create order - user purchasing a product
+  app.post("/api/orders", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      const { productId, quantity, paymentMethod } = req.body;
+
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        res.status(404).json({ success: false, message: "Product not found" });
+        return;
+      }
+
+      if (product.stock < quantity) {
+        res.status(400).json({ success: false, message: "Insufficient stock" });
+        return;
+      }
+
+      let userId = null;
+      if (token) {
+        const payload = verifyAccessToken(token);
+        if (payload) {
+          userId = payload.userId;
+          const user = await storage.getUserById(userId);
+          if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+          }
+        }
+      }
+
+      const totalAmount = parseFloat(product.price) * quantity;
+      const order = await storage.createOrder({
+        userId,
+        productId,
+        quantity,
+        totalAmount: totalAmount.toString(),
+        discountAmount: "0",
+        finalAmount: totalAmount.toString(),
+        paymentMethod,
+        paymentStatus: "pending",
+      });
+
+      // Reduce stock
+      product.stock -= quantity;
+
+      res.json({ success: true, order });
+    } catch (error) {
+      console.error("Create order error:", error);
+      res.status(500).json({ success: false, message: "Failed to create order" });
+    }
+  });
+
+  // Get user orders
+  app.get("/api/orders/user", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const orders = await storage.getUserOrders(payload.userId);
+      const ordersWithProducts = orders.map((o: any) => ({
+        ...o,
+        product: storage.getProduct(o.productId),
+      }));
+
+      res.json(ordersWithProducts);
+    } catch (error) {
+      console.error("Get user orders error:", error);
+      res.status(500).json({ success: false, message: "Failed to get orders" });
+    }
+  });
+
+  // Admin: Get all orders
+  app.get("/api/admin/orders", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const orders = await storage.getAllOrders();
+      res.json(orders);
+    } catch (error) {
+      console.error("Get admin orders error:", error);
+      res.status(500).json({ success: false, message: "Failed to get orders" });
+    }
+  });
+
+  // Admin: Update order status
+  app.patch("/api/admin/orders/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { paymentStatus } = req.body;
+      const order = await storage.updateOrderStatus(req.params.id, paymentStatus);
+
+      if (!order) {
+        res.status(404).json({ success: false, message: "Order not found" });
+        return;
+      }
+
+      res.json({ success: true, order });
+    } catch (error) {
+      console.error("Update order status error:", error);
+      res.status(500).json({ success: false, message: "Failed to update order" });
+    }
+  });
+
+  // Add to favorites
+  app.post("/api/favorites", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const { productId } = req.body;
+      const favorite = await storage.addToFavorites(payload.userId, productId);
+
+      if (!favorite) {
+        res.status(404).json({ success: false, message: "Product not found" });
+        return;
+      }
+
+      res.json({ success: true, favorite });
+    } catch (error) {
+      console.error("Add to favorites error:", error);
+      res.status(500).json({ success: false, message: "Failed to add to favorites" });
+    }
+  });
+
+  // Get user favorites
+  app.get("/api/favorites", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const favorites = await storage.getUserFavorites(payload.userId);
+      res.json(favorites);
+    } catch (error) {
+      console.error("Get favorites error:", error);
+      res.status(500).json({ success: false, message: "Failed to get favorites" });
+    }
+  });
+
+  // Remove from favorites
+  app.delete("/api/favorites/:productId", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const deleted = await storage.removeFavorite(payload.userId, req.params.productId);
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Remove favorite error:", error);
+      res.status(500).json({ success: false, message: "Failed to remove favorite" });
+    }
+  });
+
   // Register auth routes
   const httpServer = createServer(app);
 
