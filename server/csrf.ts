@@ -2,7 +2,7 @@
  * CSRF Protection middleware
  * 
  * Generates and validates CSRF tokens to prevent cross-site request forgery attacks.
- * Uses double-submit cookie pattern for stateless validation.
+ * Uses simple stateless token pattern for REST APIs.
  */
 
 import type { Request, Response, NextFunction } from 'express';
@@ -20,33 +20,23 @@ function generateToken(): string {
 }
 
 /**
- * Creates a hash of the token for secure comparison
- */
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
-}
-
-/**
  * CSRF token generation middleware
- * Generates and sets CSRF token cookie for GET requests
+ * Generates and sets CSRF token cookie for all requests
  */
 export function csrfToken(req: Request, res: Response, next: NextFunction) {
-  // Only generate token for GET requests
-  if (req.method === 'GET' && !req.cookies?.[CSRF_TOKEN_COOKIE]) {
-    const token = generateToken();
-    const hashedToken = hashToken(token);
-    
-    // Set secure cookie with SameSite protection
-    res.cookie(CSRF_TOKEN_COOKIE, hashedToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    });
-    
-    // Store token in response locals for client access
-    res.locals.csrfToken = token;
-  }
+  // Generate fresh token for every request (stateless approach)
+  const token = generateToken();
+  
+  // Set non-httpOnly cookie so client can read it for API calls
+  res.cookie(CSRF_TOKEN_COOKIE, token, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  });
+  
+  // Store token in response locals for endpoint access
+  res.locals.csrfToken = token;
   
   next();
 }
@@ -72,10 +62,8 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
     });
   }
 
-  // Compare hashed tokens
-  const hashedHeaderToken = hashToken(tokenFromHeader);
-  
-  if (hashedHeaderToken !== tokenFromCookie) {
+  // Simple comparison (stateless validation)
+  if (tokenFromHeader !== tokenFromCookie) {
     return res.status(403).json({
       success: false,
       message: 'CSRF token mismatch',
@@ -91,4 +79,3 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
 export function getCsrfToken(res: Response): string | undefined {
   return res.locals.csrfToken;
 }
-
