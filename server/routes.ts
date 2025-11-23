@@ -888,58 +888,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create order - user purchasing a product
-  app.post("/api/orders", async (req, res) => {
-    try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      const { productId, quantity, paymentMethod } = req.body;
-
-      const product = await storage.getProduct(productId);
-      if (!product) {
-        res.status(404).json({ success: false, message: "Product not found" });
-        return;
-      }
-
-      if (product.stock < quantity) {
-        res.status(400).json({ success: false, message: "Insufficient stock" });
-        return;
-      }
-
-      let userId = null;
-      if (token) {
-        const payload = verifyAccessToken(token);
-        if (payload) {
-          userId = payload.userId;
-          const user = await storage.getUserById(userId);
-          if (!user) {
-            res.status(404).json({ success: false, message: "User not found" });
-            return;
-          }
-        }
-      }
-
-      const totalAmount = parseFloat(product.price) * quantity;
-      const order = await storage.createOrder({
-        userId,
-        productId,
-        quantity,
-        totalAmount: totalAmount.toString(),
-        discountAmount: "0",
-        finalAmount: totalAmount.toString(),
-        paymentMethod,
-        paymentStatus: "pending",
-      });
-
-      // Reduce stock
-      product.stock -= quantity;
-
-      res.json({ success: true, order });
-    } catch (error) {
-      console.error("Create order error:", error);
-      res.status(500).json({ success: false, message: "Failed to create order" });
-    }
-  });
-
   // Get user orders
   app.get("/api/orders/user", async (req, res) => {
     try {
