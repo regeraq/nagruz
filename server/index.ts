@@ -88,6 +88,14 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize admin account
+  try {
+    const { initAdminAccount } = await import("./initAdmin");
+    await initAdminAccount();
+  } catch (error) {
+    console.error("Failed to initialize admin account:", error);
+  }
+
   const server = await registerRoutes(app);
 
   // FIXED: Error handler - no stack trace leakage in production

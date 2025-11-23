@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useCounter } from "@/hooks/use-counter";
 import { 
   Zap, Shield, Gauge, Thermometer, Cable, FileCheck, 
@@ -131,8 +131,10 @@ export default function Home() {
         description: response.message || "Мы свяжемся с вами в ближайшее время.",
         variant: "default",
       });
-      form.reset();
-      setSelectedFile(null);
+      setTimeout(() => {
+        form.reset();
+        setSelectedFile(null);
+      }, 0);
     },
     onError: (error: any) => {
       toast({
@@ -214,10 +216,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      <Navigation 
-        selectedDevice={selectedDevice} 
-        onDeviceChange={setSelectedDevice}
-      />
+      <Navigation />
       
       {showScrollTop && (
         <button
