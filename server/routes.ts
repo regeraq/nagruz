@@ -172,7 +172,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/contact", rateLimiters.contact, express.json({ limit: '15mb' }), async (req, res) => {
     try {
       // FIXED: Require authentication for contact submissions
-      const userId = (req.session as any)?.userId;
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      let userId: string | null = null;
+      
+      if (token) {
+        try {
+          const payload = verifyAccessToken(token);
+          userId = payload.userId;
+        } catch (e) {
+          // Token invalid, userId stays null
+        }
+      }
+      
       if (!userId) {
         res.status(401).json({
           success: false,
@@ -384,7 +395,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/orders", rateLimiters.orders, async (req, res) => {
     try {
       // FIXED: Require authentication for orders
-      const userId = (req.session as any)?.userId;
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      let userId: string | null = null;
+      
+      if (token) {
+        try {
+          const payload = verifyAccessToken(token);
+          userId = payload.userId;
+        } catch (e) {
+          // Token invalid, userId stays null
+        }
+      }
+      
       if (!userId) {
         res.status(401).json({
           success: false,

@@ -49,6 +49,12 @@ export async function apiRequest(
 ): Promise<Response> {
   const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
   
+  // Add JWT token if available
+  const accessToken = localStorage.getItem("accessToken");
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+  
   // Add CSRF token for state-changing requests
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
     let csrfToken = getCsrfToken();
