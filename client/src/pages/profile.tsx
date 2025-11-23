@@ -13,7 +13,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { User, Package, Heart, Bell, Settings, Edit2, Save, X, CheckCircle2, XCircle, Clock, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { User, Package, Heart, Bell, Settings, Edit2, Save, X, CheckCircle2, XCircle, Clock, Trash2, ShoppingCart, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -32,6 +33,15 @@ interface UserData {
   createdAt: string;
 }
 
+interface Product {
+  id: string;
+  name: string;
+  price: string;
+  stock: number;
+  description: string;
+  specifications: string;
+}
+
 const profileSchema = z.object({
   firstName: z.string().min(2, "Имя должно содержать минимум 2 символа").optional().or(z.literal("")),
   lastName: z.string().min(2, "Фамилия должна содержать минимум 2 символа").optional().or(z.literal("")),
@@ -43,6 +53,10 @@ type ProfileForm = z.infer<typeof profileSchema>;
 export default function Profile() {
   const [, setLocation] = useLocation();
   const [isEditing, setIsEditing] = useState(false);
+  const [buyDialog, setBuyDialog] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [addToFav, setAddToFav] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -63,88 +77,58 @@ export default function Profile() {
     },
   });
 
-  // Mock data for orders
   const { data: orders = [] } = useQuery({
     queryKey: ["/api/orders/user"],
     queryFn: async () => {
       const token = localStorage.getItem("accessToken");
       if (!token) return [];
-      // Mock orders data
-      return [
-        {
-          id: "order-001",
-          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          finalAmount: "15000",
-          paymentMethod: "Банковская карта",
-          paymentStatus: "delivered",
-        },
-        {
-          id: "order-002",
-          createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-          finalAmount: "8500",
-          paymentMethod: "PayPal",
-          paymentStatus: "processing",
-        },
-      ];
+      const res = await fetch("/api/orders/user", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json();
     },
     enabled: !!userData,
   });
 
-  // Mock data for favorites
   const { data: favorites = [] } = useQuery({
     queryKey: ["/api/favorites"],
     queryFn: async () => {
       const token = localStorage.getItem("accessToken");
       if (!token) return [];
-      // Mock favorites data
-      return [
-        {
-          id: "fav-001",
-          productName: "НУ-100 Промышленный нагреватель",
-          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: "fav-002",
-          productName: "НУ-30 Компактный агрегат",
-          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ];
+      const res = await fetch("/api/favorites", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json();
     },
     enabled: !!userData,
   });
 
-  // Mock data for notifications
   const { data: notifications = [] } = useQuery({
     queryKey: ["/api/notifications"],
     queryFn: async () => {
       const token = localStorage.getItem("accessToken");
       if (!token) return [];
-      // Mock notifications data
-      return [
-        {
-          id: "notif-001",
-          title: "Заказ доставлен",
-          message: "Ваш заказ #order-001 успешно доставлен",
-          createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-        },
-        {
-          id: "notif-002",
-          title: "Новое предложение",
-          message: "Специальное предложение на НУ-100 со скидкой 15%",
-          createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-          isRead: true,
-        },
-        {
-          id: "notif-003",
-          title: "Обновление профиля",
-          message: "Ваш профиль успешно обновлен",
-          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          isRead: true,
-        },
-      ];
+      const res = await fetch("/api/notifications", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json();
     },
     enabled: !!userData,
+  });
+
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    queryFn: async () => {
+      const res = await fetch("/api/products");
+      if (!res.ok) return [];
+      return res.json();
+    },
   });
 
   const {
@@ -160,6 +144,7 @@ export default function Profile() {
       phone: userData?.phone || "",
     },
   });
+
   useEffect(() => {
     if (userData) {
       reset({
@@ -209,6 +194,140 @@ export default function Profile() {
     },
   });
 
+  const createOrder = useMutation({
+    mutationFn: async (productId: string) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          productId,
+          quantity,
+          paymentMethod: "Банковская карта",
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Ошибка при создании заказа");
+      }
+
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (addToFav && selectedProduct) {
+        addFavorite.mutate(selectedProduct.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/user"] });
+      setBuyDialog(false);
+      setQuantity(1);
+      setAddToFav(false);
+      toast({
+        title: "Заказ создан",
+        description: `Заказ #${data.order.id.slice(0, 8)} успешно создан`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const addFavorite = useMutation({
+    mutationFn: async (productId: string) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/favorites", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ productId }),
+      });
+
+      if (!res.ok) throw new Error("Ошибка при добавлении в избранное");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/favorites"] });
+      toast({
+        title: "Добавлено в избранное",
+        description: "Товар добавлен в вашу коллекцию",
+      });
+    },
+  });
+
+  const removeFavorite = useMutation({
+    mutationFn: async (productId: string) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(`/api/favorites/${productId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+
+      if (!res.ok) throw new Error("Ошибка при удалении");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/favorites"] });
+      toast({
+        title: "Удалено из избранного",
+        description: "Товар удален из коллекции",
+      });
+    },
+  });
+
+  const deleteNotification = useMutation({
+    mutationFn: async (id: string) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(`/api/notifications/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+
+      if (!res.ok) throw new Error("Ошибка при удалении");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({
+        title: "Удалено",
+        description: "Уведомление удалено",
+      });
+    },
+  });
+
+  const clearNotifications = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/notifications/clear", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+
+      if (!res.ok) throw new Error("Ошибка при очистке");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({
+        title: "Уведомления очищены",
+        description: "Все уведомления удалены",
+      });
+    },
+  });
+
   const onSubmit = (data: ProfileForm) => {
     updateProfile.mutate(data);
   };
@@ -220,6 +339,19 @@ export default function Profile() {
       phone: userData?.phone || "",
     });
     setIsEditing(false);
+  };
+
+  const handleBuy = (product: Product) => {
+    setSelectedProduct(product);
+    setBuyDialog(true);
+    setQuantity(1);
+    setAddToFav(false);
+  };
+
+  const handleBuyConfirm = () => {
+    if (selectedProduct && quantity > 0 && quantity <= 99) {
+      createOrder.mutate(selectedProduct.id);
+    }
   };
 
   if (isLoading) {
@@ -291,7 +423,7 @@ export default function Profile() {
                 </div>
               </div>
               {!isEditing && (
-                <Button variant="outline" onClick={() => setIsEditing(true)}>
+                <Button variant="outline" onClick={() => setIsEditing(true)} data-testid="button-edit-profile">
                   <Edit2 className="w-4 h-4 mr-2" />
                   Редактировать
                 </Button>
@@ -301,11 +433,11 @@ export default function Profile() {
           <CardContent>
             <Tabs defaultValue="profile" className="w-full">
               <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="profile">
+                <TabsTrigger value="profile" data-testid="tab-profile">
                   <User className="w-4 h-4 mr-2" />
                   Профиль
                 </TabsTrigger>
-                <TabsTrigger value="orders">
+                <TabsTrigger value="orders" data-testid="tab-orders">
                   <Package className="w-4 h-4 mr-2" />
                   Заказы
                   {orders.length > 0 && (
@@ -314,7 +446,7 @@ export default function Profile() {
                     </Badge>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="favorites">
+                <TabsTrigger value="favorites" data-testid="tab-favorites">
                   <Heart className="w-4 h-4 mr-2" />
                   Избранное
                   {favorites.length > 0 && (
@@ -323,7 +455,7 @@ export default function Profile() {
                     </Badge>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="notifications">
+                <TabsTrigger value="notifications" data-testid="tab-notifications">
                   <Bell className="w-4 h-4 mr-2" />
                   Уведомления
                   {notifications.filter((n: any) => !n.isRead).length > 0 && (
@@ -352,6 +484,7 @@ export default function Profile() {
                                 {...register("firstName")}
                                 placeholder="Введите имя"
                                 disabled={updateProfile.isPending}
+                                data-testid="input-first-name"
                               />
                               {errors.firstName && (
                                 <p className="text-sm text-destructive">{errors.firstName.message}</p>
@@ -373,6 +506,7 @@ export default function Profile() {
                                 {...register("lastName")}
                                 placeholder="Введите фамилию"
                                 disabled={updateProfile.isPending}
+                                data-testid="input-last-name"
                               />
                               {errors.lastName && (
                                 <p className="text-sm text-destructive">{errors.lastName.message}</p>
@@ -391,12 +525,12 @@ export default function Profile() {
                         <div className="flex items-center gap-2">
                           <p className="text-sm text-muted-foreground py-2 flex-1">{userData.email}</p>
                           {userData.isEmailVerified ? (
-                            <Badge variant="default" className="gap-1">
+                            <Badge variant="default" className="gap-1" data-testid="badge-email-verified">
                               <CheckCircle2 className="w-3 h-3" />
                               Подтвержден
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="gap-1">
+                            <Badge variant="outline" className="gap-1" data-testid="badge-email-unverified">
                               <XCircle className="w-3 h-3" />
                               Не подтвержден
                             </Badge>
@@ -413,6 +547,7 @@ export default function Profile() {
                               {...register("phone")}
                               placeholder="+7 (999) 123-45-67"
                               disabled={updateProfile.isPending}
+                              data-testid="input-phone"
                             />
                             {errors.phone && (
                               <p className="text-sm text-destructive">{errors.phone.message}</p>
@@ -425,17 +560,17 @@ export default function Profile() {
                           </>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <p className="text-sm text-muted-foreground py-2 flex-1">
+                            <p className="text-sm text-muted-foreground py-2 flex-1" data-testid="text-phone">
                               {userData.phone || "Не указан"}
                             </p>
                             {userData.phone && (
                               userData.isPhoneVerified ? (
-                                <Badge variant="default" className="gap-1">
+                                <Badge variant="default" className="gap-1" data-testid="badge-phone-verified">
                                   <CheckCircle2 className="w-3 h-3" />
                                   Подтвержден
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="gap-1">
+                                <Badge variant="outline" className="gap-1" data-testid="badge-phone-unverified">
                                   <XCircle className="w-3 h-3" />
                                   Не подтвержден
                                 </Badge>
@@ -450,6 +585,7 @@ export default function Profile() {
                           <Button
                             type="submit"
                             disabled={updateProfile.isPending || !isDirty}
+                            data-testid="button-save-profile"
                           >
                             <Save className="w-4 h-4 mr-2" />
                             {updateProfile.isPending ? "Сохранение..." : "Сохранить"}
@@ -459,6 +595,7 @@ export default function Profile() {
                             variant="outline"
                             onClick={handleCancel}
                             disabled={updateProfile.isPending}
+                            data-testid="button-cancel-profile"
                           >
                             <X className="w-4 h-4 mr-2" />
                             Отмена
@@ -481,15 +618,18 @@ export default function Profile() {
                       <div className="text-center py-12">
                         <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                         <p className="text-muted-foreground">У вас пока нет заказов</p>
+                        <Button className="mt-4" onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/products"] })} data-testid="button-view-products">
+                          Просмотреть товары
+                        </Button>
                       </div>
                     ) : (
                       <div className="space-y-4">
                         {orders.map((order: any) => (
-                          <Card key={order.id}>
+                          <Card key={order.id} data-testid={`card-order-${order.id}`}>
                             <CardContent className="pt-6">
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between mb-4">
                                 <div>
-                                  <p className="font-semibold">Заказ #{order.id.slice(0, 8)}</p>
+                                  <p className="font-semibold" data-testid={`text-order-id-${order.id}`}>Заказ #{order.id.slice(0, 8)}</p>
                                   <p className="text-sm text-muted-foreground">
                                     {format(new Date(order.createdAt), "d MMMM yyyy, HH:mm", { locale: ru })}
                                   </p>
@@ -499,12 +639,12 @@ export default function Profile() {
                               <Separator className="my-4" />
                               <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div>
-                                  <p className="text-muted-foreground">Сумма</p>
-                                  <p className="font-semibold">{order.finalAmount} ₽</p>
+                                  <p className="text-muted-foreground">Количество</p>
+                                  <p className="font-semibold" data-testid={`text-quantity-${order.id}`}>{order.quantity} шт.</p>
                                 </div>
                                 <div>
-                                  <p className="text-muted-foreground">Способ оплаты</p>
-                                  <p className="font-semibold">{order.paymentMethod}</p>
+                                  <p className="text-muted-foreground">Сумма</p>
+                                  <p className="font-semibold" data-testid={`text-total-${order.id}`}>{order.finalAmount} ₽</p>
                                 </div>
                               </div>
                             </CardContent>
@@ -531,16 +671,25 @@ export default function Profile() {
                     ) : (
                       <div className="space-y-4">
                         {favorites.map((favorite: any) => (
-                          <Card key={favorite.id}>
+                          <Card key={favorite.productId} data-testid={`card-favorite-${favorite.productId}`}>
                             <CardContent className="pt-6">
                               <div className="flex items-center justify-between">
-                                <div>
-                                  <p className="font-semibold">{favorite.productName || "Товар"}</p>
+                                <div className="flex-1">
+                                  <p className="font-semibold" data-testid={`text-favorite-name-${favorite.productId}`}>{favorite.product?.name || "Товар"}</p>
                                   <p className="text-sm text-muted-foreground">
+                                    {favorite.product?.price} ₽
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-2">
                                     Добавлено {format(new Date(favorite.createdAt), "d MMMM yyyy", { locale: ru })}
                                   </p>
                                 </div>
-                                <Button variant="ghost" size="icon">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => removeFavorite.mutate(favorite.productId)}
+                                  disabled={removeFavorite.isPending}
+                                  data-testid={`button-delete-favorite-${favorite.productId}`}
+                                >
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
                               </div>
@@ -561,9 +710,17 @@ export default function Profile() {
                         <CardTitle>Уведомления</CardTitle>
                         <CardDescription>Центр уведомлений</CardDescription>
                       </div>
-                      <Button variant="outline" size="sm">
-                        Отметить все как прочитанные
-                      </Button>
+                      {notifications.length > 0 && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => clearNotifications.mutate()}
+                          disabled={clearNotifications.isPending}
+                          data-testid="button-clear-notifications"
+                        >
+                          Очистить все
+                        </Button>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -578,14 +735,15 @@ export default function Profile() {
                           <Card
                             key={notification.id}
                             className={!notification.isRead ? "border-primary" : ""}
+                            data-testid={`card-notification-${notification.id}`}
                           >
                             <CardContent className="pt-4">
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-1">
-                                    <p className="font-semibold">{notification.title}</p>
+                                    <p className="font-semibold" data-testid={`text-notification-title-${notification.id}`}>{notification.title}</p>
                                     {!notification.isRead && (
-                                      <Badge variant="destructive" className="h-2 w-2 p-0 rounded-full" />
+                                      <Badge variant="destructive" className="h-2 w-2 p-0 rounded-full" data-testid={`badge-unread-${notification.id}`} />
                                     )}
                                   </div>
                                   <p className="text-sm text-muted-foreground">{notification.message}</p>
@@ -593,6 +751,15 @@ export default function Profile() {
                                     {format(new Date(notification.createdAt), "d MMMM yyyy, HH:mm", { locale: ru })}
                                   </p>
                                 </div>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => deleteNotification.mutate(notification.id)}
+                                  disabled={deleteNotification.isPending}
+                                  data-testid={`button-delete-notification-${notification.id}`}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
                               </div>
                             </CardContent>
                           </Card>
@@ -603,14 +770,145 @@ export default function Profile() {
                 </Card>
               </TabsContent>
             </Tabs>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Доступные товары</CardTitle>
+                <CardDescription>Выберите товар для покупки</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {products.map((product: Product) => (
+                    <Card key={product.id} data-testid={`card-product-${product.id}`}>
+                      <CardContent className="pt-6">
+                        <div className="space-y-4">
+                          <div>
+                            <p className="font-semibold text-lg" data-testid={`text-product-name-${product.id}`}>{product.name}</p>
+                            <p className="text-sm text-muted-foreground">{product.description}</p>
+                            <p className="text-xs text-muted-foreground mt-2">{product.specifications}</p>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-2xl font-bold" data-testid={`text-product-price-${product.id}`}>{product.price} ₽</p>
+                              <p className="text-xs text-muted-foreground" data-testid={`text-product-stock-${product.id}`}>
+                                В наличии: {product.stock}
+                              </p>
+                            </div>
+                            <Button 
+                              onClick={() => handleBuy(product)}
+                              disabled={product.stock === 0}
+                              data-testid={`button-buy-${product.id}`}
+                            >
+                              <ShoppingCart className="w-4 h-4 mr-2" />
+                              Купить
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </CardContent>
+
           <div className="flex justify-end gap-2 p-4 border-t">
-            <Button variant="outline" onClick={() => setLocation("/")}>
+            <Button variant="outline" onClick={() => setLocation("/")} data-testid="button-go-home">
               На главную
             </Button>
           </div>
         </Card>
       </div>
+
+      <Dialog open={buyDialog} onOpenChange={setBuyDialog}>
+        <DialogContent data-testid="dialog-buy">
+          <DialogHeader>
+            <DialogTitle>Оформление покупки</DialogTitle>
+            <DialogDescription>
+              {selectedProduct?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedProduct && (
+            <div className="space-y-4">
+              <div className="bg-muted p-4 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Цена</p>
+                    <p className="font-semibold" data-testid="text-dialog-price">{selectedProduct.price} ₽</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">В наличии</p>
+                    <p className="font-semibold" data-testid="text-dialog-stock">{selectedProduct.stock} шт.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Количество</Label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    data-testid="button-quantity-minus"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="99"
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.min(99, Math.max(1, parseInt(e.target.value) || 1)))}
+                    className="text-center w-16"
+                    data-testid="input-quantity"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setQuantity(Math.min(99, quantity + 1))}
+                    data-testid="button-quantity-plus"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="bg-muted p-4 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <p className="text-muted-foreground">Итого</p>
+                  <p className="text-2xl font-bold" data-testid="text-dialog-total">
+                    {(parseFloat(selectedProduct.price) * quantity).toLocaleString("ru-RU")} ₽
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="addToFav"
+                  checked={addToFav}
+                  onChange={(e) => setAddToFav(e.target.checked)}
+                  data-testid="checkbox-add-to-favorites"
+                />
+                <Label htmlFor="addToFav" className="cursor-pointer">
+                  Добавить в избранное
+                </Label>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBuyDialog(false)} data-testid="button-dialog-cancel">
+              Отмена
+            </Button>
+            <Button onClick={handleBuyConfirm} disabled={createOrder.isPending} data-testid="button-dialog-buy">
+              {createOrder.isPending ? "Оформление..." : "Оформить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
