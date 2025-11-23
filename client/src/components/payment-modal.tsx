@@ -194,9 +194,8 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       }),
     };
 
-    setTimeout(() => {
-      createOrderMutation.mutate(orderData);
-    }, 1500);
+    // FIXED: Removed artificial delay - process order immediately
+    createOrderMutation.mutate(orderData);
   };
 
   const getPaymentMethodIcon = (method: PaymentMethod) => {

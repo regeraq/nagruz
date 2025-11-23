@@ -1,0 +1,94 @@
+/**
+ * CSRF Protection middleware
+ * 
+ * Generates and validates CSRF tokens to prevent cross-site request forgery attacks.
+ * Uses double-submit cookie pattern for stateless validation.
+ */
+
+import type { Request, Response, NextFunction } from 'express';
+import { randomBytes, createHash } from 'crypto';
+
+const CSRF_TOKEN_COOKIE = 'csrf-token';
+const CSRF_TOKEN_HEADER = 'x-csrf-token';
+const CSRF_TOKEN_LENGTH = 32;
+
+/**
+ * Generates a secure random CSRF token
+ */
+function generateToken(): string {
+  return randomBytes(CSRF_TOKEN_LENGTH).toString('hex');
+}
+
+/**
+ * Creates a hash of the token for secure comparison
+ */
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * CSRF token generation middleware
+ * Generates and sets CSRF token cookie for GET requests
+ */
+export function csrfToken(req: Request, res: Response, next: NextFunction) {
+  // Only generate token for GET requests
+  if (req.method === 'GET' && !req.cookies?.[CSRF_TOKEN_COOKIE]) {
+    const token = generateToken();
+    const hashedToken = hashToken(token);
+    
+    // Set secure cookie with SameSite protection
+    res.cookie(CSRF_TOKEN_COOKIE, hashedToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    });
+    
+    // Store token in response locals for client access
+    res.locals.csrfToken = token;
+  }
+  
+  next();
+}
+
+/**
+ * CSRF validation middleware
+ * Validates CSRF token for state-changing requests (POST, PUT, PATCH, DELETE)
+ */
+export function csrfProtection(req: Request, res: Response, next: NextFunction) {
+  // Skip CSRF check for safe methods
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+
+  // Get token from header
+  const tokenFromHeader = req.headers[CSRF_TOKEN_HEADER] as string;
+  const tokenFromCookie = req.cookies?.[CSRF_TOKEN_COOKIE];
+
+  if (!tokenFromHeader || !tokenFromCookie) {
+    return res.status(403).json({
+      success: false,
+      message: 'CSRF token missing or invalid',
+    });
+  }
+
+  // Compare hashed tokens
+  const hashedHeaderToken = hashToken(tokenFromHeader);
+  
+  if (hashedHeaderToken !== tokenFromCookie) {
+    return res.status(403).json({
+      success: false,
+      message: 'CSRF token mismatch',
+    });
+  }
+
+  next();
+}
+
+/**
+ * Gets CSRF token from response locals (for client-side use)
+ */
+export function getCsrfToken(res: Response): string | undefined {
+  return res.locals.csrfToken;
+}
+

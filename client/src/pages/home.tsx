@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Navigation } from "@/components/navigation";
 import { PowerGauge } from "@/components/power-gauge";
 import { PaymentModal } from "@/components/payment-modal";
+import { useRealtimeValidation, ValidationIcon, ValidationMessage, validationRules } from "@/components/form-validation";
 
 const navLinks = [
   { label: "Главная", id: "hero" },
@@ -97,7 +98,10 @@ export default function Home() {
       setShowScrollTop(window.scrollY > 500);
     };
     window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    // FIXED: Proper cleanup of event listener
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, []);
 
   const scrollToTop = () => {
@@ -885,57 +889,123 @@ export default function Home() {
                       <FormField
                         control={form.control}
                         name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Имя и фамилия *</FormLabel>
-                            <FormControl>
-                              <Input 
-                                placeholder="Иван Иванов" 
-                                {...field} 
-                                data-testid="input-name"
+                        render={({ field }) => {
+                          const validation = useRealtimeValidation(
+                            field.value || "",
+                            [
+                              ...validationRules.required("Имя"),
+                              ...validationRules.minLength(2, "Имя"),
+                            ],
+                            !!field.value
+                          );
+                          return (
+                            <FormItem>
+                              <FormLabel>Имя и фамилия *</FormLabel>
+                              <FormControl>
+                                <div className="relative">
+                                  <Input 
+                                    placeholder="Иван Иванов" 
+                                    {...field} 
+                                    data-testid="input-name"
+                                    aria-invalid={!validation.isValid && !!field.value}
+                                    aria-describedby={!validation.isValid && field.value ? "name-error" : undefined}
+                                  />
+                                  {field.value && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                      <ValidationIcon isValid={validation.isValid} show={!!field.value} />
+                                    </div>
+                                  )}
+                                </div>
+                              </FormControl>
+                              <ValidationMessage
+                                isValid={validation.isValid}
+                                message={validation.message}
+                                show={!!field.value}
                               />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
                       />
 
                       <div className="grid md:grid-cols-2 gap-6">
                         <FormField
                           control={form.control}
                           name="phone"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Телефон *</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  placeholder="+7 (999) 123-45-67" 
-                                  {...field} 
-                                  data-testid="input-phone"
+                          render={({ field }) => {
+                            const validation = useRealtimeValidation(
+                              field.value || "",
+                              validationRules.phone(),
+                              !!field.value
+                            );
+                            return (
+                              <FormItem>
+                                <FormLabel>Телефон *</FormLabel>
+                                <FormControl>
+                                  <div className="relative">
+                                    <Input 
+                                      placeholder="+7 (999) 123-45-67" 
+                                      {...field} 
+                                      data-testid="input-phone"
+                                      aria-invalid={!validation.isValid && !!field.value}
+                                      aria-describedby={!validation.isValid && field.value ? "phone-error" : undefined}
+                                    />
+                                    {field.value && (
+                                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                        <ValidationIcon isValid={validation.isValid} show={!!field.value} />
+                                      </div>
+                                    )}
+                                  </div>
+                                </FormControl>
+                                <ValidationMessage
+                                  isValid={validation.isValid}
+                                  message={validation.message}
+                                  show={!!field.value}
                                 />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
                         />
 
                         <FormField
                           control={form.control}
                           name="email"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Email *</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="email"
-                                  placeholder="ivanov@company.ru" 
-                                  {...field} 
-                                  data-testid="input-email"
+                          render={({ field }) => {
+                            const validation = useRealtimeValidation(
+                              field.value || "",
+                              validationRules.email(),
+                              !!field.value
+                            );
+                            return (
+                              <FormItem>
+                                <FormLabel>Email *</FormLabel>
+                                <FormControl>
+                                  <div className="relative">
+                                    <Input 
+                                      type="email"
+                                      placeholder="ivanov@company.ru" 
+                                      {...field} 
+                                      data-testid="input-email"
+                                      aria-invalid={!validation.isValid && !!field.value}
+                                      aria-describedby={!validation.isValid && field.value ? "email-error" : undefined}
+                                    />
+                                    {field.value && (
+                                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                        <ValidationIcon isValid={validation.isValid} show={!!field.value} />
+                                      </div>
+                                    )}
+                                  </div>
+                                </FormControl>
+                                <ValidationMessage
+                                  isValid={validation.isValid}
+                                  message={validation.message}
+                                  show={!!field.value}
                                 />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
                         />
                       </div>
 
@@ -960,20 +1030,44 @@ export default function Home() {
                       <FormField
                         control={form.control}
                         name="message"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Сообщение *</FormLabel>
-                            <FormControl>
-                              <Textarea 
-                                placeholder="Опишите ваши требования и вопросы..."
-                                className="min-h-32 resize-none"
-                                {...field} 
-                                data-testid="input-message"
+                        render={({ field }) => {
+                          const validation = useRealtimeValidation(
+                            field.value || "",
+                            [
+                              ...validationRules.required("Сообщение"),
+                              ...validationRules.minLength(10, "Сообщение"),
+                            ],
+                            !!field.value
+                          );
+                          return (
+                            <FormItem>
+                              <FormLabel>Сообщение *</FormLabel>
+                              <FormControl>
+                                <div className="relative">
+                                  <Textarea 
+                                    placeholder="Опишите ваши требования и вопросы..."
+                                    className="min-h-32 resize-none"
+                                    {...field} 
+                                    data-testid="input-message"
+                                    aria-invalid={!validation.isValid && !!field.value}
+                                    aria-describedby={!validation.isValid && field.value ? "message-error" : undefined}
+                                  />
+                                  {field.value && (
+                                    <div className="absolute right-3 top-3">
+                                      <ValidationIcon isValid={validation.isValid} show={!!field.value} />
+                                    </div>
+                                  )}
+                                </div>
+                              </FormControl>
+                              <ValidationMessage
+                                isValid={validation.isValid}
+                                message={validation.message}
+                                show={!!field.value}
                               />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
                       />
 
                       <div>

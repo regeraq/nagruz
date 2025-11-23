@@ -58,6 +58,16 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
+      
+      // Inject CSRF token for client-side use
+      const csrfToken = res.locals.csrfToken;
+      if (csrfToken) {
+        template = template.replace(
+          '</head>',
+          `<meta name="csrf-token" content="${csrfToken}"></head>`
+        );
+      }
+      
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
@@ -79,7 +89,19 @@ export function serveStatic(app: Express) {
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+  app.use("*", async (req, res) => {
+    const indexPath = path.resolve(distPath, "index.html");
+    let html = await fs.promises.readFile(indexPath, "utf-8");
+    
+    // Inject CSRF token for client-side use
+    const csrfToken = res.locals.csrfToken;
+    if (csrfToken) {
+      html = html.replace(
+        '</head>',
+        `<meta name="csrf-token" content="${csrfToken}"></head>`
+      );
+    }
+    
+    res.send(html);
   });
 }

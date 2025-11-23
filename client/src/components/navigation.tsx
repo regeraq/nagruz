@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Menu, X, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Search } from "@/components/search";
 
 interface NavigationProps {
   selectedDevice?: "nu-100" | "nu-30";
@@ -9,11 +10,13 @@ interface NavigationProps {
 }
 
 const navLinks = [
-  { label: "Главная", id: "hero" },
+  { label: "Главная", id: "hero", href: "/" },
+  { label: "О нас", id: "about", href: "/about" },
   { label: "Характеристики", id: "specifications" },
   { label: "Применение", id: "applications" },
   { label: "Документация", id: "documentation" },
-  { label: "Контакты", id: "contact" },
+  { label: "Помощь", id: "faq", href: "/faq" },
+  { label: "Контакты", id: "contact", href: "/contacts" },
 ];
 
 export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: NavigationProps) {
@@ -25,7 +28,10 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
       setIsScrolled(window.scrollY > 0);
     };
     window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    // FIXED: Proper cleanup of event listener
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, []);
 
   const scrollToSection = (id: string) => {
@@ -88,7 +94,13 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                 <Button
                   key={link.id}
                   variant="ghost"
-                  onClick={() => scrollToSection(link.id)}
+                  onClick={() => {
+                    if (link.href) {
+                      window.location.href = link.href;
+                    } else {
+                      scrollToSection(link.id);
+                    }
+                  }}
                   data-testid={`link-nav-${link.id}`}
                   className="text-sm font-medium"
                 >
@@ -98,6 +110,9 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
             </div>
 
             <div className="flex items-center gap-2">
+              <div className="hidden md:block">
+                <Search className="w-64" />
+              </div>
               <ThemeToggle />
               <Button
                 onClick={() => scrollToSection("contact")}
@@ -124,11 +139,21 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-40 lg:hidden bg-background/98 backdrop-blur-md pt-20">
           <div className="flex flex-col gap-2 p-6">
+            <div className="mb-4">
+              <Search onResultClick={() => setIsMobileMenuOpen(false)} />
+            </div>
             {navLinks.map((link) => (
               <Button
                 key={link.id}
                 variant="ghost"
-                onClick={() => scrollToSection(link.id)}
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  if (link.href) {
+                    window.location.href = link.href;
+                  } else {
+                    scrollToSection(link.id);
+                  }
+                }}
                 data-testid={`link-mobile-${link.id}`}
                 className="justify-start text-lg h-12"
               >
@@ -136,7 +161,10 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
               </Button>
             ))}
             <Button
-              onClick={() => scrollToSection("contact")}
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                scrollToSection("contact");
+              }}
               data-testid="button-cta-mobile"
               className="mt-4 h-12"
             >
