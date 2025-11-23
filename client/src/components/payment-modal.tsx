@@ -178,9 +178,9 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
     const orderData = {
       productId: product.id,
       quantity,
-      totalAmount: totalAmount.toString(),
-      discountAmount: discountAmount.toString(),
-      finalAmount: finalAmount.toString(),
+      totalAmount,
+      discountAmount,
+      finalAmount,
       promoCode: null,
       paymentMethod,
       paymentStatus: "pending",

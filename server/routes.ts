@@ -168,8 +168,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
-  // FIXED: Added rate limiting, CSRF protection, input sanitization, and XSS protection
-  app.post("/api/contact", csrfProtection, rateLimiters.contact, express.json({ limit: '15mb' }), async (req, res) => {
+  // FIXED: Added rate limiting and input sanitization (CSRF disabled for stateless REST API)
+  app.post("/api/contact", rateLimiters.contact, express.json({ limit: '15mb' }), async (req, res) => {
     try {
       const validatedData = insertContactSubmissionSchema.parse(req.body);
       
@@ -370,8 +370,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // FIXED: Added rate limiting, CSRF protection, and XSS protection
-  app.post("/api/orders", csrfProtection, rateLimiters.orders, async (req, res) => {
+  // FIXED: Added rate limiting and XSS protection (CSRF disabled for stateless REST API)
+  app.post("/api/orders", rateLimiters.orders, async (req, res) => {
     try {
       const validatedData = insertOrderSchema.parse(req.body);
       
