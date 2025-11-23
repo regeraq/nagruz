@@ -639,11 +639,19 @@ export default function Profile() {
                               <Separator className="my-4" />
                               <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div>
+                                  <p className="text-muted-foreground">Товар</p>
+                                  <p className="font-semibold" data-testid={`text-product-name-${order.id}`}>{order.productName || "Товар"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Цена за единицу</p>
+                                  <p className="font-semibold" data-testid={`text-product-price-${order.id}`}>{order.productPrice} ₽</p>
+                                </div>
+                                <div>
                                   <p className="text-muted-foreground">Количество</p>
                                   <p className="font-semibold" data-testid={`text-quantity-${order.id}`}>{order.quantity} шт.</p>
                                 </div>
                                 <div>
-                                  <p className="text-muted-foreground">Сумма</p>
+                                  <p className="text-muted-foreground">Итого</p>
                                   <p className="font-semibold" data-testid={`text-total-${order.id}`}>{order.finalAmount} ₽</p>
                                 </div>
                               </div>

@@ -194,9 +194,26 @@ export class MemStorage implements IStorage {
   }
 
   async createOrder(order: any) {
+    const product = this.products.find(p => p.id === order.productId);
     const id = crypto.randomUUID();
-    const newOrder = { id, ...order, createdAt: new Date(), updatedAt: new Date() };
+    const quantity = order.quantity || 1;
+    const price = product ? parseFloat(product.price) : 0;
+    const totalAmount = (price * quantity).toString();
+    const newOrder = { 
+      id, 
+      ...order, 
+      quantity,
+      totalAmount,
+      finalAmount: totalAmount,
+      productName: product?.name || "",
+      productPrice: product?.price || "0",
+      createdAt: new Date(), 
+      updatedAt: new Date() 
+    };
     this.orders.set(id, newOrder);
+    if (product && product.stock >= quantity) {
+      product.stock -= quantity;
+    }
     return newOrder;
   }
 
@@ -228,6 +245,23 @@ export class MemStorage implements IStorage {
 
   async validatePromoCode(code: string) {
     return { valid: false, discount: 0 };
+  }
+
+  async updateProductPrice(id: string, price: string) {
+    const product = this.products.find(p => p.id === id);
+    if (product) {
+      product.price = price;
+      product.updatedAt = new Date();
+    }
+    return product;
+  }
+
+  async updateProductInfo(id: string, data: any) {
+    const product = this.products.find(p => p.id === id);
+    if (product) {
+      Object.assign(product, data, { updatedAt: new Date() });
+    }
+    return product;
   }
 }
 

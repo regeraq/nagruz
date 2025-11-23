@@ -57,6 +57,10 @@ export default function Admin() {
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<any>(null);
   const [orderStatusDialog, setOrderStatusDialog] = useState(false);
   const [newOrderStatus, setNewOrderStatus] = useState("");
+  const [editingProductPrice, setEditingProductPrice] = useState<string | null>(null);
+  const [newProductPrice, setNewProductPrice] = useState("");
+  const [showPriceDialog, setShowPriceDialog] = useState(false);
+  const [selectedEditProduct, setSelectedEditProduct] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -190,6 +194,43 @@ export default function Admin() {
       toast({
         title: "Успешно",
         description: "Статус заказа обновлен",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateProductPrice = useMutation({
+    mutationFn: async ({ id, price }: { id: string; price: string }) => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+
+      const res = await fetch(`/api/admin/products/${id}/price`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ price }),
+      });
+
+      if (!res.ok) throw new Error("Ошибка при обновлении цены");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      setShowPriceDialog(false);
+      setSelectedEditProduct(null);
+      setNewProductPrice("");
+      toast({
+        title: "Успешно",
+        description: "Цена товара обновлена",
       });
     },
     onError: (error: Error) => {
@@ -499,7 +540,17 @@ export default function Admin() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
-                                <Button size="sm" variant="ghost" data-testid={`button-edit-${product.id}`}>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={() => {
+                                    setSelectedEditProduct(product);
+                                    setNewProductPrice(product.price);
+                                    setShowPriceDialog(true);
+                                  }}
+                                  data-testid={`button-edit-price-${product.id}`}
+                                  title="Редактировать цену"
+                                >
                                   <Edit2 className="w-4 h-4" />
                                 </Button>
                               </div>
@@ -880,20 +931,107 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Настройки сайта</CardTitle>
-                <CardDescription>Общие настройки и конфигурация</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Alert>
-                  <Settings className="h-4 w-4" />
-                  <AlertDescription>
-                    Настройки сайта будут отображаться здесь
-                  </AlertDescription>
-                </Alert>
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Управление контентом сайта</CardTitle>
+                  <CardDescription>Правки текста, баннеров, SEO и описаний</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-semibold mb-2">Главный баннер</h3>
+                      <p className="text-sm text-muted-foreground mb-2">Основное изображение на странице</p>
+                      <div className="bg-muted p-4 rounded-lg">
+                        <Button variant="outline" className="w-full" data-testid="button-edit-banner">
+                          Редактировать баннер
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <h3 className="font-semibold mb-2">SEO метаданные</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <Label className="text-sm">Заголовок страницы</Label>
+                          <Input placeholder="НУ-100 и НУ-30 - Профессиональное оборудование" disabled />
+                        </div>
+                        <div>
+                          <Label className="text-sm">Описание</Label>
+                          <Input placeholder="Высокопроизводительное оборудование для промышленного применения" disabled />
+                        </div>
+                        <div>
+                          <Label className="text-sm">Ключевые слова</Label>
+                          <Input placeholder="оборудование, нагрузка, промышленность" disabled />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <h3 className="font-semibold mb-2">Описание товаров</h3>
+                      <div className="space-y-3">
+                        {products.map(product => (
+                          <div key={product.id} className="border rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-sm">{product.name}</span>
+                              <Button size="sm" variant="ghost" data-testid={`button-edit-product-desc-${product.id}`}>
+                                <Edit2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{product.specifications}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <h3 className="font-semibold mb-2">Контактные данные</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <Label className="text-sm">Email</Label>
+                          <Input placeholder="support@example.com" disabled />
+                        </div>
+                        <div>
+                          <Label className="text-sm">Телефон</Label>
+                          <Input placeholder="+7 (999) 123-45-67" disabled />
+                        </div>
+                        <div>
+                          <Label className="text-sm">Адрес</Label>
+                          <Input placeholder="Москва, ул. Примерная, д. 1" disabled />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Системные настройки</CardTitle>
+                  <CardDescription>Конфигурация платформы</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-muted p-3 rounded-lg">
+                      <p className="text-xs text-muted-foreground">Версия API</p>
+                      <p className="font-semibold">v1.0.0</p>
+                    </div>
+                    <div className="bg-muted p-3 rounded-lg">
+                      <p className="text-xs text-muted-foreground">База данных</p>
+                      <p className="font-semibold">PostgreSQL</p>
+                    </div>
+                    <div className="bg-muted p-3 rounded-lg">
+                      <p className="text-xs text-muted-foreground">Статус</p>
+                      <p className="font-semibold text-green-600">Активно</p>
+                    </div>
+                    <div className="bg-muted p-3 rounded-lg">
+                      <p className="text-xs text-muted-foreground">Последнее обновление</p>
+                      <p className="font-semibold text-xs">Сегодня</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -957,6 +1095,54 @@ export default function Admin() {
             </Button>
             <Button onClick={confirmOrderStatusChange} disabled={updateOrderStatus.isPending} data-testid="button-confirm-order-status">
               {updateOrderStatus.isPending ? "Обновление..." : "Обновить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showPriceDialog} onOpenChange={setShowPriceDialog}>
+        <DialogContent data-testid="dialog-edit-price">
+          <DialogHeader>
+            <DialogTitle>Редактировать цену товара</DialogTitle>
+            <DialogDescription>
+              {selectedEditProduct?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedEditProduct && (
+            <div className="space-y-4">
+              <div className="bg-muted p-3 rounded text-sm">
+                <p className="text-muted-foreground">Текущая цена: <span className="font-semibold">{selectedEditProduct.price} ₽</span></p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="price">Новая цена (₽)</Label>
+                <Input
+                  type="number"
+                  value={newProductPrice}
+                  onChange={(e) => setNewProductPrice(e.target.value)}
+                  placeholder="Введите цену"
+                  min="0"
+                  data-testid="input-new-price"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPriceDialog(false)}>
+              Отмена
+            </Button>
+            <Button 
+              onClick={() => {
+                if (selectedEditProduct && newProductPrice) {
+                  updateProductPrice.mutate({ id: selectedEditProduct.id, price: newProductPrice });
+                }
+              }} 
+              disabled={updateProductPrice.isPending || !newProductPrice}
+              data-testid="button-confirm-price"
+            >
+              {updateProductPrice.isPending ? "Обновление..." : "Обновить"}
             </Button>
           </DialogFooter>
         </DialogContent>

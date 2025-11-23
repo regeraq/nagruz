@@ -1200,6 +1200,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Update product price
+  app.patch("/api/admin/products/:id/price", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const product = await storage.updateProductPrice(req.params.id, req.body.price);
+      if (!product) {
+        res.status(404).json({ success: false, message: "Product not found" });
+        return;
+      }
+
+      res.json({ success: true, product });
+    } catch (error) {
+      console.error("Update price error:", error);
+      res.status(500).json({ success: false, message: "Failed to update price" });
+    }
+  });
+
+  // Admin: Update product info
+  app.patch("/api/admin/products/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const product = await storage.updateProductInfo(req.params.id, req.body);
+      if (!product) {
+        res.status(404).json({ success: false, message: "Product not found" });
+        return;
+      }
+
+      res.json({ success: true, product });
+    } catch (error) {
+      console.error("Update product error:", error);
+      res.status(500).json({ success: false, message: "Failed to update product" });
+    }
+  });
+
   // Register auth routes
   const httpServer = createServer(app);
 
