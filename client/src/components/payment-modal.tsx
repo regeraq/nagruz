@@ -174,10 +174,26 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const handlePayment = () => {
     if (paymentStatus === "processing") return;
 
-    if (!customerName.trim() || !customerEmail.trim() || !customerPhone.trim()) {
+    // Trim and validate all fields
+    const trimmedName = customerName.trim();
+    const trimmedEmail = customerEmail.trim();
+    const trimmedPhone = customerPhone.trim();
+
+    if (!trimmedName || !trimmedEmail || !trimmedPhone) {
       toast({
         title: "Ошибка",
         description: "Пожалуйста, заполните все контактные данные",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      toast({
+        title: "Ошибка",
+        description: "Пожалуйста, введите корректный email адрес",
         variant: "destructive",
       });
       return;
@@ -194,9 +210,9 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       promoCode: null,
       paymentMethod,
       paymentStatus: "pending",
-      customerName,
-      customerEmail,
-      customerPhone,
+      customerName: trimmedName,
+      customerEmail: trimmedEmail,
+      customerPhone: trimmedPhone,
       paymentDetails: JSON.stringify({
         method: paymentMethod,
         cryptoAddress: cryptoAddress || undefined,
