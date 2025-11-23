@@ -2,7 +2,7 @@ import type { Express } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { hashPassword, verifyPassword, generateAccessToken, verifyAccessToken } from "./auth";
+import { hashPassword, verifyPassword, generateAccessToken, verifyAccessToken, generateRefreshToken } from "./auth";
 import { insertContactSubmissionSchema, insertOrderSchema } from "@shared/schema";
 import { z } from "zod";
 import { 
@@ -573,11 +573,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: user.role,
       });
 
+      const refreshToken = generateRefreshToken(user.id);
+
       res.json({
         success: true,
         message: "User registered successfully",
         user: { id: user.id, email: user.email, role: user.role },
-        accessToken,
+        tokens: { accessToken, refreshToken },
       });
     } catch (error) {
       console.error("Registration error:", error);
@@ -600,7 +602,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const isPasswordValid = await verifyPassword(password, user.password);
+      const passwordHash = user.passwordHash || user.password;
+      const isPasswordValid = await verifyPassword(password, passwordHash);
       if (!isPasswordValid) {
         res.status(401).json({ success: false, message: "Invalid credentials" });
         return;
@@ -612,11 +615,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: user.role,
       });
 
+      const refreshToken = generateRefreshToken(user.id);
+
       res.json({
         success: true,
         message: "Login successful",
         user: { id: user.id, email: user.email, role: user.role },
-        accessToken,
+        tokens: { accessToken, refreshToken },
       });
     } catch (error) {
       console.error("Login error:", error);

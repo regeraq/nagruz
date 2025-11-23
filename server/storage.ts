@@ -70,7 +70,21 @@ export class MemStorage implements IStorage {
 
   async createUser(user: any) {
     const id = crypto.randomUUID();
-    const newUser = { id, ...user, createdAt: new Date() };
+    const newUser = {
+      id,
+      email: user.email,
+      password: user.password || null,
+      passwordHash: user.passwordHash || user.password || null,
+      firstName: user.firstName || null,
+      lastName: user.lastName || null,
+      avatar: user.avatar || null,
+      phone: user.phone || null,
+      role: user.role || "user",
+      isEmailVerified: user.isEmailVerified || false,
+      isPhoneVerified: user.isPhoneVerified || false,
+      isBlocked: user.isBlocked || false,
+      createdAt: new Date(),
+    };
     this.users.set(id, newUser);
     return newUser;
   }
