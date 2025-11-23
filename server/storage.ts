@@ -145,6 +145,7 @@ export class MemStorage implements IStorage {
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
     const product: Product = {
       ...insertProduct,
+      currency: insertProduct.currency ?? "RUB",
       createdAt: new Date(),
     };
     this.products.set(product.id, product);
@@ -157,6 +158,7 @@ export class MemStorage implements IStorage {
       ...insertOrder,
       id,
       discountAmount: insertOrder.discountAmount ?? "0",
+      paymentStatus: insertOrder.paymentStatus ?? "pending",
       promoCode: insertOrder.promoCode ?? null,
       customerName: insertOrder.customerName ?? null,
       customerEmail: insertOrder.customerEmail ?? null,
@@ -207,6 +209,7 @@ export class MemStorage implements IStorage {
     const promoCode: PromoCode = {
       ...insertPromoCode,
       id,
+      isActive: insertPromoCode.isActive ?? 1,
       expiresAt: insertPromoCode.expiresAt ?? null,
       createdAt: new Date(),
     };
