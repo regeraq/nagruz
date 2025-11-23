@@ -1,5 +1,3 @@
-import { createId } from "@paralleldrive/cuid2";
-
 export interface IStorage {
   getUserByEmail(email: string): Promise<any>;
   getUserById(id: string): Promise<any>;
@@ -10,13 +8,25 @@ export interface IStorage {
   getAllNotifications(userId: string): Promise<any[]>;
   markNotificationAsRead(id: string): Promise<void>;
   getProducts(): Promise<any[]>;
+  getProduct(id: string): Promise<any>;
   getContact(id: string): Promise<any>;
+  createContactSubmission(data: any): Promise<any>;
+  getContactSubmissions(): Promise<any[]>;
+  getContactSubmission(id: string): Promise<any>;
+  recordLoginAttempt(email: string, success: boolean): Promise<void>;
+  getOrder(id: string): Promise<any>;
+  updateOrderStatus(id: string, status: string, details?: string): Promise<any>;
+  createOrder(order: any): Promise<any>;
+  validatePromoCode(code: string): Promise<any>;
 }
 
 export class MemStorage implements IStorage {
   private users = new Map();
   private sessions = new Map();
   private notifications = new Map();
+  private contacts = new Map();
+  private orders = new Map();
+  private loginAttempts = new Map();
   private products = [
     {
       id: "nu-100",
@@ -26,6 +36,27 @@ export class MemStorage implements IStorage {
       currency: "RUB",
       sku: "NU-100",
       specifications: "100 кВт, 20 ступеней",
+      stock: 10,
+      category: "Industrial",
+      imageUrl: null,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: "nu-30",
+      name: "НУ-30",
+      description: "Compact load device",
+      price: "50000",
+      currency: "RUB",
+      sku: "NU-30",
+      specifications: "30 кВт, 6 ступеней",
+      stock: 15,
+      category: "Industrial",
+      imageUrl: null,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
   ];
 
@@ -38,7 +69,7 @@ export class MemStorage implements IStorage {
   }
 
   async createUser(user: any) {
-    const id = createId();
+    const id = crypto.randomUUID();
     const newUser = { id, ...user, createdAt: new Date() };
     this.users.set(id, newUser);
     return newUser;
@@ -49,7 +80,7 @@ export class MemStorage implements IStorage {
   }
 
   async createSession(session: any) {
-    const id = createId();
+    const id = crypto.randomUUID();
     const newSession = { id, ...session };
     this.sessions.set(id, newSession);
     return newSession;
@@ -72,8 +103,61 @@ export class MemStorage implements IStorage {
     return this.products;
   }
 
+  async getProduct(id: string) {
+    return this.products.find((p: any) => p.id === id);
+  }
+
   async getContact(id: string) {
-    return null;
+    return this.contacts.get(id);
+  }
+
+  async createContactSubmission(data: any) {
+    const id = crypto.randomUUID();
+    const submission = { id, ...data, createdAt: new Date() };
+    this.contacts.set(id, submission);
+    return submission;
+  }
+
+  async getContactSubmissions() {
+    return Array.from(this.contacts.values());
+  }
+
+  async getContactSubmission(id: string) {
+    return this.contacts.get(id);
+  }
+
+  async recordLoginAttempt(email: string, success: boolean) {
+    if (!this.loginAttempts.has(email)) {
+      this.loginAttempts.set(email, []);
+    }
+    const attempts = this.loginAttempts.get(email);
+    attempts.push({ timestamp: new Date(), success });
+    if (attempts.length > 100) attempts.shift();
+  }
+
+  async getOrder(id: string) {
+    return this.orders.get(id);
+  }
+
+  async updateOrderStatus(id: string, status: string, details?: string) {
+    const order = this.orders.get(id);
+    if (order) {
+      order.paymentStatus = status;
+      order.paymentDetails = details;
+      order.updatedAt = new Date();
+    }
+    return order;
+  }
+
+  async createOrder(order: any) {
+    const id = crypto.randomUUID();
+    const newOrder = { id, ...order, createdAt: new Date(), updatedAt: new Date() };
+    this.orders.set(id, newOrder);
+    return newOrder;
+  }
+
+  async validatePromoCode(code: string) {
+    return { valid: false, discount: 0 };
   }
 }
 

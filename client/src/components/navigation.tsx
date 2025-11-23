@@ -24,6 +24,11 @@ interface User {
   role: string;
 }
 
+interface NavigationProps {
+  selectedDevice?: "nu-100" | "nu-30";
+  onDeviceChange?: (device: "nu-100" | "nu-30") => void;
+}
+
 const navLinks = [
   { label: "Главная", href: "/" },
   { label: "Характеристики", href: "/specifications" },
@@ -32,11 +37,15 @@ const navLinks = [
   { label: "Контакты", href: "/contacts" },
 ];
 
-export function Navigation() {
+export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: NavigationProps = {}) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const devices = [
+    { id: "nu-100", name: "НУ-100" },
+    { id: "nu-30", name: "НУ-30" },
+  ];
 
   // Get current user
   const { data: userData, isLoading: isLoadingUser } = useQuery<User | null>({
@@ -120,18 +129,46 @@ export function Navigation() {
       >
         <nav className="max-w-7xl mx-auto px-6 md:px-8">
           <div className="flex items-center justify-between h-16 md:h-20">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <button
                 onClick={() => setLocation("/")}
+                data-testid="button-logo"
                 className="flex items-center gap-2 hover-elevate active-elevate-2 rounded-md px-2 py-1"
               >
                 <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center flex-shrink-0">
                   <Gauge className="w-5 h-5 text-primary-foreground" />
                 </div>
               </button>
+              
+              {/* Выбор устройства */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="button-device-selector"
+                    className="hidden md:flex items-center gap-2"
+                  >
+                    <Gauge className="h-4 w-4" />
+                    {devices.find(d => d.id === selectedDevice)?.name || "Устройство"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {devices.map((device) => (
+                    <DropdownMenuItem
+                      key={device.id}
+                      onClick={() => onDeviceChange?.(device.id as "nu-100" | "nu-30")}
+                      className={selectedDevice === device.id ? "bg-accent" : ""}
+                      data-testid={`device-option-${device.id}`}
+                    >
+                      {device.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
-            <div className="hidden lg:flex items-center gap-1">
+            <div className="hidden lg:flex items-center gap-1 flex-1 justify-center">
               {navLinks.map((link) => {
                 const isActive = location === link.href || (link.href === "/" && location === "/");
                 return (

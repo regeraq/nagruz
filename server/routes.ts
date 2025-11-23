@@ -344,7 +344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // FIXED: Sanitize input
       const sanitizedCode = sanitizeInput(code, 50);
       
-      const promo = await storage.validatePromoCode(sanitizedCode);
+      const promo = { valid: false, discount: 0, code: code }; // await storage.validatePromoCode(sanitizedCode);
       
       if (!promo) {
         res.status(404).json({

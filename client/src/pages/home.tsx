@@ -131,10 +131,11 @@ export default function Home() {
         description: response.message || "Мы свяжемся с вами в ближайшее время.",
         variant: "default",
       });
-      setTimeout(() => {
+      // Reset form without setState in callback to avoid loops
+      queueMicrotask(() => {
         form.reset();
         setSelectedFile(null);
-      }, 0);
+      });
     },
     onError: (error: any) => {
       toast({
@@ -883,252 +884,123 @@ export default function Home() {
             <div className="lg:col-span-3">
               <Card>
                 <CardContent className="pt-6">
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                      <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => {
-                          const validation = useRealtimeValidation(
-                            field.value || "",
-                            [
-                              ...validationRules.required("Имя"),
-                              ...validationRules.minLength(2, "Имя"),
-                            ],
-                            !!field.value
-                          );
-                          return (
-                            <FormItem>
-                              <FormLabel>Имя и фамилия *</FormLabel>
-                              <FormControl>
-                                <div className="relative">
-                                  <Input 
-                                    placeholder="Иван Иванов" 
-                                    {...field} 
-                                    data-testid="input-name"
-                                    aria-invalid={!validation.isValid && !!field.value}
-                                    aria-describedby={!validation.isValid && field.value ? "name-error" : undefined}
-                                  />
-                                  {field.value && (
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                      <ValidationIcon isValid={validation.isValid} show={!!field.value} />
-                                    </div>
-                                  )}
-                                </div>
-                              </FormControl>
-                              <ValidationMessage
-                                isValid={validation.isValid}
-                                message={validation.message}
-                                show={!!field.value}
-                              />
-                              <FormMessage />
-                            </FormItem>
-                          );
-                        }}
+                  <form onSubmit={(e) => { e.preventDefault(); contactMutation.mutate(form.getValues()); }} className="space-y-6">
+                    <div>
+                      <label className="text-sm font-medium">Имя и фамилия *</label>
+                      <Input 
+                        placeholder="Иван Иванов" 
+                        value={form.watch("name")}
+                        onChange={(e) => form.setValue("name", e.target.value)}
+                        data-testid="input-name"
+                        className="mt-2"
                       />
+                    </div>
 
-                      <div className="grid md:grid-cols-2 gap-6">
-                        <FormField
-                          control={form.control}
-                          name="phone"
-                          render={({ field }) => {
-                            const validation = useRealtimeValidation(
-                              field.value || "",
-                              validationRules.phone(),
-                              !!field.value
-                            );
-                            return (
-                              <FormItem>
-                                <FormLabel>Телефон *</FormLabel>
-                                <FormControl>
-                                  <div className="relative">
-                                    <Input 
-                                      placeholder="+7 (999) 123-45-67" 
-                                      {...field} 
-                                      data-testid="input-phone"
-                                      aria-invalid={!validation.isValid && !!field.value}
-                                      aria-describedby={!validation.isValid && field.value ? "phone-error" : undefined}
-                                    />
-                                    {field.value && (
-                                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                        <ValidationIcon isValid={validation.isValid} show={!!field.value} />
-                                      </div>
-                                    )}
-                                  </div>
-                                </FormControl>
-                                <ValidationMessage
-                                  isValid={validation.isValid}
-                                  message={validation.message}
-                                  show={!!field.value}
-                                />
-                                <FormMessage />
-                              </FormItem>
-                            );
-                          }}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="email"
-                          render={({ field }) => {
-                            const validation = useRealtimeValidation(
-                              field.value || "",
-                              validationRules.email(),
-                              !!field.value
-                            );
-                            return (
-                              <FormItem>
-                                <FormLabel>Email *</FormLabel>
-                                <FormControl>
-                                  <div className="relative">
-                                    <Input 
-                                      type="email"
-                                      placeholder="ivanov@company.ru" 
-                                      {...field} 
-                                      data-testid="input-email"
-                                      aria-invalid={!validation.isValid && !!field.value}
-                                      aria-describedby={!validation.isValid && field.value ? "email-error" : undefined}
-                                    />
-                                    {field.value && (
-                                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                        <ValidationIcon isValid={validation.isValid} show={!!field.value} />
-                                      </div>
-                                    )}
-                                  </div>
-                                </FormControl>
-                                <ValidationMessage
-                                  isValid={validation.isValid}
-                                  message={validation.message}
-                                  show={!!field.value}
-                                />
-                                <FormMessage />
-                              </FormItem>
-                            );
-                          }}
-                        />
-                      </div>
-
-                      <FormField
-                        control={form.control}
-                        name="company"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Компания *</FormLabel>
-                            <FormControl>
-                              <Input 
-                                placeholder="ООО 'Название компании'" 
-                                {...field} 
-                                data-testid="input-company"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="message"
-                        render={({ field }) => {
-                          const validation = useRealtimeValidation(
-                            field.value || "",
-                            [
-                              ...validationRules.required("Сообщение"),
-                              ...validationRules.minLength(10, "Сообщение"),
-                            ],
-                            !!field.value
-                          );
-                          return (
-                            <FormItem>
-                              <FormLabel>Сообщение *</FormLabel>
-                              <FormControl>
-                                <div className="relative">
-                                  <Textarea 
-                                    placeholder="Опишите ваши требования и вопросы..."
-                                    className="min-h-32 resize-none"
-                                    {...field} 
-                                    data-testid="input-message"
-                                    aria-invalid={!validation.isValid && !!field.value}
-                                    aria-describedby={!validation.isValid && field.value ? "message-error" : undefined}
-                                  />
-                                  {field.value && (
-                                    <div className="absolute right-3 top-3">
-                                      <ValidationIcon isValid={validation.isValid} show={!!field.value} />
-                                    </div>
-                                  )}
-                                </div>
-                              </FormControl>
-                              <ValidationMessage
-                                isValid={validation.isValid}
-                                message={validation.message}
-                                show={!!field.value}
-                              />
-                              <FormMessage />
-                            </FormItem>
-                          );
-                        }}
-                      />
-
+                    <div className="grid md:grid-cols-2 gap-6">
                       <div>
-                        <Label>Прикрепить файл (опционально)</Label>
-                        {!selectedFile ? (
-                          <label
-                            htmlFor="file-upload"
-                            className="mt-2 flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover-elevate transition-all"
-                            data-testid="file-drop-zone"
-                          >
-                            <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                            <span className="text-sm text-muted-foreground">
-                              Нажмите для выбора файла
-                            </span>
-                            <span className="text-xs text-muted-foreground mt-1">
-                              Максимум 10 МБ
-                            </span>
-                            <input
-                              id="file-upload"
-                              type="file"
-                              className="hidden"
-                              onChange={handleFileSelect}
-                              accept=".pdf,.doc,.docx,.xls,.xlsx"
-                              data-testid="input-file-upload"
-                            />
-                          </label>
-                        ) : (
-                          <div className="mt-2 flex items-center justify-between p-4 bg-muted rounded-lg" data-testid="file-selected">
-                            <div className="flex items-center gap-3">
-                              <FileCheck className="h-5 w-5 text-primary" />
-                              <span className="text-sm font-medium" data-testid="text-file-name">{selectedFile.name}</span>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={removeFile}
-                              data-testid="button-remove-file"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        )}
+                        <label className="text-sm font-medium">Телефон *</label>
+                        <Input 
+                          placeholder="+7 (999) 123-45-67" 
+                          value={form.watch("phone")}
+                          onChange={(e) => form.setValue("phone", e.target.value)}
+                          data-testid="input-phone"
+                          className="mt-2"
+                        />
                       </div>
+                      <div>
+                        <label className="text-sm font-medium">Email *</label>
+                        <Input 
+                          type="email"
+                          placeholder="ivanov@company.ru" 
+                          value={form.watch("email")}
+                          onChange={(e) => form.setValue("email", e.target.value)}
+                          data-testid="input-email"
+                          className="mt-2"
+                        />
+                      </div>
+                    </div>
 
-                      <Button 
-                        type="submit" 
-                        className="w-full h-12 text-base"
-                        data-testid="button-submit-contact"
-                        disabled={contactMutation.isPending}
-                      >
-                        {contactMutation.isPending ? (
-                          <>
-                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                            Отправка...
-                          </>
-                        ) : (
-                          "Получить коммерческое предложение"
-                        )}
-                      </Button>
-                    </form>
-                  </Form>
+                    <div>
+                      <label className="text-sm font-medium">Компания *</label>
+                      <Input 
+                        placeholder="ООО 'Название компании'" 
+                        value={form.watch("company")}
+                        onChange={(e) => form.setValue("company", e.target.value)}
+                        data-testid="input-company"
+                        className="mt-2"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium">Сообщение *</label>
+                      <Textarea 
+                        placeholder="Опишите ваши требования и вопросы..."
+                        className="min-h-32 resize-none mt-2"
+                        value={form.watch("message")}
+                        onChange={(e) => form.setValue("message", e.target.value)}
+                        data-testid="input-message"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Прикрепить файл (опционально)</Label>
+                      {!selectedFile ? (
+                        <label
+                          htmlFor="file-upload"
+                          className="mt-2 flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover-elevate transition-all"
+                          data-testid="file-drop-zone"
+                        >
+                          <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                          <span className="text-sm text-muted-foreground">
+                            Нажмите для выбора файла
+                          </span>
+                          <span className="text-xs text-muted-foreground mt-1">
+                            Максимум 10 МБ
+                          </span>
+                          <input
+                            id="file-upload"
+                            type="file"
+                            className="hidden"
+                            onChange={handleFileSelect}
+                            accept=".pdf,.doc,.docx,.xls,.xlsx"
+                            data-testid="input-file-upload"
+                          />
+                        </label>
+                      ) : (
+                        <div className="mt-2 flex items-center justify-between p-4 bg-muted rounded-lg" data-testid="file-selected">
+                          <div className="flex items-center gap-3">
+                            <FileCheck className="h-5 w-5 text-primary" />
+                            <span className="text-sm font-medium" data-testid="text-file-name">{selectedFile.name}</span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={removeFile}
+                            data-testid="button-remove-file"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <Button 
+                      type="submit" 
+                      className="w-full h-12 text-base"
+                      data-testid="button-submit-contact"
+                      disabled={contactMutation.isPending}
+                    >
+                      {contactMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Отправка...
+                        </>
+                      ) : (
+                        "Получить коммерческое предложение"
+                      )}
+                    </Button>
+                  </form>
                 </CardContent>
               </Card>
             </div>

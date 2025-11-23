@@ -102,7 +102,7 @@ export async function recordLoginAttempt(
   loginAttemptsCache.set(key, attempts);
   
   // Also store in database for persistence
-  await storage.recordLoginAttempt(email, ipAddress, success);
+  await storage.recordLoginAttempt(email, success);
   
   // Clean old attempts
   cleanOldAttempts(email, ipAddress);
