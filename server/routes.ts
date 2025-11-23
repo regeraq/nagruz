@@ -704,6 +704,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           phone: user.phone,
           role: user.role,
           avatar: user.avatar,
+          isEmailVerified: user.isEmailVerified || false,
+          isPhoneVerified: user.isPhoneVerified || false,
+          createdAt: user.createdAt || new Date().toISOString(),
         },
       });
     } catch (error) {

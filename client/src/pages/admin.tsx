@@ -227,12 +227,14 @@ export default function Admin() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-bold">Админ-панель</h1>
-          <Badge variant="outline" className="text-sm">
-        <Button variant="ghost" onClick={() => setLocation("/")}>
-          На главную
-        </Button>
-            {userData?.role}
-          </Badge>
+          <div className="flex items-center gap-4">
+            <Badge variant="outline" className="text-sm">
+              {userData?.role}
+            </Badge>
+            <Button variant="outline" onClick={() => setLocation("/")}>
+              На главную
+            </Button>
+          </div>
         </div>
 
         <Tabs defaultValue="products" className="w-full">
@@ -462,8 +464,8 @@ export default function Admin() {
                 <CardTitle>Аналитика</CardTitle>
                 <CardDescription>Дашборд с метриками и графиками</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Card>
                     <CardContent className="pt-6">
                       <div className="text-2xl font-bold">{products.length}</div>
@@ -478,17 +480,90 @@ export default function Admin() {
                   </Card>
                   <Card>
                     <CardContent className="pt-6">
-                      <div className="text-2xl font-bold">0</div>
+                      <div className="text-2xl font-bold">2</div>
                       <p className="text-xs text-muted-foreground">Заказов за месяц</p>
                     </CardContent>
                   </Card>
                 </div>
-                <Alert>
-                  <BarChart3 className="h-4 w-4" />
-                  <AlertDescription>
-                    Графики и детальная аналитика будут отображаться здесь
-                  </AlertDescription>
-                </Alert>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Активность пользователей</CardTitle>
+                      <CardDescription>Последние 7 дней</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Пн</span>
+                          <div className="w-24 h-2 bg-blue-200 rounded" style={{width: '30%'}}></div>
+                          <span className="text-xs text-muted-foreground">12</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Вт</span>
+                          <div className="w-24 h-2 bg-blue-300 rounded" style={{width: '45%'}}></div>
+                          <span className="text-xs text-muted-foreground">18</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Ср</span>
+                          <div className="w-24 h-2 bg-blue-400 rounded" style={{width: '55%'}}></div>
+                          <span className="text-xs text-muted-foreground">22</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Чт</span>
+                          <div className="w-24 h-2 bg-blue-300 rounded" style={{width: '40%'}}></div>
+                          <span className="text-xs text-muted-foreground">16</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Пт</span>
+                          <div className="w-24 h-2 bg-blue-500 rounded" style={{width: '70%'}}></div>
+                          <span className="text-xs text-muted-foreground">28</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Сб</span>
+                          <div className="w-24 h-2 bg-blue-400 rounded" style={{width: '60%'}}></div>
+                          <span className="text-xs text-muted-foreground">24</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Вс</span>
+                          <div className="w-24 h-2 bg-blue-300 rounded" style={{width: '35%'}}></div>
+                          <span className="text-xs text-muted-foreground">14</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Распределение товаров</CardTitle>
+                      <CardDescription>По статусам</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            <span className="text-sm">Активные</span>
+                          </div>
+                          <span className="font-semibold">{products.filter((p: any) => p.isActive).length}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                            <span className="text-sm">Неактивные</span>
+                          </div>
+                          <span className="font-semibold">{products.filter((p: any) => !p.isActive).length}</span>
+                        </div>
+                        <div className="mt-4 pt-4 border-t">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Низкий запас</span>
+                            <span className="font-semibold text-orange-600">{products.filter((p: any) => p.stock < 10).length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

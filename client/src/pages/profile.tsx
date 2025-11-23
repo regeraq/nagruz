@@ -69,8 +69,23 @@ export default function Profile() {
     queryFn: async () => {
       const token = localStorage.getItem("accessToken");
       if (!token) return [];
-      // This would be a real API call
-      return [];
+      // Mock orders data
+      return [
+        {
+          id: "order-001",
+          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          finalAmount: "15000",
+          paymentMethod: "Банковская карта",
+          paymentStatus: "delivered",
+        },
+        {
+          id: "order-002",
+          createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+          finalAmount: "8500",
+          paymentMethod: "PayPal",
+          paymentStatus: "processing",
+        },
+      ];
     },
     enabled: !!userData,
   });
@@ -81,7 +96,19 @@ export default function Profile() {
     queryFn: async () => {
       const token = localStorage.getItem("accessToken");
       if (!token) return [];
-      return [];
+      // Mock favorites data
+      return [
+        {
+          id: "fav-001",
+          productName: "НУ-100 Промышленный нагреватель",
+          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+        {
+          id: "fav-002",
+          productName: "НУ-30 Компактный агрегат",
+          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+      ];
     },
     enabled: !!userData,
   });
@@ -92,7 +119,30 @@ export default function Profile() {
     queryFn: async () => {
       const token = localStorage.getItem("accessToken");
       if (!token) return [];
-      return [];
+      // Mock notifications data
+      return [
+        {
+          id: "notif-001",
+          title: "Заказ доставлен",
+          message: "Ваш заказ #order-001 успешно доставлен",
+          createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+          isRead: false,
+        },
+        {
+          id: "notif-002",
+          title: "Новое предложение",
+          message: "Специальное предложение на НУ-100 со скидкой 15%",
+          createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+          isRead: true,
+        },
+        {
+          id: "notif-003",
+          title: "Обновление профиля",
+          message: "Ваш профиль успешно обновлен",
+          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+          isRead: true,
+        },
+      ];
     },
     enabled: !!userData,
   });
@@ -239,10 +289,6 @@ export default function Profile() {
                   </CardTitle>
                   <CardDescription>{userData.email}</CardDescription>
                 </div>
-              <Button variant="ghost" onClick={() => setLocation("/")}>
-                <User className="w-4 h-4 mr-2" />
-                На главную
-              </Button>
               </div>
               {!isEditing && (
                 <Button variant="outline" onClick={() => setIsEditing(true)}>
@@ -558,6 +604,11 @@ export default function Profile() {
               </TabsContent>
             </Tabs>
           </CardContent>
+          <div className="flex justify-end gap-2 p-4 border-t">
+            <Button variant="outline" onClick={() => setLocation("/")}>
+              На главную
+            </Button>
+          </div>
         </Card>
       </div>
     </div>
