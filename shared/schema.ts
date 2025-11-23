@@ -95,11 +95,16 @@ export const orders = pgTable("orders", {
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 }).extend({
   quantity: z.number().min(1, "Минимальное количество - 1").max(99, "Максимальное количество - 99"),
+  totalAmount: z.union([z.string(), z.number()]).transform(v => String(v)),
+  discountAmount: z.union([z.string(), z.number()]).transform(v => String(v)),
+  finalAmount: z.union([z.string(), z.number()]).transform(v => String(v)),
   customerName: z.string().min(2, "Имя должно содержать минимум 2 символа"),
   customerEmail: z.string().email("Введите корректный email"),
   customerPhone: z.string().min(10, "Введите корректный номер телефона"),
+  userId: z.string().nullable().optional(),
 });
 
 export type InsertOrder = z.infer<typeof insertOrderSchema>;

@@ -168,9 +168,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
-  // FIXED: Added rate limiting and input sanitization (CSRF disabled for stateless REST API)
+  // FIXED: Added rate limiting, authentication requirement, and input sanitization
   app.post("/api/contact", rateLimiters.contact, express.json({ limit: '15mb' }), async (req, res) => {
     try {
+      // FIXED: Require authentication for contact submissions
+      const userId = (req.session as any)?.userId;
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          message: "Для отправки заявок необходимо авторизоваться",
+        });
+        return;
+      }
+      
       const validatedData = insertContactSubmissionSchema.parse(req.body);
       
       // FIXED: Validate and sanitize file data
@@ -373,9 +383,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // FIXED: Added rate limiting and XSS protection (CSRF disabled for stateless REST API)
   app.post("/api/orders", rateLimiters.orders, async (req, res) => {
     try {
+      // FIXED: Require authentication for orders
+      const userId = (req.session as any)?.userId;
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          message: "Для оформления заказов необходимо авторизоваться",
+        });
+        return;
+      }
+      
       const validatedData = insertOrderSchema.parse(req.body);
       
-      const product = await storage.getProduct(validatedData.productId);
+      // FIXED: Add userId to order
+      const orderDataWithUserId = {
+        ...validatedData,
+        userId,
+      };
+      
+      const product = await storage.getProduct(orderDataWithUserId.productId);
       if (!product) {
         res.status(404).json({
           success: false,
@@ -389,7 +415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       reservedUntil.setUTCMinutes(reservedUntil.getUTCMinutes() + 15);
 
       const orderData = {
-        ...validatedData,
+        ...orderDataWithUserId,
         reservedUntil,
       };
 
