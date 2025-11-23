@@ -30,11 +30,11 @@ interface NavigationProps {
 }
 
 const navLinks = [
-  { label: "Главная", href: "/" },
-  { label: "Характеристики", href: "/specifications" },
-  { label: "Применение", href: "/applications" },
-  { label: "Документация", href: "/documentation" },
-  { label: "Контакты", href: "/contacts" },
+  { label: "Главная", id: "hero" },
+  { label: "Характеристики", id: "specifications" },
+  { label: "Применение", id: "applications" },
+  { label: "Документация", id: "documentation" },
+  { label: "Контакты", id: "contact" },
 ];
 
 export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: NavigationProps = {}) {
@@ -170,26 +170,29 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
 
             <div className="hidden lg:flex items-center gap-1 flex-1 justify-center">
               {navLinks.map((link) => {
-                const isActive = location === link.href || (link.href === "/" && location === "/");
                 return (
                   <Button
-                    key={link.href}
+                    key={link.id}
                     variant="ghost"
                     onClick={() => {
-                      setLocation(link.href);
+                      const element = document.getElementById(link.id);
+                      if (element) {
+                        const offset = 80;
+                        const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+                        window.scrollTo({
+                          top: elementPosition - offset,
+                          behavior: "smooth",
+                        });
+                      }
                       setIsMobileMenuOpen(false);
                     }}
                     className={cn(
                       "text-sm font-medium transition-all duration-200 relative",
                       "hover:bg-accent hover:text-accent-foreground",
-                      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      isActive && "text-primary font-semibold"
+                      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     )}
                   >
                     {link.label}
-                    {isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
-                    )}
                   </Button>
                 );
               })}
@@ -270,19 +273,25 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
         <div className="fixed inset-0 z-40 lg:hidden bg-background/98 backdrop-blur-md pt-20 animate-in slide-in-from-top">
           <div className="flex flex-col gap-2 p-6">
             {navLinks.map((link) => {
-              const isActive = location === link.href || (link.href === "/" && location === "/");
               return (
                 <Button
-                  key={link.href}
+                  key={link.id}
                   variant="ghost"
                   onClick={() => {
+                    const element = document.getElementById(link.id);
+                    if (element) {
+                      const offset = 80;
+                      const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+                      window.scrollTo({
+                        top: elementPosition - offset,
+                        behavior: "smooth",
+                      });
+                    }
                     setIsMobileMenuOpen(false);
-                    setLocation(link.href);
                   }}
                   className={cn(
                     "justify-start text-lg h-12 transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    isActive && "bg-accent text-primary font-semibold"
+                    "hover:bg-accent hover:text-accent-foreground"
                   )}
                 >
                   {link.label}

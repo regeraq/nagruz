@@ -217,7 +217,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      <Navigation />
+      <Navigation selectedDevice={selectedDevice} onDeviceChange={setSelectedDevice} />
       
       {showScrollTop && (
         <button
