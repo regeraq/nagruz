@@ -8,7 +8,7 @@ async function throwIfResNotOk(res: Response) {
 }
 
 /**
- * Gets CSRF token from cookie
+ * Gets CSRF token from cookie or fetches from server
  * CSRF token is set by server in cookie and should be sent in header
  */
 function getCsrfToken(): string | null {
@@ -27,6 +27,21 @@ function getCsrfToken(): string | null {
   return null;
 }
 
+/**
+ * Fetch CSRF token from server
+ */
+export async function fetchCsrfToken(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/csrf-token", { credentials: "include" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.token || null;
+  } catch (error) {
+    console.error("Error fetching CSRF token:", error);
+    return null;
+  }
+}
+
 export async function apiRequest(
   method: string,
   url: string,
@@ -36,7 +51,13 @@ export async function apiRequest(
   
   // Add CSRF token for state-changing requests
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    const csrfToken = getCsrfToken();
+    let csrfToken = getCsrfToken();
+    
+    // If no token found, try to fetch it from server
+    if (!csrfToken) {
+      csrfToken = await fetchCsrfToken();
+    }
+    
     if (csrfToken) {
       headers['x-csrf-token'] = csrfToken;
     }
