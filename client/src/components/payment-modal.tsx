@@ -83,11 +83,21 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
     },
     onError: (error: any) => {
       setPaymentStatus("error");
-      toast({
-        title: "Ошибка оформления",
-        description: error.message || "Попробуйте позже",
-        variant: "destructive",
-      });
+      
+      // Check if 401 (not authenticated)
+      if (error.message && error.message.startsWith("401")) {
+        toast({
+          title: "Авторизация требуется",
+          description: "Пожалуйста, авторизуйтесь для оформления заказа",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Ошибка оформления",
+          description: error.message || "Попробуйте позже",
+          variant: "destructive",
+        });
+      }
     },
   });
 

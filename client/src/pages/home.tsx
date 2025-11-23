@@ -138,11 +138,20 @@ export default function Home() {
       });
     },
     onError: (error: any) => {
-      toast({
-        title: "Ошибка отправки",
-        description: error.message || "Произошла ошибка. Попробуйте позже.",
-        variant: "destructive",
-      });
+      // Check if 401 (not authenticated)
+      if (error.message && error.message.startsWith("401")) {
+        toast({
+          title: "Авторизация требуется",
+          description: "Пожалуйста, авторизуйтесь для отправки заявок",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Ошибка отправки",
+          description: error.message || "Произошла ошибка. Попробуйте позже.",
+          variant: "destructive",
+        });
+      }
     },
   });
 
