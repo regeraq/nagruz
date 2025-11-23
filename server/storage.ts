@@ -7,6 +7,9 @@ export interface IStorage {
   deleteSession(id: string): Promise<boolean>;
   getAllNotifications(userId: string): Promise<any[]>;
   markNotificationAsRead(id: string): Promise<void>;
+  deleteNotification(id: string): Promise<boolean>;
+  clearUserNotifications(userId: string): Promise<boolean>;
+  createNotification(notification: any): Promise<any>;
   getProducts(): Promise<any[]>;
   getProduct(id: string): Promise<any>;
   getContact(id: string): Promise<any>;
@@ -26,7 +29,7 @@ export interface IStorage {
 }
 
 export class MemStorage implements IStorage {
-  private users = new Map();
+  public users = new Map();
   private sessions = new Map();
   private notifications = new Map();
   private contacts = new Map();
@@ -117,6 +120,27 @@ export class MemStorage implements IStorage {
   async markNotificationAsRead(id: string) {
     const notif = this.notifications.get(id);
     if (notif) notif.isRead = true;
+  }
+
+  async deleteNotification(id: string) {
+    return this.notifications.delete(id);
+  }
+
+  async clearUserNotifications(userId: string) {
+    const notificationsToDelete = Array.from(this.notifications.values()).filter((n: any) => n.userId === userId);
+    notificationsToDelete.forEach((n: any) => {
+      Array.from(this.notifications.entries()).forEach(([key, val]) => {
+        if (val === n) this.notifications.delete(key);
+      });
+    });
+    return true;
+  }
+
+  async createNotification(notification: any) {
+    const id = crypto.randomUUID();
+    const newNotification = { id, ...notification, createdAt: new Date() };
+    this.notifications.set(id, newNotification);
+    return newNotification;
   }
 
   async getProducts() {

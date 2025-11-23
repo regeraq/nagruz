@@ -1059,6 +1059,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user notifications
+  app.get("/api/notifications", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const notifications = await storage.getAllNotifications(payload.userId);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Get notifications error:", error);
+      res.status(500).json({ success: false, message: "Failed to get notifications" });
+    }
+  });
+
+  // Delete notification
+  app.delete("/api/notifications/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const deleted = await storage.deleteNotification(req.params.id);
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Delete notification error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete notification" });
+    }
+  });
+
+  // Clear all notifications
+  app.post("/api/notifications/clear", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      await storage.clearUserNotifications(payload.userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Clear notifications error:", error);
+      res.status(500).json({ success: false, message: "Failed to clear notifications" });
+    }
+  });
+
+  // Admin: Get user by ID with orders
+  app.get("/api/admin/users/:userId", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const admin = await storage.getUserById(payload.userId);
+      if (!admin || (admin.role !== "admin" && admin.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const user = await storage.getUserById(req.params.userId);
+      if (!user) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+
+      const orders = await storage.getUserOrders(req.params.userId);
+      res.json({ user, orders });
+    } catch (error) {
+      console.error("Get user details error:", error);
+      res.status(500).json({ success: false, message: "Failed to get user details" });
+    }
+  });
+
+  // Admin: Get order details
+  app.get("/api/admin/orders/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const order = await storage.getOrder(req.params.id);
+      if (!order) {
+        res.status(404).json({ success: false, message: "Order not found" });
+        return;
+      }
+
+      const product = await storage.getProduct(order.productId);
+      const orderUser = order.userId ? await storage.getUserById(order.userId) : null;
+
+      res.json({ order, product, user: orderUser });
+    } catch (error) {
+      console.error("Get order details error:", error);
+      res.status(500).json({ success: false, message: "Failed to get order details" });
+    }
+  });
+
   // Register auth routes
   const httpServer = createServer(app);
 
