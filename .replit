@@ -16,12 +16,12 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 35791
-externalPort = 3003
-
-[[ports]]
 localPort = 38077
 externalPort = 3001
+
+[[ports]]
+localPort = 39689
+externalPort = 3003
 
 [[ports]]
 localPort = 40957
@@ -61,5 +61,5 @@ integrations = ["javascript_mem_db:1.0.0"]
 [userenv]
 
 [userenv.shared]
-RESEND_API_KEY = "re_jmJxivBq_ARSkz9HVT2uWVujswYCC1QFt"
+RESEND_API_KEY = "re_VvLSMZny_PHBRPG9bnVmK3JeU5sbPt4Wu"
 OWNER_EMAIL = "rostext@gmail.com"

@@ -215,6 +215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // FIXED: XSS protection - escape all user input
       const ownerEmailHtml = `
         <h2>Новая коммерческое предложение</h2>
+        <p><strong>ID заявки:</strong> ${escapeHtml(submission.id)}</p>
         <p><strong>Имя:</strong> ${escapeHtml(validatedData.name)}</p>
         <p><strong>Email:</strong> ${escapeHtml(validatedData.email)}</p>
         <p><strong>Телефон:</strong> ${escapeHtml(validatedData.phone)}</p>
@@ -225,7 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       `;
 
       // Send email asynchronously (don't block response)
-      sendEmail(OWNER_EMAIL, `Новое коммерческое предложение от ${escapeHtml(validatedData.name)}`, ownerEmailHtml).catch(err => {
+      sendEmail(OWNER_EMAIL, `Новое коммерческое предложение (ID: ${submission.id}) от ${escapeHtml(validatedData.name)}`, ownerEmailHtml).catch(err => {
         console.error("Failed to send email:", err);
       });
       
@@ -401,6 +402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0;">
             <p style="margin: 5px 0;"><strong>ID заказа:</strong> <code style="background: #eee; padding: 3px 6px;">${escapeHtml(order.id)}</code></p>
+            <p style="margin: 5px 0;"><strong>ID пользователя:</strong> <code style="background: #eee; padding: 3px 6px;">${escapeHtml(order.userId || 'Гость')}</code></p>
           </div>
           
           <h3 style="color: #1a1a1a; margin-top: 20px;">Контактные данные клиента:</h3>
@@ -1265,6 +1267,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Update product error:", error);
       res.status(500).json({ success: false, message: "Failed to update product" });
+    }
+  });
+
+  // Admin: Get admin dashboard stats
+  app.get("/api/admin/stats", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const orders = await storage.getAllOrders();
+      const contacts = await storage.getContactSubmissions();
+      const users = Array.from((storage as any).users.values());
+      
+      res.json({
+        success: true,
+        stats: {
+          totalUsers: users.length,
+          totalOrders: orders.length,
+          totalContacts: contacts.length,
+          pendingOrders: orders.filter((o: any) => o.paymentStatus === 'pending').length,
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      res.status(500).json({ success: false, message: "Failed to fetch stats" });
     }
   });
 

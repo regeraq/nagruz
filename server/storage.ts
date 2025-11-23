@@ -1,3 +1,5 @@
+import { generateNumericId } from "./utils";
+
 export interface IStorage {
   getUserByEmail(email: string): Promise<any>;
   getUserById(id: string): Promise<any>;
@@ -78,7 +80,7 @@ export class MemStorage implements IStorage {
   }
 
   async createUser(user: any) {
-    const id = crypto.randomUUID();
+    const id = generateNumericId();
     const newUser = {
       id,
       email: user.email,
@@ -103,7 +105,7 @@ export class MemStorage implements IStorage {
   }
 
   async createSession(session: any) {
-    const id = crypto.randomUUID();
+    const id = generateNumericId();
     const newSession = { id, ...session };
     this.sessions.set(id, newSession);
     return newSession;
@@ -137,7 +139,7 @@ export class MemStorage implements IStorage {
   }
 
   async createNotification(notification: any) {
-    const id = crypto.randomUUID();
+    const id = generateNumericId();
     const newNotification = { id, ...notification, createdAt: new Date() };
     this.notifications.set(id, newNotification);
     return newNotification;
@@ -156,7 +158,7 @@ export class MemStorage implements IStorage {
   }
 
   async createContactSubmission(data: any) {
-    const id = crypto.randomUUID();
+    const id = generateNumericId();
     const submission = { id, ...data, createdAt: new Date() };
     this.contacts.set(id, submission);
     return submission;
@@ -195,7 +197,7 @@ export class MemStorage implements IStorage {
 
   async createOrder(order: any) {
     const product = this.products.find(p => p.id === order.productId);
-    const id = crypto.randomUUID();
+    const id = generateNumericId();
     const quantity = order.quantity || 1;
     const price = product ? parseFloat(product.price) : 0;
     const totalAmount = (price * quantity).toString();
