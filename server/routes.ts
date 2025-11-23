@@ -669,6 +669,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/logout", rateLimiters.general, (req, res) => {
     res.json({ success: true, message: "Logged out" });
   });
+
+  // Profile update endpoint
+  app.patch("/api/auth/profile", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+
+      const { firstName, lastName, phone } = req.body;
+      Object.assign(user, { firstName, lastName, phone });
+
+      res.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phone: user.phone,
+          role: user.role,
+          avatar: user.avatar,
+        },
+      });
+    } catch (error) {
+      console.error("Profile update error:", error);
+      res.status(500).json({ success: false, message: "Failed to update profile" });
+    }
+  });
+
+  // Admin: Get all users
+  app.get("/api/admin/users", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const allUsers = Array.from((storage as any).users.values()).map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        role: u.role,
+        createdAt: u.createdAt,
+      }));
+
+      res.json(allUsers);
+    } catch (error) {
+      console.error("Get users error:", error);
+      res.status(500).json({ success: false, message: "Failed to get users" });
+    }
+  });
+
+  // Admin: Update product stock
+  app.patch("/api/admin/products/:id/stock", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const product = await storage.getProduct(req.params.id);
+      if (!product) {
+        res.status(404).json({ success: false, message: "Product not found" });
+        return;
+      }
+
+      const { stock } = req.body;
+      if (typeof stock !== "number") {
+        res.status(400).json({ success: false, message: "Invalid stock value" });
+        return;
+      }
+
+      product.stock = stock;
+
+      res.json({
+        success: true,
+        product,
+      });
+    } catch (error) {
+      console.error("Update stock error:", error);
+      res.status(500).json({ success: false, message: "Failed to update stock" });
+    }
+  });
+
+  // Admin: Delete products
+  app.delete("/api/admin/products", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { ids } = req.body;
+      if (!Array.isArray(ids)) {
+        res.status(400).json({ success: false, message: "Invalid request" });
+        return;
+      }
+
+      res.json({
+        success: true,
+        deleted: ids.length,
+      });
+    } catch (error) {
+      console.error("Delete products error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete products" });
+    }
+  });
   // Register auth routes
   const httpServer = createServer(app);
 

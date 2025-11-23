@@ -36,13 +36,21 @@ function Router() {
   );
 }
 
+function AppContent() {
+  return (
+    <>
+      <Navigation />
+      <Router />
+    </>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Navigation />
+        <AppContent />
         <Toaster />
-        <Router />
       </TooltipProvider>
     </QueryClientProvider>
   );
