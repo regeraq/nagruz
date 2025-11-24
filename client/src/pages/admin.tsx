@@ -28,6 +28,9 @@ export default function AdminFull() {
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [showCreatePromo, setShowCreatePromo] = useState(false);
   const [showCreateAdmin, setShowCreateAdmin] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState("");
+  const [editStock, setEditStock] = useState("");
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
   const [seoKeywords, setSeoKeywords] = useState("");
@@ -242,6 +245,23 @@ export default function AdminFull() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({ title: "Статус товара обновлен" });
+    },
+  });
+
+  // Update product price and stock
+  const updateProductPriceStock = useMutation({
+    mutationFn: async ({ id, price, stock }: { id: string; price: string; stock: number }) => {
+      const res = await apiRequest("PATCH", `/api/admin/products/${id}`, { price, stock });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      setEditingProductId(null);
+      toast({ title: "Товар обновлен" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка обновления товара", variant: "destructive" });
     },
   });
 
@@ -524,8 +544,69 @@ export default function AdminFull() {
                         </TableCell>
                         <TableCell className="font-medium">{product.name}</TableCell>
                         <TableCell>{product.sku}</TableCell>
-                        <TableCell>{product.price} ₽</TableCell>
-                        <TableCell>{product.stock}</TableCell>
+                        <TableCell>
+                          {editingProductId === product.id ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                value={editPrice}
+                                onChange={(e) => setEditPrice(e.target.value)}
+                                className="w-24"
+                                data-testid={`input-price-${product.id}`}
+                              />
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => {
+                                  updateProductPriceStock.mutate({
+                                    id: product.id,
+                                    price: editPrice,
+                                    stock: parseInt(editStock),
+                                  });
+                                }}
+                                disabled={updateProductPriceStock.isPending}
+                                data-testid={`button-save-${product.id}`}
+                              >
+                                Сохранить
+                              </Button>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => {
+                                setEditingProductId(product.id);
+                                setEditPrice(product.price);
+                                setEditStock(product.stock);
+                              }}
+                              className="cursor-pointer hover:opacity-60"
+                              data-testid={`cell-price-${product.id}`}
+                            >
+                              {product.price} ₽
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editingProductId === product.id ? (
+                            <Input
+                              type="number"
+                              value={editStock}
+                              onChange={(e) => setEditStock(e.target.value)}
+                              className="w-16"
+                              data-testid={`input-stock-${product.id}`}
+                            />
+                          ) : (
+                            <div
+                              onClick={() => {
+                                setEditingProductId(product.id);
+                                setEditPrice(product.price);
+                                setEditStock(product.stock);
+                              }}
+                              className="cursor-pointer hover:opacity-60"
+                              data-testid={`cell-stock-${product.id}`}
+                            >
+                              {product.stock}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={product.isActive ? "default" : "secondary"}>
                             {product.isActive ? "Активен" : "Неактивен"}
