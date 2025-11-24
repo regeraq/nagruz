@@ -27,6 +27,7 @@ interface User {
 interface NavigationProps {
   selectedDevice?: "nu-100" | "nu-200" | "nu-30";
   onDeviceChange?: (device: "nu-100" | "nu-200" | "nu-30") => void;
+  availableDeviceIds?: string[];
 }
 
 const navLinks = [
@@ -37,16 +38,19 @@ const navLinks = [
   { label: "Контакты", id: "contact" },
 ];
 
-export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: NavigationProps = {}) {
+export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availableDeviceIds = ["nu-100", "nu-200", "nu-30"] }: NavigationProps = {}) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const devices = [
+  const allDevices = [
     { id: "nu-100", name: "НУ-100" },
     { id: "nu-200", name: "НУ-200" },
     { id: "nu-30", name: "НУ-30" },
   ];
+  
+  // Filter to show only available devices
+  const devices = allDevices.filter(d => availableDeviceIds.includes(d.id));
 
   // Get current user
   const { data: userData, isLoading: isLoadingUser } = useQuery<User | null>({
@@ -158,7 +162,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
                   {devices.map((device) => (
                     <DropdownMenuItem
                       key={device.id}
-                      onClick={() => onDeviceChange?.(device.id as "nu-100" | "nu-30")}
+                      onClick={() => onDeviceChange?.(device.id as "nu-100" | "nu-200" | "nu-30")}
                       className={selectedDevice === device.id ? "bg-accent" : ""}
                       data-testid={`device-option-${device.id}`}
                     >

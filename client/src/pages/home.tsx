@@ -102,10 +102,10 @@ export default function Home() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const device = devices[selectedDevice];
+  const device = devices[selectedDevice] || devices["nu-100"];
   const { toast } = useToast();
 
-  const { data: products } = useQuery<Product[]>({
+  const { data: products = [] } = useQuery<Product[]>({
     queryKey: ['/api/products'],
   });
 
@@ -117,6 +117,17 @@ export default function Home() {
   const contactEmail = settingsData?.settings?.find((s: any) => s.key === 'contact_email')?.value || 'info@example.com';
   const contactPhone = settingsData?.settings?.find((s: any) => s.key === 'contact_phone')?.value || '+7 (999) 123-45-67';
   const contactAddress = settingsData?.settings?.find((s: any) => s.key === 'contact_address')?.value || 'Москва, Россия';
+
+  // Get available products (active only)
+  const availableProducts = products.filter((p: Product) => p.isActive !== false);
+  const availableDeviceIds = availableProducts.map((p: Product) => p.id);
+
+  // Auto-switch to first available device if current is not available
+  useEffect(() => {
+    if (availableProducts.length > 0 && !availableDeviceIds.includes(selectedDevice)) {
+      setSelectedDevice(availableDeviceIds[0] as "nu-100" | "nu-200" | "nu-30");
+    }
+  }, [availableProducts, availableDeviceIds, selectedDevice]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -251,7 +262,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      <Navigation selectedDevice={selectedDevice} onDeviceChange={setSelectedDevice} />
+      <Navigation 
+        selectedDevice={selectedDevice} 
+        onDeviceChange={setSelectedDevice}
+        availableDeviceIds={availableDeviceIds}
+      />
       
       {showScrollTop && (
         <button
@@ -289,7 +304,7 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-12 animate-fade-up" style={{ animationDelay: "0.3s" }}>
             <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-power">
               <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
-              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power" key={selectedDevice}>{parseInt(device.power)}</span>
+              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power" key={selectedDevice}>{device?.power ? parseInt(device.power) : "—"}</span>
               <span className="font-mono text-xs sm:text-sm font-semibold">кВт</span>
             </div>
             <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-steps">
@@ -390,7 +405,7 @@ export default function Home() {
             </div>
             
             <div className="w-full flex justify-center animate-fade-up" style={{ animationDelay: "0.3s" }}>
-              <PowerGauge maxPower={parseInt(device.maxPower.split(" ")[0])} />
+              <PowerGauge maxPower={device?.maxPower ? parseInt(device.maxPower.split(" ")[0]) : 100} />
             </div>
           </div>
         </div>
