@@ -45,57 +45,45 @@ function scrollToSection(id: string) {
   }
 }
 
-const devices = {
-  "nu-100": {
-    name: "НУ-100",
-    power: "100 кВт",
-    steps: "20 ступеней",
-    voltage: "AC/DC",
-    minVoltage: "230-400 В / 110-220 В",
-    maxPower: "100 кВт",
-    frequency: "50 Гц",
-    phases: "3",
-    cosφ: "0.99",
-    cooling: "Воздушное принудительное",
-    description: "Профессиональное нагрузочное устройство для тестирования дизель-генераторов, газопоршневых и газотурбинных установок, ИБП и аккумуляторных батарей",
-    powerRange: "50–100 кВт",
-    acVoltage: "230–400 В",
-    dcVoltage: "110–220 В"
-  },
-  "nu-30": {
-    name: "НУ-30",
-    power: "30 кВт",
-    steps: "6 ступеней",
-    voltage: "AC/DC",
-    minVoltage: "230-400 В / 110-220 В",
-    maxPower: "30 кВт",
-    frequency: "50 Гц",
-    phases: "3",
-    cosφ: "0.99",
-    cooling: "Воздушное принудительное",
-    description: "Компактное нагрузочное устройство для тестирования генераторов, ИБП и источников питания мощностью до 30 кВт",
-    powerRange: "15–30 кВт",
-    acVoltage: "230–400 В",
-    dcVoltage: "110–220 В"
-  }
-};
-
 export default function Home() {
-  const [selectedDevice, setSelectedDevice] = useState<"nu-100" | "nu-30">("nu-100");
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const device = devices[selectedDevice];
   const { toast } = useToast();
 
-  const { data: products } = useQuery<Product[]>({
+  const { data: products = [] } = useQuery<Product[]>({
     queryKey: ['/api/products'],
   });
 
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ['/api/admin/settings'],
   });
+
+  // Initialize selected device from first product
+  useEffect(() => {
+    if (products && products.length > 0 && !selectedDeviceId) {
+      setSelectedDeviceId(products[0].id);
+    }
+  }, [products, selectedDeviceId]);
+
+  const device = (products?.find(p => p.id === selectedDeviceId) || products?.[0]) || {
+    name: "Loading...",
+    description: "Loading...",
+    power: "0 кВт",
+    steps: "0",
+    voltage: "AC/DC",
+    minVoltage: "0 В",
+    maxPower: "0 кВт",
+    frequency: "50 Гц",
+    phases: "3",
+    cosφ: "0.99",
+    cooling: "Air",
+    powerRange: "0 кВт",
+    acVoltage: "0 В",
+    dcVoltage: "0 В",
+  };
 
   // Extract contact settings
   const contactEmail = settingsData?.settings?.find((s: any) => s.key === 'contact_email')?.value || 'info@example.com';
@@ -201,7 +189,7 @@ export default function Home() {
   };
 
   const handleBuyClick = () => {
-    const product = products?.find(p => p.id === selectedDevice);
+    const product = products?.find(p => p.id === selectedDeviceId);
     if (product) {
       setSelectedProduct(product);
       setPaymentModalOpen(true);
@@ -235,7 +223,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      <Navigation selectedDevice={selectedDevice} onDeviceChange={setSelectedDevice} />
+      <Navigation selectedDevice={selectedDeviceId} onDeviceChange={setSelectedDeviceId} />
       
       {showScrollTop && (
         <button
@@ -273,7 +261,7 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-12 animate-fade-up" style={{ animationDelay: "0.3s" }}>
             <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-power">
               <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
-              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power" key={selectedDevice}>{parseInt(device.power)}</span>
+              <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power" key={selectedDeviceId}>{parseInt(device.power)}</span>
               <span className="font-mono text-xs sm:text-sm font-semibold">кВт</span>
             </div>
             <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-steps">
@@ -374,7 +362,7 @@ export default function Home() {
             </div>
             
             <div className="w-full flex justify-center animate-fade-up" style={{ animationDelay: "0.3s" }}>
-              <PowerGauge maxPower={parseInt(device.maxPower.split(" ")[0])} />
+              <PowerGauge maxPower={parseInt((device?.maxPower || "0").toString().split(" ")[0])} />
             </div>
           </div>
         </div>

@@ -1301,6 +1301,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ADMIN: Update Product
+  app.patch("/api/admin/products/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const product = await storage.updateProduct(req.params.id, req.body);
+      if (!product) {
+        res.status(404).json({ success: false, message: "Product not found" });
+        return;
+      }
+
+      res.json({ success: true, product });
+    } catch (error) {
+      console.error("Update product error:", error);
+      res.status(500).json({ success: false, message: "Failed to update product" });
+    }
+  });
+
   // ADMIN: Delete Products
   app.delete("/api/admin/products", async (req, res) => {
     try {
