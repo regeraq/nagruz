@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'react';
 
 interface PowerGaugeProps {
   maxPower: number;
+  useEnhancedScale?: boolean;
 }
 
-export function PowerGauge({ maxPower }: PowerGaugeProps) {
+export function PowerGauge({ maxPower, useEnhancedScale = false }: PowerGaugeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number>();
   const needleAngleRef = useRef<number>(-135);
@@ -33,8 +34,10 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     const centerY = size / 2;
     const radius = 120;
 
-    // Dynamically determine max scale based on input maxPower
-    const scaleMax = Math.ceil(maxPower / 50) * 50; // Round up to nearest 50
+    // Determine scale based on whether we use enhanced scale or fixed 150
+    const scaleMax = useEnhancedScale 
+      ? Math.ceil(maxPower / 50) * 50  // Dynamic: round up to nearest 50
+      : 150;                             // Fixed: always 150 for NU-100 and NU-30
     
     // Calculate target angle for current power level
     const targetAngle = -135 + (maxPower / scaleMax) * 270;
@@ -77,48 +80,50 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         let tickColor: string;
 
         if (isMainTick) {
-          tickLength = 24;
-          tickWidth = 3;
-          tickColor = 'rgba(26, 148, 255, 1)';
+          tickLength = useEnhancedScale ? 24 : 20;
+          tickWidth = useEnhancedScale ? 3 : 2;
+          tickColor = useEnhancedScale ? 'rgba(26, 148, 255, 1)' : 'rgba(26, 148, 255, 0.8)';
         } else if (isMediumTick) {
-          tickLength = 14;
-          tickWidth = 1.5;
-          tickColor = 'rgba(26, 148, 255, 0.7)';
+          tickLength = useEnhancedScale ? 14 : 10;
+          tickWidth = useEnhancedScale ? 1.5 : 1;
+          tickColor = useEnhancedScale ? 'rgba(26, 148, 255, 0.7)' : 'rgba(26, 148, 255, 0.5)';
         } else {
           continue;
         }
 
-        const x1 = centerX + Math.cos(scaleAngle) * (radius - 2);
-        const y1 = centerY + Math.sin(scaleAngle) * (radius - 2);
-        const x2 = centerX + Math.cos(scaleAngle) * (radius - 2 - tickLength);
-        const y2 = centerY + Math.sin(scaleAngle) * (radius - 2 - tickLength);
+        const x1 = centerX + Math.cos(scaleAngle) * (radius - (useEnhancedScale ? 2 : 5));
+        const y1 = centerY + Math.sin(scaleAngle) * (radius - (useEnhancedScale ? 2 : 5));
+        const x2 = centerX + Math.cos(scaleAngle) * (radius - (useEnhancedScale ? 2 : 5) - tickLength);
+        const y2 = centerY + Math.sin(scaleAngle) * (radius - (useEnhancedScale ? 2 : 5) - tickLength);
 
         ctx.strokeStyle = tickColor;
         ctx.lineWidth = tickWidth;
         ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+        if (useEnhancedScale) {
+          ctx.lineJoin = 'round';
+        }
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
 
         if (isMainTick) {
-          const numX = centerX + Math.cos(scaleAngle) * (radius - 55);
-          const numY = centerY + Math.sin(scaleAngle) * (radius - 55);
+          const numX = centerX + Math.cos(scaleAngle) * (radius - (useEnhancedScale ? 55 : 50));
+          const numY = centerY + Math.sin(scaleAngle) * (radius - (useEnhancedScale ? 55 : 50));
           
-          // Add subtle background for text
-          ctx.fillStyle = 'rgba(10, 14, 39, 0.3)';
-          ctx.font = 'bold 18px IBM Plex Mono';
+          ctx.fillStyle = useEnhancedScale ? 'rgba(26, 148, 255, 0.9)' : 'rgba(26, 148, 255, 0.9)';
+          ctx.font = useEnhancedScale ? 'bold 18px IBM Plex Mono' : 'bold 16px IBM Plex Mono';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          const textMetrics = ctx.measureText(i.toString());
-          ctx.fillRect(numX - textMetrics.width / 2 - 4, numY - 8, textMetrics.width + 8, 16);
           
-          // Draw text with gradient effect
-          ctx.fillStyle = 'rgba(26, 148, 255, 1)';
-          ctx.font = 'bold 18px IBM Plex Mono';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
+          if (useEnhancedScale) {
+            // Enhanced style with background
+            const textMetrics = ctx.measureText(i.toString());
+            ctx.fillStyle = 'rgba(10, 14, 39, 0.3)';
+            ctx.fillRect(numX - textMetrics.width / 2 - 4, numY - 8, textMetrics.width + 8, 16);
+            ctx.fillStyle = 'rgba(26, 148, 255, 1)';
+          }
+          
           ctx.fillText(i.toString(), numX, numY);
         }
       }
@@ -199,7 +204,7 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [maxPower]);
+  }, [maxPower, useEnhancedScale]);
 
   return (
     <div

@@ -405,7 +405,10 @@ export default function Home() {
             </div>
             
             <div className="w-full flex justify-center animate-fade-up" style={{ animationDelay: "0.3s" }}>
-              <PowerGauge maxPower={device?.maxPower ? parseInt(device.maxPower.split(" ")[0]) : 100} />
+              <PowerGauge 
+                maxPower={device?.maxPower ? parseInt(device.maxPower.split(" ")[0]) : 100}
+                useEnhancedScale={selectedDevice === "nu-200"}
+              />
             </div>
           </div>
         </div>
