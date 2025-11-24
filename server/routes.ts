@@ -1306,6 +1306,546 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ADMIN: Create Product
+  app.post("/api/admin/products", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const product = await storage.createProduct(req.body);
+      res.status(201).json({ success: true, product });
+    } catch (error) {
+      console.error("Create product error:", error);
+      res.status(500).json({ success: false, message: "Failed to create product" });
+    }
+  });
+
+  // ADMIN: Delete Products
+  app.delete("/api/admin/products", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { ids } = req.body;
+      if (!ids || !Array.isArray(ids)) {
+        res.status(400).json({ success: false, message: "Invalid product IDs" });
+        return;
+      }
+
+      const deleted = await storage.deleteProducts(ids);
+      res.json({ success: true, deleted });
+    } catch (error) {
+      console.error("Delete products error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete products" });
+    }
+  });
+
+  // ADMIN: Get All Users
+  app.get("/api/admin/users", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const users = await storage.getAllUsers();
+      res.json({ success: true, users });
+    } catch (error) {
+      console.error("Get users error:", error);
+      res.status(500).json({ success: false, message: "Failed to get users" });
+    }
+  });
+
+  // ADMIN: Get User by ID
+  app.get("/api/admin/users/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const targetUser = await storage.getUserById(req.params.id);
+      if (!targetUser) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+
+      res.json({ success: true, user: targetUser });
+    } catch (error) {
+      console.error("Get user error:", error);
+      res.status(500).json({ success: false, message: "Failed to get user" });
+    }
+  });
+
+  // ADMIN: Update User Role
+  app.patch("/api/admin/users/:id/role", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || user.role !== "superadmin") {
+        res.status(403).json({ success: false, message: "Only superadmin can change roles" });
+        return;
+      }
+
+      const { role } = req.body;
+      if (!["user", "moderator", "admin", "superadmin"].includes(role)) {
+        res.status(400).json({ success: false, message: "Invalid role" });
+        return;
+      }
+
+      const updatedUser = await storage.updateUserRole(req.params.id, role);
+      if (!updatedUser) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+
+      res.json({ success: true, user: updatedUser });
+    } catch (error) {
+      console.error("Update role error:", error);
+      res.status(500).json({ success: false, message: "Failed to update role" });
+    }
+  });
+
+  // ADMIN: Block/Unblock User
+  app.patch("/api/admin/users/:id/block", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { blocked } = req.body;
+      const updatedUser = await storage.blockUser(req.params.id, blocked);
+      if (!updatedUser) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+
+      res.json({ success: true, user: updatedUser });
+    } catch (error) {
+      console.error("Block user error:", error);
+      res.status(500).json({ success: false, message: "Failed to block user" });
+    }
+  });
+
+  // ADMIN: Delete User
+  app.delete("/api/admin/users/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || user.role !== "superadmin") {
+        res.status(403).json({ success: false, message: "Only superadmin can delete users" });
+        return;
+      }
+
+      const deleted = await storage.deleteUser(req.params.id);
+      if (!deleted) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+
+      res.json({ success: true, message: "User deleted" });
+    } catch (error) {
+      console.error("Delete user error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete user" });
+    }
+  });
+
+  // ADMIN: Get User Orders
+  app.get("/api/admin/users/:id/orders", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const orders = await storage.getUserOrders(req.params.id);
+      res.json({ success: true, orders });
+    } catch (error) {
+      console.error("Get user orders error:", error);
+      res.status(500).json({ success: false, message: "Failed to get orders" });
+    }
+  });
+
+  // ADMIN: Create Admin User
+  app.post("/api/admin/admins", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || user.role !== "superadmin") {
+        res.status(403).json({ success: false, message: "Only superadmin can create admins" });
+        return;
+      }
+
+      const { email, password, role, firstName, lastName } = req.body;
+      
+      if (!email || !password) {
+        res.status(400).json({ success: false, message: "Email and password required" });
+        return;
+      }
+
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        res.status(409).json({ success: false, message: "User already exists" });
+        return;
+      }
+
+      const hashedPassword = await hashPassword(password);
+      const newAdmin = await storage.createUser({
+        email,
+        password: hashedPassword,
+        role: role || "admin",
+        firstName: firstName || null,
+        lastName: lastName || null,
+      });
+
+      res.status(201).json({ success: true, admin: newAdmin });
+    } catch (error) {
+      console.error("Create admin error:", error);
+      res.status(500).json({ success: false, message: "Failed to create admin" });
+    }
+  });
+
+  // ADMIN: Get Contact Submissions
+  app.get("/api/admin/contacts", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const contacts = await storage.getContactSubmissions();
+      res.json({ success: true, contacts });
+    } catch (error) {
+      console.error("Get contacts error:", error);
+      res.status(500).json({ success: false, message: "Failed to get contacts" });
+    }
+  });
+
+  // ADMIN: Delete Contact Submission
+  app.delete("/api/admin/contacts/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const deleted = await storage.deleteContactSubmission(req.params.id);
+      if (!deleted) {
+        res.status(404).json({ success: false, message: "Contact submission not found" });
+        return;
+      }
+
+      res.json({ success: true, message: "Contact submission deleted" });
+    } catch (error) {
+      console.error("Delete contact error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete contact" });
+    }
+  });
+
+  // ADMIN: Get Promo Codes
+  app.get("/api/admin/promocodes", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const promoCodes = await storage.getPromoCodes();
+      res.json({ success: true, promoCodes });
+    } catch (error) {
+      console.error("Get promo codes error:", error);
+      res.status(500).json({ success: false, message: "Failed to get promo codes" });
+    }
+  });
+
+  // ADMIN: Create Promo Code
+  app.post("/api/admin/promocodes", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const promoCode = await storage.createPromoCode(req.body);
+      res.status(201).json({ success: true, promoCode });
+    } catch (error) {
+      console.error("Create promo code error:", error);
+      res.status(500).json({ success: false, message: "Failed to create promo code" });
+    }
+  });
+
+  // ADMIN: Update Promo Code
+  app.patch("/api/admin/promocodes/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const promoCode = await storage.updatePromoCode(req.params.id, req.body);
+      if (!promoCode) {
+        res.status(404).json({ success: false, message: "Promo code not found" });
+        return;
+      }
+
+      res.json({ success: true, promoCode });
+    } catch (error) {
+      console.error("Update promo code error:", error);
+      res.status(500).json({ success: false, message: "Failed to update promo code" });
+    }
+  });
+
+  // ADMIN: Delete Promo Code
+  app.delete("/api/admin/promocodes/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const deleted = await storage.deletePromoCode(req.params.id);
+      if (!deleted) {
+        res.status(404).json({ success: false, message: "Promo code not found" });
+        return;
+      }
+
+      res.json({ success: true, message: "Promo code deleted" });
+    } catch (error) {
+      console.error("Delete promo code error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete promo code" });
+    }
+  });
+
+  // ADMIN: Get Site Settings
+  app.get("/api/admin/settings", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const settings = await storage.getSiteSettings();
+      res.json({ success: true, settings });
+    } catch (error) {
+      console.error("Get settings error:", error);
+      res.status(500).json({ success: false, message: "Failed to get settings" });
+    }
+  });
+
+  // ADMIN: Update Site Setting
+  app.put("/api/admin/settings/:key", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { value, type, description } = req.body;
+      const setting = await storage.setSiteSetting(req.params.key, value, type, description);
+      res.json({ success: true, setting });
+    } catch (error) {
+      console.error("Update setting error:", error);
+      res.status(500).json({ success: false, message: "Failed to update setting" });
+    }
+  });
+
+  // USER: Change Password
+  app.post("/api/auth/change-password", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        res.status(400).json({ success: false, message: "Current and new passwords required" });
+        return;
+      }
+
+      const isValid = await verifyPassword(currentPassword, user.passwordHash || user.password);
+      if (!isValid) {
+        res.status(400).json({ success: false, message: "Current password is incorrect" });
+        return;
+      }
+
+      if (newPassword.length < 8) {
+        res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+        return;
+      }
+
+      const hashedPassword = await hashPassword(newPassword);
+      await storage.updateUser(user.id, { passwordHash: hashedPassword, password: hashedPassword });
+
+      res.json({ success: true, message: "Password changed successfully" });
+    } catch (error) {
+      console.error("Change password error:", error);
+      res.status(500).json({ success: false, message: "Failed to change password" });
+    }
+  });
+
+  // USER: Mark Notification as Read
+  app.patch("/api/notifications/:id/read", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      await storage.markNotificationAsRead(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark notification as read error:", error);
+      res.status(500).json({ success: false, message: "Failed to mark as read" });
+    }
+  });
+
   // Register auth routes
   const httpServer = createServer(app);
 

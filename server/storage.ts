@@ -4,6 +4,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<any>;
   getUserById(id: string): Promise<any>;
   createUser(user: any): Promise<any>;
+  updateUser(id: string, data: any): Promise<any>;
   getSessionByToken(token: string): Promise<any>;
   createSession(session: any): Promise<any>;
   deleteSession(id: string): Promise<boolean>;
@@ -14,10 +15,17 @@ export interface IStorage {
   createNotification(notification: any): Promise<any>;
   getProducts(): Promise<any[]>;
   getProduct(id: string): Promise<any>;
+  createProduct(product: any): Promise<any>;
+  updateProduct(id: string, data: any): Promise<any>;
+  deleteProduct(id: string): Promise<boolean>;
+  deleteProducts(ids: string[]): Promise<number>;
+  updateProductPrice(id: string, price: string): Promise<any>;
+  updateProductInfo(id: string, data: any): Promise<any>;
   getContact(id: string): Promise<any>;
   createContactSubmission(data: any): Promise<any>;
   getContactSubmissions(): Promise<any[]>;
   getContactSubmission(id: string): Promise<any>;
+  deleteContactSubmission(id: string): Promise<boolean>;
   recordLoginAttempt(email: string, success: boolean): Promise<void>;
   getOrder(id: string): Promise<any>;
   updateOrderStatus(id: string, status: string, details?: string): Promise<any>;
@@ -28,6 +36,18 @@ export interface IStorage {
   removeFavorite(userId: string, productId: string): Promise<boolean>;
   getUserFavorites(userId: string): Promise<any[]>;
   validatePromoCode(code: string): Promise<any>;
+  getAllUsers(): Promise<any[]>;
+  updateUserRole(id: string, role: string): Promise<any>;
+  blockUser(id: string, blocked: boolean): Promise<any>;
+  deleteUser(id: string): Promise<boolean>;
+  getPromoCodes(): Promise<any[]>;
+  getPromoCode(id: string): Promise<any>;
+  createPromoCode(promo: any): Promise<any>;
+  updatePromoCode(id: string, data: any): Promise<any>;
+  deletePromoCode(id: string): Promise<boolean>;
+  getSiteSettings(): Promise<any[]>;
+  getSiteSetting(key: string): Promise<any>;
+  setSiteSetting(key: string, value: string, type?: string, description?: string): Promise<any>;
 }
 
 export class MemStorage implements IStorage {
@@ -38,6 +58,8 @@ export class MemStorage implements IStorage {
   private orders = new Map();
   private favorites = new Map();
   private loginAttempts = new Map();
+  private promoCodes = new Map();
+  private siteSettings = new Map();
   private products = [
     {
       id: "nu-100",
@@ -246,7 +268,26 @@ export class MemStorage implements IStorage {
   }
 
   async validatePromoCode(code: string) {
-    return { valid: false, discount: 0 };
+    const promo = Array.from(this.promoCodes.values()).find((p: any) => p.code === code);
+    
+    if (!promo) {
+      return null;
+    }
+    
+    if (promo.isActive === 0 || promo.isActive === false) {
+      return null;
+    }
+    
+    if (promo.expiresAt && new Date(promo.expiresAt) < new Date()) {
+      return null;
+    }
+    
+    return {
+      valid: true,
+      code: promo.code,
+      discountPercent: promo.discountPercent,
+      id: promo.id,
+    };
   }
 
   async updateProductPrice(id: string, price: string) {
@@ -264,6 +305,156 @@ export class MemStorage implements IStorage {
       Object.assign(product, data, { updatedAt: new Date() });
     }
     return product;
+  }
+
+  async updateUser(id: string, data: any) {
+    const user = this.users.get(id);
+    if (user) {
+      Object.assign(user, data, { updatedAt: new Date() });
+    }
+    return user;
+  }
+
+  async createProduct(product: any) {
+    const id = product.id || generateNumericId();
+    const newProduct = {
+      id,
+      ...product,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.products.push(newProduct);
+    return newProduct;
+  }
+
+  async updateProduct(id: string, data: any) {
+    const product = this.products.find(p => p.id === id);
+    if (product) {
+      Object.assign(product, data, { updatedAt: new Date() });
+    }
+    return product;
+  }
+
+  async deleteProduct(id: string) {
+    const index = this.products.findIndex(p => p.id === id);
+    if (index !== -1) {
+      this.products.splice(index, 1);
+      return true;
+    }
+    return false;
+  }
+
+  async deleteProducts(ids: string[]) {
+    let deleted = 0;
+    for (const id of ids) {
+      const index = this.products.findIndex(p => p.id === id);
+      if (index !== -1) {
+        this.products.splice(index, 1);
+        deleted++;
+      }
+    }
+    return deleted;
+  }
+
+  async deleteContactSubmission(id: string) {
+    return this.contacts.delete(id);
+  }
+
+  async getAllUsers() {
+    return Array.from(this.users.values());
+  }
+
+  async updateUserRole(id: string, role: string) {
+    const user = this.users.get(id);
+    if (user) {
+      user.role = role;
+      user.updatedAt = new Date();
+    }
+    return user;
+  }
+
+  async blockUser(id: string, blocked: boolean) {
+    const user = this.users.get(id);
+    if (user) {
+      user.isBlocked = blocked;
+      user.updatedAt = new Date();
+    }
+    return user;
+  }
+
+  async deleteUser(id: string) {
+    const deleted = this.users.delete(id);
+    if (deleted) {
+      Array.from(this.sessions.values()).forEach((s: any) => {
+        if (s.userId === id) {
+          Array.from(this.sessions.entries()).forEach(([key, val]) => {
+            if (val === s) this.sessions.delete(key);
+          });
+        }
+      });
+    }
+    return deleted;
+  }
+
+  async getPromoCodes() {
+    return Array.from(this.promoCodes.values());
+  }
+
+  async getPromoCode(id: string) {
+    return this.promoCodes.get(id);
+  }
+
+  async createPromoCode(promo: any) {
+    const id = generateNumericId();
+    const newPromo = {
+      id,
+      ...promo,
+      createdAt: new Date(),
+    };
+    this.promoCodes.set(id, newPromo);
+    return newPromo;
+  }
+
+  async updatePromoCode(id: string, data: any) {
+    const promo = this.promoCodes.get(id);
+    if (promo) {
+      Object.assign(promo, data);
+    }
+    return promo;
+  }
+
+  async deletePromoCode(id: string) {
+    return this.promoCodes.delete(id);
+  }
+
+  async getSiteSettings() {
+    return Array.from(this.siteSettings.values());
+  }
+
+  async getSiteSetting(key: string) {
+    return Array.from(this.siteSettings.values()).find((s: any) => s.key === key);
+  }
+
+  async setSiteSetting(key: string, value: string, type: string = 'string', description?: string) {
+    let setting = Array.from(this.siteSettings.values()).find((s: any) => s.key === key);
+    if (setting) {
+      setting.value = value;
+      setting.type = type;
+      if (description) setting.description = description;
+      setting.updatedAt = new Date();
+    } else {
+      const id = generateNumericId();
+      setting = {
+        id,
+        key,
+        value,
+        type,
+        description: description || '',
+        updatedAt: new Date(),
+      };
+      this.siteSettings.set(id, setting);
+    }
+    return setting;
   }
 }
 
