@@ -208,6 +208,27 @@ export default function Profile() {
       const totalAmount = productPrice * quantity;
       const finalAmount = totalAmount;
 
+      let customerName = "Покупатель";
+      const firstName = userData.firstName?.trim() || "";
+      const lastName = userData.lastName?.trim() || "";
+      const fullName = `${firstName} ${lastName}`.trim();
+      
+      if (fullName && fullName.length >= 2) {
+        customerName = fullName;
+      } else {
+        const emailLocalPart = userData.email.split("@")[0] || "";
+        if (emailLocalPart && emailLocalPart.length >= 2) {
+          customerName = emailLocalPart;
+        }
+      }
+      
+      let customerPhone = "+7 (900) 000-00-00";
+      const userPhone = userData.phone?.trim() || "";
+      const phoneDigits = userPhone.replace(/\D/g, "");
+      if (phoneDigits.length >= 10) {
+        customerPhone = userPhone;
+      }
+
       const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -224,9 +245,9 @@ export default function Profile() {
           discountAmount: "0",
           finalAmount: finalAmount.toString(),
           paymentMethod: "Банковская карта",
-          customerName: `${userData.firstName || ""} ${userData.lastName || ""}`.trim() || userData.email.split("@")[0],
+          customerName,
           customerEmail: userData.email,
-          customerPhone: userData.phone || "+7 (999) 000-00-00",
+          customerPhone,
         }),
       });
 
