@@ -5,380 +5,244 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Package, Users, BarChart3, FileText, Settings, Plus, Edit2, Trash2, Save, X, CheckCircle2, Search } from "lucide-react";
+import { 
+  Package, Users, BarChart3, FileText, Settings, Plus, Edit2, Trash2, 
+  Save, X, Search, Shield, Tag, Mail, UserPlus 
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale/ru";
+import { apiRequest } from "@/lib/queryClient";
 
-interface Product {
-  id: string;
-  name: string;
-  price: string;
-  stock: number;
-  sku: string;
-  isActive: boolean;
-}
-
-interface User {
-  id: string;
-  email: string;
-  firstName?: string;
-  lastName?: string;
-  role: string;
-  createdAt: string;
-}
-
-interface Order {
-  id: string;
-  userId: string;
-  productId: string;
-  quantity: number;
-  totalAmount: string;
-  finalAmount: string;
-  paymentStatus: string;
-  paymentMethod: string;
-  createdAt: string;
-}
-
-export default function Admin() {
+export default function AdminFull() {
   const [, setLocation] = useLocation();
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
-  const [editingProduct, setEditingProduct] = useState<string | null>(null);
-  const [editingStock, setEditingStock] = useState<number | null>(null);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [searchUserId, setSearchUserId] = useState("");
-  const [selectedUserDetail, setSelectedUserDetail] = useState<any>(null);
-  const [selectedOrderDetail, setSelectedOrderDetail] = useState<any>(null);
-  const [orderStatusDialog, setOrderStatusDialog] = useState(false);
-  const [newOrderStatus, setNewOrderStatus] = useState("");
-  const [editingProductPrice, setEditingProductPrice] = useState<string | null>(null);
-  const [newProductPrice, setNewProductPrice] = useState("");
-  const [showPriceDialog, setShowPriceDialog] = useState(false);
-  const [selectedEditProduct, setSelectedEditProduct] = useState<any>(null);
+  const [showCreateProduct, setShowCreateProduct] = useState(false);
+  const [showCreatePromo, setShowCreatePromo] = useState(false);
+  const [showCreateAdmin, setShowCreateAdmin] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Fetch current user
   const { data: userData } = useQuery({
     queryKey: ["/api/auth/me"],
-    queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
-
-      const res = await fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      });
-
-      if (!res.ok) throw new Error("Failed to fetch user");
-      const data = await res.json();
-      return data.user;
-    },
   });
 
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
+  // Fetch products
+  const { data: products = [] } = useQuery({
     queryKey: ["/api/products"],
-    queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return [];
-
-      const res = await fetch("/api/products", {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      });
-
-      if (!res.ok) return [];
-      return res.json();
-    },
   });
 
-  const { data: users = [], isLoading: isLoadingUsers } = useQuery({
+  // Fetch users
+  const { data: usersData } = useQuery({
     queryKey: ["/api/admin/users"],
-    queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return [];
-
-      const res = await fetch("/api/admin/users", {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      });
-
-      if (!res.ok) return [];
-      return res.json();
-    },
+    enabled: !!userData && ["admin", "superadmin"].includes(userData?.role),
   });
 
-  const { data: orders = [], isLoading: isLoadingOrders } = useQuery<Order[]>({
+  // Fetch orders
+  const { data: ordersData } = useQuery({
     queryKey: ["/api/admin/orders"],
-    queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return [];
-
-      const res = await fetch("/api/admin/orders", {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      });
-
-      if (!res.ok) return [];
-      return res.json();
-    },
+    enabled: !!userData && ["admin", "superadmin"].includes(userData?.role),
   });
 
-  const updateProductStock = useMutation({
-    mutationFn: async ({ id, stock }: { id: string; stock: number }) => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
+  // Fetch contacts
+  const { data: contactsData } = useQuery({
+    queryKey: ["/api/admin/contacts"],
+    enabled: !!userData && ["admin", "superadmin"].includes(userData?.role),
+  });
 
-      const res = await fetch(`/api/admin/products/${id}/stock`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ stock }),
+  // Fetch promocodes
+  const { data: promoCodesData } = useQuery({
+    queryKey: ["/api/admin/promocodes"],
+    enabled: !!userData && ["admin", "superadmin"].includes(userData?.role),
+  });
+
+  const users = usersData?.users || [];
+  const orders = ordersData?.orders || [];
+  const contacts = contactsData?.contacts || [];
+  const promoCodes = promoCodesData?.promoCodes || [];
+
+  // Create product mutation
+  const createProduct = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest("/api/admin/products", {
+        method: "POST",
+        body: JSON.stringify(data),
       });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Ошибка при обновлении");
-      }
-
-      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      setEditingProduct(null);
-      setEditingStock(null);
-      toast({
-        title: "Успешно",
-        description: "Количество обновлено",
-      });
+      setShowCreateProduct(false);
+      toast({ title: "Товар создан" });
     },
-    onError: (error: Error) => {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
     },
   });
 
+  // Delete products mutation
+  const deleteProducts = useMutation({
+    mutationFn: async (ids: string[]) => {
+      return apiRequest("/api/admin/products", {
+        method: "DELETE",
+        body: JSON.stringify({ ids }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      setSelectedProducts(new Set());
+      toast({ title: "Товары удалены" });
+    },
+  });
+
+  // Update user role
+  const updateUserRole = useMutation({
+    mutationFn: async ({ id, role }: { id: string; role: string }) => {
+      return apiRequest(`/api/admin/users/${id}/role`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Роль обновлена" });
+    },
+  });
+
+  // Block user
+  const blockUser = useMutation({
+    mutationFn: async ({ id, blocked }: { id: string; blocked: boolean }) => {
+      return apiRequest(`/api/admin/users/${id}/block`, {
+        method: "PATCH",
+        body: JSON.stringify({ blocked }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Статус пользователя обновлен" });
+    },
+  });
+
+  // Delete user
+  const deleteUser = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest(`/api/admin/users/${id}`, {
+        method: "DELETE",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Пользователь удален" });
+    },
+  });
+
+  // Create admin
+  const createAdmin = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest("/api/admin/admins", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setShowCreateAdmin(false);
+      toast({ title: "Администратор создан" });
+    },
+  });
+
+  // Update order status
   const updateOrderStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
-
-      const res = await fetch(`/api/admin/orders/${id}`, {
+      return apiRequest(`/api/orders/${id}/status`, {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ paymentStatus: status }),
+        body: JSON.stringify({ status }),
       });
-
-      if (!res.ok) throw new Error("Ошибка при обновлении");
-      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
-      setOrderStatusDialog(false);
-      setNewOrderStatus("");
-      toast({
-        title: "Успешно",
-        description: "Статус заказа обновлен",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Статус заказа обновлен" });
     },
   });
 
-  const updateProductPrice = useMutation({
-    mutationFn: async ({ id, price }: { id: string; price: string }) => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
-
-      const res = await fetch(`/api/admin/products/${id}/price`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ price }),
-      });
-
-      if (!res.ok) throw new Error("Ошибка при обновлении цены");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      setShowPriceDialog(false);
-      setSelectedEditProduct(null);
-      setNewProductPrice("");
-      toast({
-        title: "Успешно",
-        description: "Цена товара обновлена",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const deleteProducts = useMutation({
-    mutationFn: async (ids: string[]) => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
-
-      const res = await fetch("/api/admin/products", {
+  // Delete contact
+  const deleteContact = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest(`/api/admin/contacts/${id}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ ids }),
       });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Ошибка при удалении");
-      }
-
-      return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      setSelectedProducts(new Set());
-      setShowDeleteDialog(false);
-      toast({
-        title: "Успешно",
-        description: "Товары удалены",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
+      toast({ title: "Заявка удалена" });
     },
   });
 
-  const handleStockEdit = (product: Product) => {
-    setEditingProduct(product.id);
-    setEditingStock(product.stock);
-  };
-
-  const handleStockSave = (id: string) => {
-    if (editingStock !== null && editingStock >= 0) {
-      updateProductStock.mutate({ id, stock: editingStock });
-    }
-  };
-
-  const handleStockCancel = () => {
-    setEditingProduct(null);
-    setEditingStock(null);
-  };
-
-  const toggleProductSelection = (id: string) => {
-    const newSelected = new Set(selectedProducts);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
-    setSelectedProducts(newSelected);
-  };
-
-  const toggleAllProducts = () => {
-    if (selectedProducts.size === products.length) {
-      setSelectedProducts(new Set());
-    } else {
-      setSelectedProducts(new Set(products.map(p => p.id)));
-    }
-  };
-
-  const handleBulkDelete = () => {
-    if (selectedProducts.size === 0) return;
-    setShowDeleteDialog(true);
-  };
-
-  const confirmBulkDelete = () => {
-    deleteProducts.mutate(Array.from(selectedProducts));
-  };
-
-  const handleSearchUser = (userId: string) => {
-    if (!userId.trim()) {
-      setSelectedUserDetail(null);
-      return;
-    }
-    const found = users.find((u: any) => u.id === userId);
-    if (found) {
-      const userOrders = orders.filter((o: any) => o.userId === userId);
-      setSelectedUserDetail({ ...found, orders: userOrders });
-    } else {
-      toast({
-        title: "Не найдено",
-        description: "Пользователь с таким ID не найден",
-        variant: "destructive",
+  // Create promo code
+  const createPromoCode = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest("/api/admin/promocodes", {
+        method: "POST",
+        body: JSON.stringify(data),
       });
-      setSelectedUserDetail(null);
-    }
-  };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promocodes"] });
+      setShowCreatePromo(false);
+      toast({ title: "Промокод создан" });
+    },
+  });
 
-  const handleOrderStatusChange = (order: Order) => {
-    setSelectedOrderDetail(order);
-    setNewOrderStatus(order.paymentStatus);
-    setOrderStatusDialog(true);
-  };
-
-  const confirmOrderStatusChange = () => {
-    if (selectedOrderDetail && newOrderStatus) {
-      updateOrderStatus.mutate({
-        id: selectedOrderDetail.id,
-        status: newOrderStatus,
+  // Delete promo code
+  const deletePromoCode = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest(`/api/admin/promocodes/${id}`, {
+        method: "DELETE",
       });
-    }
-  };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promocodes"] });
+      toast({ title: "Промокод удален" });
+    },
+  });
 
-  const isAdmin = userData?.role === "admin" || userData?.role === "superadmin" || userData?.role === "moderator";
+  // Toggle product active status
+  const updatePromoCodeStatus = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: number }) => {
+      return apiRequest(`/api/admin/promocodes/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promocodes"] });
+      toast({ title: "Статус промокода обновлен" });
+    },
+  });
+
+  const isAdmin = userData?.role === "admin" || userData?.role === "superadmin";
+  const isSuperAdmin = userData?.role === "superadmin";
 
   if (!isAdmin) {
     return (
       <div className="container mx-auto px-4 py-8 pt-24">
-        <Card>
-          <CardContent className="pt-6">
-            <Alert>
-              <AlertDescription>У вас нет доступа к админ-панели</AlertDescription>
-            </Alert>
-          </CardContent>
-        </Card>
+        <Alert>
+          <AlertDescription>У вас нет доступа к админ-панели</AlertDescription>
+        </Alert>
       </div>
     );
   }
 
-  const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.finalAmount), 0);
-  const deliveredOrders = orders.filter(o => o.paymentStatus === "delivered").length;
-  const processingOrders = orders.filter(o => o.paymentStatus === "processing").length;
+  const totalRevenue = orders.reduce((sum: number, o: any) => sum + parseFloat(o.finalAmount || 0), 0);
+  const admins = users.filter((u: any) => ["admin", "superadmin", "moderator"].includes(u.role));
 
   return (
     <div className="container mx-auto px-4 py-8 pt-24">
@@ -386,768 +250,690 @@ export default function Admin() {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-bold">Админ-панель</h1>
           <div className="flex items-center gap-4">
-            <Badge variant="outline" className="text-sm">
-              {userData?.role}
-            </Badge>
-            <Button variant="outline" onClick={() => setLocation("/")} data-testid="button-go-home">
+            <Badge variant="outline">{userData?.role}</Badge>
+            <Button variant="outline" onClick={() => setLocation("/")}>
               На главную
             </Button>
           </div>
         </div>
 
-        <Tabs defaultValue="products" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="products">
-              <Package className="w-4 h-4 mr-2" />
-              Товары
-            </TabsTrigger>
-            <TabsTrigger value="users">
-              <Users className="w-4 h-4 mr-2" />
-              Пользователи
-            </TabsTrigger>
-            <TabsTrigger value="orders">
-              <Package className="w-4 h-4 mr-2" />
-              Заказы
-            </TabsTrigger>
-            <TabsTrigger value="analytics">
-              <BarChart3 className="w-4 h-4 mr-2" />
-              Аналитика
-            </TabsTrigger>
-            <TabsTrigger value="settings">
-              <Settings className="w-4 h-4 mr-2" />
-              Настройки
-            </TabsTrigger>
+        <Tabs defaultValue="analytics" className="w-full">
+          <TabsList className="grid w-full grid-cols-8 gap-1">
+            <TabsTrigger value="analytics"><BarChart3 className="w-4 h-4 mr-1" />Аналитика</TabsTrigger>
+            <TabsTrigger value="products"><Package className="w-4 h-4 mr-1" />Товары</TabsTrigger>
+            <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" />Пользователи</TabsTrigger>
+            <TabsTrigger value="admins"><Shield className="w-4 h-4 mr-1" />Админы</TabsTrigger>
+            <TabsTrigger value="orders"><FileText className="w-4 h-4 mr-1" />Заказы</TabsTrigger>
+            <TabsTrigger value="contacts"><Mail className="w-4 h-4 mr-1" />Заявки</TabsTrigger>
+            <TabsTrigger value="promocodes"><Tag className="w-4 h-4 mr-1" />Промокоды</TabsTrigger>
+            <TabsTrigger value="settings"><Settings className="w-4 h-4 mr-1" />Настройки</TabsTrigger>
           </TabsList>
 
+          {/* Analytics Tab */}
+          <TabsContent value="analytics" className="mt-6 space-y-6">
+            <div className="grid grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Всего товаров</CardDescription>
+                  <CardTitle className="text-3xl">{products.length}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Пользователи</CardDescription>
+                  <CardTitle className="text-3xl">{users.length}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Заказы</CardDescription>
+                  <CardTitle className="text-3xl">{orders.length}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Выручка</CardDescription>
+                  <CardTitle className="text-3xl">{totalRevenue.toFixed(0)} ₽</CardTitle>
+                </CardHeader>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Последние заказы</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Пользователь</TableHead>
+                      <TableHead>Сумма</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead>Дата</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.slice(0, 5).map((order: any) => (
+                      <TableRow key={order.id}>
+                        <TableCell className="font-mono text-sm">{order.id.slice(0, 8)}</TableCell>
+                        <TableCell>{order.customerName || order.customerEmail}</TableCell>
+                        <TableCell>{order.finalAmount} ₽</TableCell>
+                        <TableCell>
+                          <Badge>{order.paymentStatus}</Badge>
+                        </TableCell>
+                        <TableCell>{format(new Date(order.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Products Tab */}
           <TabsContent value="products" className="mt-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>Управление товарами</CardTitle>
-                    <CardDescription>CRUD операции для товаров</CardDescription>
+                    <CardDescription>Создание, редактирование и удаление товаров</CardDescription>
                   </div>
                   <div className="flex gap-2">
                     {selectedProducts.size > 0 && (
-                      <Button
-                        variant="destructive"
-                        onClick={handleBulkDelete}
-                        disabled={deleteProducts.isPending}
-                        data-testid="button-delete-selected"
-                      >
+                      <Button variant="destructive" onClick={() => deleteProducts.mutate(Array.from(selectedProducts))}>
                         <Trash2 className="w-4 h-4 mr-2" />
                         Удалить ({selectedProducts.size})
                       </Button>
                     )}
-                    <Button data-testid="button-add-product">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Добавить товар
-                    </Button>
+                    <Dialog open={showCreateProduct} onOpenChange={setShowCreateProduct}>
+                      <DialogTrigger asChild>
+                        <Button>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Добавить товар
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Создать товар</DialogTitle>
+                        </DialogHeader>
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.currentTarget);
+                            createProduct.mutate({
+                              id: formData.get("id"),
+                              name: formData.get("name"),
+                              description: formData.get("description"),
+                              price: formData.get("price"),
+                              sku: formData.get("sku"),
+                              specifications: formData.get("specifications"),
+                              stock: parseInt(formData.get("stock") as string),
+                              isActive: true,
+                              currency: "RUB",
+                            });
+                          }}
+                        >
+                          <div className="space-y-4">
+                            <div>
+                              <Label>ID</Label>
+                              <Input name="id" required />
+                            </div>
+                            <div>
+                              <Label>Название</Label>
+                              <Input name="name" required />
+                            </div>
+                            <div>
+                              <Label>Описание</Label>
+                              <Textarea name="description" required />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label>Цена (₽)</Label>
+                                <Input name="price" type="number" required />
+                              </div>
+                              <div>
+                                <Label>Количество</Label>
+                                <Input name="stock" type="number" defaultValue="0" required />
+                              </div>
+                            </div>
+                            <div>
+                              <Label>Артикул</Label>
+                              <Input name="sku" required />
+                            </div>
+                            <div>
+                              <Label>Характеристики</Label>
+                              <Textarea name="specifications" required />
+                            </div>
+                          </div>
+                          <DialogFooter className="mt-4">
+                            <Button type="submit" disabled={createProduct.isPending}>
+                              {createProduct.isPending ? "Создание..." : "Создать"}
+                            </Button>
+                          </DialogFooter>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                {isLoadingProducts ? (
-                  <div className="text-center py-12">
-                    <div className="animate-pulse">Загрузка...</div>
-                  </div>
-                ) : products.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">Товары не найдены</p>
-                  </div>
-                ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12">
-                            <Checkbox
-                              checked={selectedProducts.size === products.length && products.length > 0}
-                              onCheckedChange={toggleAllProducts}
-                              data-testid="checkbox-select-all"
-                            />
-                          </TableHead>
-                          <TableHead>Название</TableHead>
-                          <TableHead>Артикул</TableHead>
-                          <TableHead>Цена</TableHead>
-                          <TableHead>Количество</TableHead>
-                          <TableHead>Статус</TableHead>
-                          <TableHead className="text-right">Действия</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {products.map((product) => (
-                          <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
-                            <TableCell>
-                              <Checkbox
-                                checked={selectedProducts.has(product.id)}
-                                onCheckedChange={() => toggleProductSelection(product.id)}
-                                data-testid={`checkbox-product-${product.id}`}
-                              />
-                            </TableCell>
-                            <TableCell className="font-medium" data-testid={`cell-name-${product.id}`}>{product.name}</TableCell>
-                            <TableCell data-testid={`cell-sku-${product.id}`}>{product.sku}</TableCell>
-                            <TableCell data-testid={`cell-price-${product.id}`}>{product.price} ₽</TableCell>
-                            <TableCell>
-                              {editingProduct === product.id ? (
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    type="number"
-                                    value={editingStock ?? 0}
-                                    onChange={(e) => setEditingStock(parseInt(e.target.value) || 0)}
-                                    className="w-20"
-                                    min="0"
-                                    autoFocus
-                                    data-testid={`input-stock-${product.id}`}
-                                  />
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleStockSave(product.id)}
-                                    disabled={updateProductStock.isPending}
-                                    data-testid={`button-save-stock-${product.id}`}
-                                  >
-                                    <Save className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={handleStockCancel}
-                                    disabled={updateProductStock.isPending}
-                                    data-testid={`button-cancel-stock-${product.id}`}
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <span data-testid={`text-stock-${product.id}`}>{product.stock}</span>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleStockEdit(product)}
-                                    data-testid={`button-edit-stock-${product.id}`}
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={product.isActive ? "default" : "secondary"} data-testid={`badge-status-${product.id}`}>
-                                {product.isActive ? "Активен" : "Неактивен"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  onClick={() => {
-                                    setSelectedEditProduct(product);
-                                    setNewProductPrice(product.price);
-                                    setShowPriceDialog(true);
-                                  }}
-                                  data-testid={`button-edit-price-${product.id}`}
-                                  title="Редактировать цену"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedProducts.size === products.length && products.length > 0}
+                          onCheckedChange={() => {
+                            if (selectedProducts.size === products.length) {
+                              setSelectedProducts(new Set());
+                            } else {
+                              setSelectedProducts(new Set(products.map((p: any) => p.id)));
+                            }
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead>Название</TableHead>
+                      <TableHead>Артикул</TableHead>
+                      <TableHead>Цена</TableHead>
+                      <TableHead>Количество</TableHead>
+                      <TableHead>Статус</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {products.map((product: any) => (
+                      <TableRow key={product.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedProducts.has(product.id)}
+                            onCheckedChange={() => {
+                              const newSet = new Set(selectedProducts);
+                              if (newSet.has(product.id)) {
+                                newSet.delete(product.id);
+                              } else {
+                                newSet.add(product.id);
+                              }
+                              setSelectedProducts(newSet);
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell>{product.sku}</TableCell>
+                        <TableCell>{product.price} ₽</TableCell>
+                        <TableCell>{product.stock}</TableCell>
+                        <TableCell>
+                          <Badge variant={product.isActive ? "default" : "secondary"}>
+                            {product.isActive ? "Активен" : "Неактивен"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Users Tab */}
           <TabsContent value="users" className="mt-6">
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Поиск пользователя по ID</CardTitle>
-                  <CardDescription>Введите ID пользователя для просмотра деталей и заказов</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Введите ID пользователя..."
-                      value={searchUserId}
-                      onChange={(e) => setSearchUserId(e.target.value)}
-                      data-testid="input-search-user"
-                    />
-                    <Button
-                      onClick={() => handleSearchUser(searchUserId)}
-                      data-testid="button-search-user"
-                    >
-                      <Search className="w-4 h-4 mr-2" />
-                      Поиск
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {selectedUserDetail && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Профиль пользователя</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-muted-foreground text-sm">ID</p>
-                        <p className="font-semibold" data-testid="text-user-id">{selectedUserDetail.id}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-sm">Email</p>
-                        <p className="font-semibold" data-testid="text-user-email">{selectedUserDetail.email}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-sm">Имя</p>
-                        <p className="font-semibold" data-testid="text-user-name">
-                          {selectedUserDetail.firstName && selectedUserDetail.lastName
-                            ? `${selectedUserDetail.firstName} ${selectedUserDetail.lastName}`
-                            : "—"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-sm">Роль</p>
-                        <Badge variant="outline" data-testid="badge-user-role">{selectedUserDetail.role}</Badge>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-muted-foreground text-sm">Дата регистрации</p>
-                        <p className="font-semibold" data-testid="text-user-created">
-                          {format(new Date(selectedUserDetail.createdAt), "d MMMM yyyy, HH:mm", { locale: ru })}
-                        </p>
-                      </div>
-                    </div>
-
-                    {selectedUserDetail.orders && selectedUserDetail.orders.length > 0 && (
-                      <div className="mt-6">
-                        <h3 className="font-semibold mb-4">Заказы пользователя ({selectedUserDetail.orders.length})</h3>
-                        <div className="space-y-2">
-                          {selectedUserDetail.orders.map((order: Order) => (
-                            <Card key={order.id} data-testid={`card-user-order-${order.id}`}>
-                              <CardContent className="pt-4">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <p className="font-semibold text-sm"># {order.id.slice(0, 8)}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {format(new Date(order.createdAt), "d MMM yyyy", { locale: ru })}
-                                    </p>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="font-semibold">{order.finalAmount} ₽</p>
-                                    <Badge
-                                      variant={order.paymentStatus === "delivered" ? "default" : "secondary"}
-                                      className="text-xs"
-                                      data-testid={`badge-order-status-${order.id}`}
-                                    >
-                                      {order.paymentStatus}
-                                    </Badge>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Все пользователи</CardTitle>
-                  <CardDescription>Список всех зарегистрированных пользователей</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {isLoadingUsers ? (
-                    <div className="text-center py-12">
-                      <div className="animate-pulse">Загрузка...</div>
-                    </div>
-                  ) : users.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">Пользователи не найдены</p>
-                    </div>
-                  ) : (
-                    <div className="rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Имя</TableHead>
-                            <TableHead>Роль</TableHead>
-                            <TableHead>Дата регистрации</TableHead>
-                            <TableHead className="text-right">Действия</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {users.map((user: any) => (
-                            <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
-                              <TableCell className="font-medium" data-testid={`cell-email-${user.id}`}>{user.email}</TableCell>
-                              <TableCell data-testid={`cell-name-${user.id}`}>
-                                {user.firstName && user.lastName
-                                  ? `${user.firstName} ${user.lastName}`
-                                  : "—"}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" data-testid={`badge-role-${user.id}`}>{user.role}</Badge>
-                              </TableCell>
-                              <TableCell data-testid={`cell-created-${user.id}`}>
-                                {format(new Date(user.createdAt), "d MMM yyyy", { locale: ru })}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setSearchUserId(user.id);
-                                    handleSearchUser(user.id);
-                                  }}
-                                  data-testid={`button-view-user-${user.id}`}
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Управление пользователями</CardTitle>
+                <CardDescription>Просмотр и управление пользователями</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Имя</TableHead>
+                      <TableHead>Роль</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead>Дата регистрации</TableHead>
+                      <TableHead>Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((user: any) => (
+                      <TableRow key={user.id}>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>{user.firstName || user.lastName ? `${user.firstName || ""} ${user.lastName || ""}` : "-"}</TableCell>
+                        <TableCell>
+                          {isSuperAdmin ? (
+                            <Select
+                              value={user.role}
+                              onValueChange={(role) => updateUserRole.mutate({ id: user.id, role })}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="user">User</SelectItem>
+                                <SelectItem value="moderator">Moderator</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="superadmin">Superadmin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Badge>{user.role}</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {user.isBlocked ? (
+                            <Badge variant="destructive">Заблокирован</Badge>
+                          ) : (
+                            <Badge variant="default">Активен</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>{format(new Date(user.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => blockUser.mutate({ id: user.id, blocked: !user.isBlocked })}
+                            >
+                              {user.isBlocked ? "Разблокировать" : "Заблокировать"}
+                            </Button>
+                            {isSuperAdmin && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  if (confirm("Удалить пользователя?")) {
+                                    deleteUser.mutate(user.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
 
+          {/* Admins Tab */}
+          <TabsContent value="admins" className="mt-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Управление администраторами</CardTitle>
+                    <CardDescription>Создание и управление административными аккаунтами</CardDescription>
+                  </div>
+                  {isSuperAdmin && (
+                    <Dialog open={showCreateAdmin} onOpenChange={setShowCreateAdmin}>
+                      <DialogTrigger asChild>
+                        <Button>
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          Создать администратора
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Создать администратора</DialogTitle>
+                        </DialogHeader>
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.currentTarget);
+                            createAdmin.mutate({
+                              email: formData.get("email"),
+                              password: formData.get("password"),
+                              role: formData.get("role"),
+                              firstName: formData.get("firstName"),
+                              lastName: formData.get("lastName"),
+                            });
+                          }}
+                        >
+                          <div className="space-y-4">
+                            <div>
+                              <Label>Email</Label>
+                              <Input name="email" type="email" required />
+                            </div>
+                            <div>
+                              <Label>Пароль</Label>
+                              <Input name="password" type="password" required />
+                            </div>
+                            <div>
+                              <Label>Роль</Label>
+                              <Select name="role" defaultValue="admin">
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                  <SelectItem value="moderator">Moderator</SelectItem>
+                                  <SelectItem value="superadmin">Superadmin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label>Имя</Label>
+                                <Input name="firstName" />
+                              </div>
+                              <div>
+                                <Label>Фамилия</Label>
+                                <Input name="lastName" />
+                              </div>
+                            </div>
+                          </div>
+                          <DialogFooter className="mt-4">
+                            <Button type="submit" disabled={createAdmin.isPending}>
+                              {createAdmin.isPending ? "Создание..." : "Создать"}
+                            </Button>
+                          </DialogFooter>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Имя</TableHead>
+                      <TableHead>Роль</TableHead>
+                      <TableHead>Дата создания</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {admins.map((admin: any) => (
+                      <TableRow key={admin.id}>
+                        <TableCell>{admin.email}</TableCell>
+                        <TableCell>{admin.firstName || admin.lastName ? `${admin.firstName || ""} ${admin.lastName || ""}` : "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant={admin.role === "superadmin" ? "default" : "secondary"}>
+                            {admin.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{format(new Date(admin.createdAt), "dd.MM.yyyy HH:mm", { locale: ru })}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Orders Tab */}
           <TabsContent value="orders" className="mt-6">
             <Card>
               <CardHeader>
                 <CardTitle>Управление заказами</CardTitle>
-                <CardDescription>Просмотр и управление всеми заказами</CardDescription>
+                <CardDescription>Просмотр и управление заказами</CardDescription>
               </CardHeader>
               <CardContent>
-                {isLoadingOrders ? (
-                  <div className="text-center py-12">
-                    <div className="animate-pulse">Загрузка...</div>
-                  </div>
-                ) : orders.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">Заказы не найдены</p>
-                  </div>
-                ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID заказа</TableHead>
-                          <TableHead>Товар</TableHead>
-                          <TableHead>Количество</TableHead>
-                          <TableHead>Сумма</TableHead>
-                          <TableHead>Статус</TableHead>
-                          <TableHead>Дата</TableHead>
-                          <TableHead className="text-right">Действия</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {orders.map((order: Order) => (
-                          <TableRow key={order.id} data-testid={`row-order-${order.id}`}>
-                            <TableCell className="font-mono text-sm" data-testid={`cell-order-id-${order.id}`}>
-                              {order.id.slice(0, 8)}
-                            </TableCell>
-                            <TableCell data-testid={`cell-product-id-${order.id}`}>{order.productId}</TableCell>
-                            <TableCell data-testid={`cell-quantity-${order.id}`}>{order.quantity}</TableCell>
-                            <TableCell className="font-semibold" data-testid={`cell-amount-${order.id}`}>
-                              {order.finalAmount} ₽
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  order.paymentStatus === "delivered"
-                                    ? "default"
-                                    : order.paymentStatus === "cancelled"
-                                    ? "destructive"
-                                    : "secondary"
-                                }
-                                data-testid={`badge-status-${order.id}`}
-                              >
-                                {order.paymentStatus}
-                              </Badge>
-                            </TableCell>
-                            <TableCell data-testid={`cell-date-${order.id}`}>
-                              {format(new Date(order.createdAt), "d MMM yyyy", { locale: ru })}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleOrderStatusChange(order)}
-                                data-testid={`button-edit-order-${order.id}`}
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Клиент</TableHead>
+                      <TableHead>Товар</TableHead>
+                      <TableHead>Сумма</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead>Дата</TableHead>
+                      <TableHead>Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order: any) => (
+                      <TableRow key={order.id}>
+                        <TableCell className="font-mono text-sm">{order.id.slice(0, 8)}</TableCell>
+                        <TableCell>{order.customerName || order.customerEmail}</TableCell>
+                        <TableCell>{order.productId}</TableCell>
+                        <TableCell>{order.finalAmount} ₽</TableCell>
+                        <TableCell>
+                          <Select
+                            value={order.paymentStatus}
+                            onValueChange={(status) => updateOrderStatus.mutate({ id: order.id, status })}
+                          >
+                            <SelectTrigger className="w-36">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Ожидание</SelectItem>
+                              <SelectItem value="paid">Оплачен</SelectItem>
+                              <SelectItem value="processing">В обработке</SelectItem>
+                              <SelectItem value="shipped">Отправлен</SelectItem>
+                              <SelectItem value="delivered">Доставлен</SelectItem>
+                              <SelectItem value="cancelled">Отменен</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>{format(new Date(order.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="outline">
+                            Детали
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="analytics" className="mt-6">
+          {/* Contacts Tab */}
+          <TabsContent value="contacts" className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>Аналитика</CardTitle>
-                <CardDescription>Полный дашборд с метриками и графиками</CardDescription>
+                <CardTitle>Заявки с сайта</CardTitle>
+                <CardDescription>Просмотр и управление контактными заявками</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-3xl font-bold" data-testid="text-total-products">{products.length}</div>
-                      <p className="text-xs text-muted-foreground">Всего товаров</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-3xl font-bold" data-testid="text-total-users">{users.length}</div>
-                      <p className="text-xs text-muted-foreground">Всего пользователей</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-3xl font-bold" data-testid="text-total-orders">{orders.length}</div>
-                      <p className="text-xs text-muted-foreground">Всего заказов</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-3xl font-bold" data-testid="text-total-revenue">
-                        {(totalRevenue / 1000).toFixed(0)}K
-                      </div>
-                      <p className="text-xs text-muted-foreground">Выручка (₽)</p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Статусы заказов</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Доставлено</span>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-green-200 rounded" style={{ width: `${deliveredOrders * 20}px` }}></div>
-                          <span className="text-sm font-semibold" data-testid="text-delivered">{deliveredOrders}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">В обработке</span>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-blue-200 rounded" style={{ width: `${processingOrders * 20}px` }}></div>
-                          <span className="text-sm font-semibold" data-testid="text-processing">{processingOrders}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Ожидание</span>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-yellow-200 rounded" style={{ width: `${(orders.length - deliveredOrders - processingOrders) * 20}px` }}></div>
-                          <span className="text-sm font-semibold" data-testid="text-pending">
-                            {orders.length - deliveredOrders - processingOrders}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Статусы товаров</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                          <span className="text-sm">Активные</span>
-                        </div>
-                        <span className="font-semibold" data-testid="text-active-products">
-                          {products.filter((p: any) => p.isActive).length}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                          <span className="text-sm">Неактивные</span>
-                        </div>
-                        <span className="font-semibold" data-testid="text-inactive-products">
-                          {products.filter((p: any) => !p.isActive).length}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                        <span className="text-sm text-muted-foreground">Низкий запас (&lt;10)</span>
-                        <span className="font-semibold text-orange-600" data-testid="text-low-stock">
-                          {products.filter((p: any) => p.stock < 10).length}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Последние заказы</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {orders.length === 0 ? (
-                      <p className="text-muted-foreground text-sm">Нет заказов</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {orders.slice(-5).reverse().map((order: Order) => (
-                          <div key={order.id} className="flex justify-between items-center p-2 hover:bg-muted rounded">
-                            <span className="text-sm font-mono">#{order.id.slice(0, 8)}</span>
-                            <span className="text-sm">{order.finalAmount} ₽</span>
-                            <Badge variant="outline" className="text-xs">{order.paymentStatus}</Badge>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Имя</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Телефон</TableHead>
+                      <TableHead>Компания</TableHead>
+                      <TableHead>Сообщение</TableHead>
+                      <TableHead>Дата</TableHead>
+                      <TableHead>Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contacts.map((contact: any) => (
+                      <TableRow key={contact.id}>
+                        <TableCell>{contact.name}</TableCell>
+                        <TableCell>{contact.email}</TableCell>
+                        <TableCell>{contact.phone}</TableCell>
+                        <TableCell>{contact.company}</TableCell>
+                        <TableCell className="max-w-xs truncate">{contact.message}</TableCell>
+                        <TableCell>{format(new Date(contact.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              if (confirm("Удалить заявку?")) {
+                                deleteContact.mutate(contact.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Promo Codes Tab */}
+          <TabsContent value="promocodes" className="mt-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Управление промокодами</CardTitle>
+                    <CardDescription>Создание и управление промокодами</CardDescription>
+                  </div>
+                  <Dialog open={showCreatePromo} onOpenChange={setShowCreatePromo}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Создать промокод
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Создать промокод</DialogTitle>
+                      </DialogHeader>
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.currentTarget);
+                          createPromoCode.mutate({
+                            code: formData.get("code"),
+                            discountPercent: parseInt(formData.get("discountPercent") as string),
+                            expiresAt: formData.get("expiresAt") ? new Date(formData.get("expiresAt") as string) : null,
+                            isActive: 1,
+                          });
+                        }}
+                      >
+                        <div className="space-y-4">
+                          <div>
+                            <Label>Код промокода</Label>
+                            <Input name="code" required placeholder="SALE2024" />
+                          </div>
+                          <div>
+                            <Label>Скидка (%)</Label>
+                            <Input name="discountPercent" type="number" min="1" max="100" required />
+                          </div>
+                          <div>
+                            <Label>Дата истечения (необязательно)</Label>
+                            <Input name="expiresAt" type="datetime-local" />
+                          </div>
+                        </div>
+                        <DialogFooter className="mt-4">
+                          <Button type="submit" disabled={createPromoCode.isPending}>
+                            {createPromoCode.isPending ? "Создание..." : "Создать"}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Код</TableHead>
+                      <TableHead>Скидка</TableHead>
+                      <TableHead>Истекает</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead>Дата создания</TableHead>
+                      <TableHead>Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {promoCodes.map((promo: any) => (
+                      <TableRow key={promo.id}>
+                        <TableCell className="font-mono font-semibold">{promo.code}</TableCell>
+                        <TableCell>{promo.discountPercent}%</TableCell>
+                        <TableCell>
+                          {promo.expiresAt ? format(new Date(promo.expiresAt), "dd.MM.yyyy", { locale: ru }) : "Без срока"}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant={promo.isActive ? "default" : "secondary"}
+                            onClick={() => {
+                              updatePromoCodeStatus.mutate({ id: promo.id, isActive: promo.isActive ? 0 : 1 });
+                            }}
+                          >
+                            {promo.isActive ? "Активен" : "Неактивен"}
+                          </Button>
+                        </TableCell>
+                        <TableCell>{format(new Date(promo.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              if (confirm("Удалить промокод?")) {
+                                deletePromoCode.mutate(promo.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Settings Tab */}
           <TabsContent value="settings" className="mt-6">
-            <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Управление контентом сайта</CardTitle>
-                  <CardDescription>Правки текста, баннеров, SEO и описаний</CardDescription>
+                  <CardTitle>SEO настройки</CardTitle>
+                  <CardDescription>Метаданные для поисковых систем</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="font-semibold mb-2">Главный баннер</h3>
-                      <p className="text-sm text-muted-foreground mb-2">Основное изображение на странице</p>
-                      <div className="bg-muted p-4 rounded-lg">
-                        <Button variant="outline" className="w-full" data-testid="button-edit-banner">
-                          Редактировать баннер
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="border-t pt-4">
-                      <h3 className="font-semibold mb-2">SEO метаданные</h3>
-                      <div className="space-y-3">
-                        <div>
-                          <Label className="text-sm">Заголовок страницы</Label>
-                          <Input placeholder="НУ-100 и НУ-30 - Профессиональное оборудование" disabled />
-                        </div>
-                        <div>
-                          <Label className="text-sm">Описание</Label>
-                          <Input placeholder="Высокопроизводительное оборудование для промышленного применения" disabled />
-                        </div>
-                        <div>
-                          <Label className="text-sm">Ключевые слова</Label>
-                          <Input placeholder="оборудование, нагрузка, промышленность" disabled />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-t pt-4">
-                      <h3 className="font-semibold mb-2">Описание товаров</h3>
-                      <div className="space-y-3">
-                        {products.map(product => (
-                          <div key={product.id} className="border rounded-lg p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-medium text-sm">{product.name}</span>
-                              <Button size="sm" variant="ghost" data-testid={`button-edit-product-desc-${product.id}`}>
-                                <Edit2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                            <p className="text-xs text-muted-foreground">{product.specifications}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="border-t pt-4">
-                      <h3 className="font-semibold mb-2">Контактные данные</h3>
-                      <div className="space-y-3">
-                        <div>
-                          <Label className="text-sm">Email</Label>
-                          <Input placeholder="support@example.com" disabled />
-                        </div>
-                        <div>
-                          <Label className="text-sm">Телефон</Label>
-                          <Input placeholder="+7 (999) 123-45-67" disabled />
-                        </div>
-                        <div>
-                          <Label className="text-sm">Адрес</Label>
-                          <Input placeholder="Москва, ул. Примерная, д. 1" disabled />
-                        </div>
-                      </div>
-                    </div>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label>Заголовок сайта</Label>
+                    <Input placeholder="Нагрузочные устройства" />
                   </div>
+                  <div>
+                    <Label>Описание</Label>
+                    <Textarea placeholder="Производство и продажа нагрузочных устройств" />
+                  </div>
+                  <div>
+                    <Label>Ключевые слова</Label>
+                    <Input placeholder="нагрузочные устройства, ну-100, ну-30" />
+                  </div>
+                  <Button>Сохранить SEO</Button>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Системные настройки</CardTitle>
-                  <CardDescription>Конфигурация платформы</CardDescription>
+                  <CardTitle>Контактные данные</CardTitle>
+                  <CardDescription>Информация для клиентов</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-muted p-3 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Версия API</p>
-                      <p className="font-semibold">v1.0.0</p>
-                    </div>
-                    <div className="bg-muted p-3 rounded-lg">
-                      <p className="text-xs text-muted-foreground">База данных</p>
-                      <p className="font-semibold">PostgreSQL</p>
-                    </div>
-                    <div className="bg-muted p-3 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Статус</p>
-                      <p className="font-semibold text-green-600">Активно</p>
-                    </div>
-                    <div className="bg-muted p-3 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Последнее обновление</p>
-                      <p className="font-semibold text-xs">Сегодня</p>
-                    </div>
+                  <div>
+                    <Label>Email</Label>
+                    <Input type="email" placeholder="info@example.com" />
                   </div>
+                  <div>
+                    <Label>Телефон</Label>
+                    <Input type="tel" placeholder="+7 (999) 123-45-67" />
+                  </div>
+                  <div>
+                    <Label>Адрес</Label>
+                    <Input placeholder="Москва, ул. Примерная, д. 1" />
+                  </div>
+                  <Button>Сохранить контакты</Button>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
         </Tabs>
       </div>
-
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent data-testid="dialog-delete-products">
-          <DialogHeader>
-            <DialogTitle>Подтверждение удаления</DialogTitle>
-            <DialogDescription>
-              Вы уверены, что хотите удалить {selectedProducts.size} товар(ов)? Это действие нельзя отменить.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
-              Отмена
-            </Button>
-            <Button variant="destructive" onClick={confirmBulkDelete} disabled={deleteProducts.isPending} data-testid="button-confirm-delete">
-              {deleteProducts.isPending ? "Удаление..." : "Удалить"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={orderStatusDialog} onOpenChange={setOrderStatusDialog}>
-        <DialogContent data-testid="dialog-order-status">
-          <DialogHeader>
-            <DialogTitle>Изменить статус заказа</DialogTitle>
-            <DialogDescription>
-              Заказ #{selectedOrderDetail?.id.slice(0, 8)}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedOrderDetail && (
-            <div className="space-y-4">
-              <div className="bg-muted p-3 rounded text-sm">
-                <p className="text-muted-foreground">Текущий статус: <span className="font-semibold">{selectedOrderDetail.paymentStatus}</span></p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="status">Новый статус</Label>
-                <Select value={newOrderStatus} onValueChange={setNewOrderStatus}>
-                  <SelectTrigger data-testid="select-order-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Ожидание оплаты</SelectItem>
-                    <SelectItem value="paid">Оплачен</SelectItem>
-                    <SelectItem value="processing">В обработке</SelectItem>
-                    <SelectItem value="shipped">Отправлен</SelectItem>
-                    <SelectItem value="delivered">Доставлен</SelectItem>
-                    <SelectItem value="cancelled">Отменен</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOrderStatusDialog(false)}>
-              Отмена
-            </Button>
-            <Button onClick={confirmOrderStatusChange} disabled={updateOrderStatus.isPending} data-testid="button-confirm-order-status">
-              {updateOrderStatus.isPending ? "Обновление..." : "Обновить"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showPriceDialog} onOpenChange={setShowPriceDialog}>
-        <DialogContent data-testid="dialog-edit-price">
-          <DialogHeader>
-            <DialogTitle>Редактировать цену товара</DialogTitle>
-            <DialogDescription>
-              {selectedEditProduct?.name}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedEditProduct && (
-            <div className="space-y-4">
-              <div className="bg-muted p-3 rounded text-sm">
-                <p className="text-muted-foreground">Текущая цена: <span className="font-semibold">{selectedEditProduct.price} ₽</span></p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="price">Новая цена (₽)</Label>
-                <Input
-                  type="number"
-                  value={newProductPrice}
-                  onChange={(e) => setNewProductPrice(e.target.value)}
-                  placeholder="Введите цену"
-                  min="0"
-                  data-testid="input-new-price"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPriceDialog(false)}>
-              Отмена
-            </Button>
-            <Button 
-              onClick={() => {
-                if (selectedEditProduct && newProductPrice) {
-                  updateProductPrice.mutate({ id: selectedEditProduct.id, price: newProductPrice });
-                }
-              }} 
-              disabled={updateProductPrice.isPending || !newProductPrice}
-              data-testid="button-confirm-price"
-            >
-              {updateProductPrice.isPending ? "Обновление..." : "Обновить"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
