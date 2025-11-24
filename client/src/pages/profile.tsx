@@ -57,6 +57,10 @@ export default function Profile() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [addToFav, setAddToFav] = useState(false);
+  const [orderFilter, setOrderFilter] = useState("all");
+  const [orderSort, setOrderSort] = useState("newest");
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: "", new: "", confirm: "" });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -196,6 +200,14 @@ export default function Profile() {
 
   const createOrder = useMutation({
     mutationFn: async (productId: string) => {
+      if (!userData || !selectedProduct) {
+        throw new Error("Данные пользователя или товара недоступны");
+      }
+
+      const productPrice = parseFloat(selectedProduct.price);
+      const totalAmount = productPrice * quantity;
+      const finalAmount = totalAmount;
+
       const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -206,8 +218,15 @@ export default function Profile() {
         credentials: "include",
         body: JSON.stringify({
           productId,
+          productPrice: selectedProduct.price,
           quantity,
+          totalAmount: totalAmount.toString(),
+          discountAmount: "0",
+          finalAmount: finalAmount.toString(),
           paymentMethod: "Банковская карта",
+          customerName: `${userData.firstName || ""} ${userData.lastName || ""}`.trim() || userData.email.split("@")[0],
+          customerEmail: userData.email,
+          customerPhone: userData.phone || "+7 (999) 000-00-00",
         }),
       });
 
@@ -328,6 +347,59 @@ export default function Profile() {
     },
   });
 
+  const markNotificationRead = useMutation({
+    mutationFn: async (id: string) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(`/api/notifications/${id}/read`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+
+      if (!res.ok) throw new Error("Ошибка при обновлении");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
+
+  const changePassword = useMutation({
+    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Ошибка при смене пароля");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setShowPasswordDialog(false);
+      setPasswordForm({ current: "", new: "", confirm: "" });
+      toast({
+        title: "Пароль изменен",
+        description: "Ваш пароль успешно обновлен",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const onSubmit = (data: ProfileForm) => {
     updateProfile.mutate(data);
   };
@@ -353,6 +425,44 @@ export default function Profile() {
       createOrder.mutate(selectedProduct.id);
     }
   };
+
+  const handlePasswordChange = () => {
+    if (!passwordForm.new || passwordForm.new.length < 8) {
+      toast({
+        title: "Ошибка",
+        description: "Новый пароль должен содержать минимум 8 символов",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (passwordForm.new !== passwordForm.confirm) {
+      toast({
+        title: "Ошибка",
+        description: "Пароли не совпадают",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    changePassword.mutate({
+      currentPassword: passwordForm.current,
+      newPassword: passwordForm.new,
+    });
+  };
+
+  const filteredOrders = orders.filter((order: any) => {
+    if (orderFilter === "all") return true;
+    return order.paymentStatus === orderFilter;
+  });
+
+  const sortedOrders = [...filteredOrders].sort((a: any, b: any) => {
+    if (orderSort === "newest") {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    } else {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    }
+  });
 
   if (isLoading) {
     return (
@@ -602,6 +712,20 @@ export default function Profile() {
                           </Button>
                         </div>
                       )}
+
+                      {!isEditing && (
+                        <div className="pt-4 border-t">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setShowPasswordDialog(true)}
+                            data-testid="button-change-password"
+                          >
+                            <Settings className="w-4 h-4 mr-2" />
+                            Изменить пароль
+                          </Button>
+                        </div>
+                      )}
                     </form>
                   </CardContent>
                 </Card>
@@ -610,8 +734,82 @@ export default function Profile() {
               <TabsContent value="orders" className="mt-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>История заказов</CardTitle>
-                    <CardDescription>Все ваши заказы в одном месте</CardDescription>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>История заказов</CardTitle>
+                        <CardDescription>Все ваши заказы в одном месте</CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setOrderSort(orderSort === "newest" ? "oldest" : "newest")}
+                          data-testid="button-sort-orders"
+                        >
+                          {orderSort === "newest" ? "Сначала новые" : "Сначала старые"}
+                        </Button>
+                      </div>
+                    </div>
+                    {orders.length > 0 && (
+                      <div className="flex gap-2 flex-wrap mt-4">
+                        <Button
+                          variant={orderFilter === "all" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOrderFilter("all")}
+                          data-testid="filter-all"
+                        >
+                          Все ({orders.length})
+                        </Button>
+                        <Button
+                          variant={orderFilter === "pending" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOrderFilter("pending")}
+                          data-testid="filter-pending"
+                        >
+                          Ожидают оплаты ({orders.filter((o: any) => o.paymentStatus === "pending").length})
+                        </Button>
+                        <Button
+                          variant={orderFilter === "paid" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOrderFilter("paid")}
+                          data-testid="filter-paid"
+                        >
+                          Оплачены ({orders.filter((o: any) => o.paymentStatus === "paid").length})
+                        </Button>
+                        <Button
+                          variant={orderFilter === "processing" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOrderFilter("processing")}
+                          data-testid="filter-processing"
+                        >
+                          В обработке ({orders.filter((o: any) => o.paymentStatus === "processing").length})
+                        </Button>
+                        <Button
+                          variant={orderFilter === "shipped" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOrderFilter("shipped")}
+                          data-testid="filter-shipped"
+                        >
+                          Отправлены ({orders.filter((o: any) => o.paymentStatus === "shipped").length})
+                        </Button>
+                        <Button
+                          variant={orderFilter === "delivered" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOrderFilter("delivered")}
+                          data-testid="filter-delivered"
+                        >
+                          Доставлены ({orders.filter((o: any) => o.paymentStatus === "delivered").length})
+                        </Button>
+                        <Button
+                          variant={orderFilter === "cancelled" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOrderFilter("cancelled")}
+                          data-testid="filter-cancelled"
+                        >
+                          Отменены ({orders.filter((o: any) => o.paymentStatus === "cancelled").length})
+                        </Button>
+                      </div>
+                    )}
                   </CardHeader>
                   <CardContent>
                     {orders.length === 0 ? (
@@ -622,9 +820,14 @@ export default function Profile() {
                           Просмотреть товары
                         </Button>
                       </div>
+                    ) : sortedOrders.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground">Нет заказов с выбранным фильтром</p>
+                      </div>
                     ) : (
                       <div className="space-y-4">
-                        {orders.map((order: any) => (
+                        {sortedOrders.map((order: any) => (
                           <Card key={order.id} data-testid={`card-order-${order.id}`}>
                             <CardContent className="pt-6">
                               <div className="flex items-center justify-between mb-4">
@@ -687,19 +890,34 @@ export default function Profile() {
                                   <p className="text-sm text-muted-foreground">
                                     {favorite.product?.price} ₽
                                   </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    На складе: {favorite.product?.stock || 0} шт.
+                                  </p>
                                   <p className="text-xs text-muted-foreground mt-2">
                                     Добавлено {format(new Date(favorite.createdAt), "d MMMM yyyy", { locale: ru })}
                                   </p>
                                 </div>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  onClick={() => removeFavorite.mutate(favorite.productId)}
-                                  disabled={removeFavorite.isPending}
-                                  data-testid={`button-delete-favorite-${favorite.productId}`}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                <div className="flex gap-2">
+                                  <Button 
+                                    variant="default" 
+                                    size="sm"
+                                    onClick={() => handleBuy(favorite.product)}
+                                    disabled={!favorite.product || favorite.product.stock === 0}
+                                    data-testid={`button-buy-favorite-${favorite.productId}`}
+                                  >
+                                    <ShoppingCart className="w-4 h-4 mr-2" />
+                                    Купить
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    onClick={() => removeFavorite.mutate(favorite.productId)}
+                                    disabled={removeFavorite.isPending}
+                                    data-testid={`button-delete-favorite-${favorite.productId}`}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
                               </div>
                             </CardContent>
                           </Card>
@@ -742,8 +960,13 @@ export default function Profile() {
                         {notifications.map((notification: any) => (
                           <Card
                             key={notification.id}
-                            className={!notification.isRead ? "border-primary" : ""}
+                            className={!notification.isRead ? "border-primary cursor-pointer" : "cursor-pointer"}
                             data-testid={`card-notification-${notification.id}`}
+                            onClick={() => {
+                              if (!notification.isRead) {
+                                markNotificationRead.mutate(notification.id);
+                              }
+                            }}
                           >
                             <CardContent className="pt-4">
                               <div className="flex items-start justify-between">
@@ -759,15 +982,34 @@ export default function Profile() {
                                     {format(new Date(notification.createdAt), "d MMMM yyyy, HH:mm", { locale: ru })}
                                   </p>
                                 </div>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => deleteNotification.mutate(notification.id)}
-                                  disabled={deleteNotification.isPending}
-                                  data-testid={`button-delete-notification-${notification.id}`}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
+                                <div className="flex gap-2">
+                                  {!notification.isRead && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        markNotificationRead.mutate(notification.id);
+                                      }}
+                                      disabled={markNotificationRead.isPending}
+                                      data-testid={`button-mark-read-${notification.id}`}
+                                    >
+                                      <CheckCircle2 className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteNotification.mutate(notification.id);
+                                    }}
+                                    disabled={deleteNotification.isPending}
+                                    data-testid={`button-delete-notification-${notification.id}`}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                </div>
                               </div>
                             </CardContent>
                           </Card>
@@ -913,6 +1155,78 @@ export default function Profile() {
             </Button>
             <Button onClick={handleBuyConfirm} disabled={createOrder.isPending} data-testid="button-dialog-buy">
               {createOrder.isPending ? "Оформление..." : "Оформить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent data-testid="dialog-change-password">
+          <DialogHeader>
+            <DialogTitle>Изменить пароль</DialogTitle>
+            <DialogDescription>
+              Введите текущий пароль и новый пароль
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="current-password">Текущий пароль</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={passwordForm.current}
+                onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
+                placeholder="Введите текущий пароль"
+                data-testid="input-current-password"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="new-password">Новый пароль</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={passwordForm.new}
+                onChange={(e) => setPasswordForm({ ...passwordForm, new: e.target.value })}
+                placeholder="Минимум 8 символов"
+                data-testid="input-new-password"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Пароль должен содержать минимум 8 символов
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="confirm-password">Подтвердите новый пароль</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={passwordForm.confirm}
+                onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+                placeholder="Повторите новый пароль"
+                data-testid="input-confirm-password"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPasswordDialog(false);
+                setPasswordForm({ current: "", new: "", confirm: "" });
+              }}
+              data-testid="button-cancel-password"
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={handlePasswordChange}
+              disabled={changePassword.isPending || !passwordForm.current || !passwordForm.new || !passwordForm.confirm}
+              data-testid="button-confirm-password"
+            >
+              {changePassword.isPending ? "Изменение..." : "Изменить пароль"}
             </Button>
           </DialogFooter>
         </DialogContent>

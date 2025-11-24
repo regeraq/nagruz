@@ -904,10 +904,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const orders = await storage.getUserOrders(payload.userId);
-      const ordersWithProducts = orders.map((o: any) => ({
-        ...o,
-        product: storage.getProduct(o.productId),
-      }));
+      const ordersWithProducts = await Promise.all(
+        orders.map(async (o: any) => ({
+          ...o,
+          product: await storage.getProduct(o.productId),
+        }))
+      );
 
       res.json(ordersWithProducts);
     } catch (error) {
