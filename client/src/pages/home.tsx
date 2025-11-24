@@ -69,8 +69,8 @@ export default function Home() {
   }, [products, selectedDeviceId]);
 
   const device = (products?.find(p => p.id === selectedDeviceId) || products?.[0]) || {
-    name: "Loading...",
-    description: "Loading...",
+    name: "Устройство нагрузки",
+    description: "Профессиональное устройство для тестирования электрооборудования",
     power: "0 кВт",
     steps: "0",
     voltage: "AC/DC",
@@ -79,7 +79,7 @@ export default function Home() {
     frequency: "50 Гц",
     phases: "3",
     cosφ: "0.99",
-    cooling: "Air",
+    cooling: "Воздушное",
     powerRange: "0 кВт",
     acVoltage: "0 В",
     dcVoltage: "0 В",
