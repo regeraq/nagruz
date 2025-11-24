@@ -93,6 +93,15 @@ export default function Home() {
     queryKey: ['/api/products'],
   });
 
+  const { data: settingsData = {} as any } = useQuery({
+    queryKey: ['/api/admin/settings'],
+  });
+
+  // Extract contact settings
+  const contactEmail = settingsData?.settings?.find((s: any) => s.key === 'contact_email')?.value || 'info@example.com';
+  const contactPhone = settingsData?.settings?.find((s: any) => s.key === 'contact_phone')?.value || '+7 (999) 123-45-67';
+  const contactAddress = settingsData?.settings?.find((s: any) => s.key === 'contact_address')?.value || 'Москва, Россия';
+
   useEffect(() => {
     const handleScroll = () => {
       setShowScrollTop(window.scrollY > 500);
@@ -1012,7 +1021,7 @@ export default function Home() {
                     <Phone className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
                       <div className="text-sm font-medium">Телефон</div>
-                      <div className="text-sm text-muted-foreground" data-testid="text-phone">+7 (495) 123-45-67</div>
+                      <div className="text-sm text-muted-foreground" data-testid="text-phone">{contactPhone}</div>
                     </div>
                   </div>
                   <Separator />
@@ -1020,7 +1029,7 @@ export default function Home() {
                     <Mail className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
                       <div className="text-sm font-medium">Email</div>
-                      <div className="text-sm text-muted-foreground" data-testid="text-email">info@nm-100.ru</div>
+                      <div className="text-sm text-muted-foreground" data-testid="text-email">{contactEmail}</div>
                     </div>
                   </div>
                   <Separator />
@@ -1045,7 +1054,7 @@ export default function Home() {
                     <div>
                       <div className="text-sm font-medium">Адрес</div>
                       <div className="text-sm text-muted-foreground" data-testid="text-address">
-                        Москва, ул. Промышленная, д. 1
+                        {contactAddress}
                       </div>
                     </div>
                   </div>

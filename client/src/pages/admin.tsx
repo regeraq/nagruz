@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,33 +48,59 @@ export default function AdminFull() {
   });
 
   // Fetch users
-  const { data: usersData } = useQuery({
+  const { data: usersData = {} as any } = useQuery({
     queryKey: ["/api/admin/users"],
-    enabled: !!userData && ["admin", "superadmin"].includes(userData?.role),
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
   // Fetch orders
-  const { data: ordersData } = useQuery({
+  const { data: ordersData = {} as any } = useQuery({
     queryKey: ["/api/admin/orders"],
-    enabled: !!userData && ["admin", "superadmin"].includes(userData?.role),
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
   // Fetch contacts
-  const { data: contactsData } = useQuery({
+  const { data: contactsData = {} as any } = useQuery({
     queryKey: ["/api/admin/contacts"],
-    enabled: !!userData && ["admin", "superadmin"].includes(userData?.role),
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
   // Fetch promocodes
-  const { data: promoCodesData } = useQuery({
+  const { data: promoCodesData = {} as any } = useQuery({
     queryKey: ["/api/admin/promocodes"],
-    enabled: !!userData && ["admin", "superadmin"].includes(userData?.role),
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
+  });
+
+  // Fetch settings
+  const { data: settingsData = {} as any } = useQuery({
+    queryKey: ["/api/admin/settings"],
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
   const users = usersData?.users || [];
   const orders = ordersData?.orders || [];
   const contacts = contactsData?.contacts || [];
   const promoCodes = promoCodesData?.promoCodes || [];
+
+  // Load settings into form when they arrive
+  useEffect(() => {
+    if (settingsData?.settings) {
+      const settings = settingsData.settings as any[];
+      const seoTitle = settings.find((s: any) => s.key === "seo_title");
+      const seoDesc = settings.find((s: any) => s.key === "seo_description");
+      const seoKeywords = settings.find((s: any) => s.key === "seo_keywords");
+      const contactEmailSetting = settings.find((s: any) => s.key === "contact_email");
+      const contactPhoneSetting = settings.find((s: any) => s.key === "contact_phone");
+      const contactAddressSetting = settings.find((s: any) => s.key === "contact_address");
+
+      if (seoTitle) setSeoTitle(seoTitle.value || "");
+      if (seoDesc) setSeoDescription(seoDesc.value || "");
+      if (seoKeywords) setSeoKeywords(seoKeywords.value || "");
+      if (contactEmailSetting) setContactEmail(contactEmailSetting.value || "");
+      if (contactPhoneSetting) setContactPhone(contactPhoneSetting.value || "");
+      if (contactAddressSetting) setContactAddress(contactAddressSetting.value || "");
+    }
+  }, [settingsData]);
 
   // Create product mutation
   const createProduct = useMutation({
@@ -224,6 +250,7 @@ export default function AdminFull() {
       return true;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
       toast({ title: "SEO настройки сохранены" });
     },
     onError: (error: any) => {
@@ -240,6 +267,7 @@ export default function AdminFull() {
       return true;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
       toast({ title: "Контактные данные сохранены" });
     },
     onError: (error: any) => {
@@ -247,8 +275,8 @@ export default function AdminFull() {
     },
   });
 
-  const isAdmin = userData?.role === "admin" || userData?.role === "superadmin";
-  const isSuperAdmin = userData?.role === "superadmin";
+  const isAdmin = (userData as any)?.role === "admin" || (userData as any)?.role === "superadmin";
+  const isSuperAdmin = (userData as any)?.role === "superadmin";
 
   if (!isAdmin) {
     return (
