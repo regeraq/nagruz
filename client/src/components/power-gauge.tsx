@@ -66,30 +66,57 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       const minAngle = (-135 * Math.PI) / 180;
       const maxAngle = (135 * Math.PI) / 180;
 
+      // Draw scale marks and numbers
       for (let i = 0; i <= scaleMax; i += 10) {
         const scaleAngle = minAngle + ((i / scaleMax) * (maxAngle - minAngle));
         const isMainTick = i % 50 === 0;
-        const tickLength = isMainTick ? 20 : 10;
-        const tickWidth = isMainTick ? 2 : 1;
+        const isMediumTick = i % 50 !== 0 && i % 10 === 0;
+        
+        let tickLength: number;
+        let tickWidth: number;
+        let tickColor: string;
 
-        const x1 = centerX + Math.cos(scaleAngle) * (radius - 5);
-        const y1 = centerY + Math.sin(scaleAngle) * (radius - 5);
-        const x2 = centerX + Math.cos(scaleAngle) * (radius - 5 - tickLength);
-        const y2 = centerY + Math.sin(scaleAngle) * (radius - 5 - tickLength);
+        if (isMainTick) {
+          tickLength = 24;
+          tickWidth = 3;
+          tickColor = 'rgba(26, 148, 255, 1)';
+        } else if (isMediumTick) {
+          tickLength = 14;
+          tickWidth = 1.5;
+          tickColor = 'rgba(26, 148, 255, 0.7)';
+        } else {
+          continue;
+        }
 
-        ctx.strokeStyle = isMainTick ? 'rgba(26, 148, 255, 0.8)' : 'rgba(26, 148, 255, 0.5)';
+        const x1 = centerX + Math.cos(scaleAngle) * (radius - 2);
+        const y1 = centerY + Math.sin(scaleAngle) * (radius - 2);
+        const x2 = centerX + Math.cos(scaleAngle) * (radius - 2 - tickLength);
+        const y2 = centerY + Math.sin(scaleAngle) * (radius - 2 - tickLength);
+
+        ctx.strokeStyle = tickColor;
         ctx.lineWidth = tickWidth;
         ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
 
         if (isMainTick) {
-          const numX = centerX + Math.cos(scaleAngle) * (radius - 50);
-          const numY = centerY + Math.sin(scaleAngle) * (radius - 50);
-          ctx.fillStyle = 'rgba(26, 148, 255, 0.9)';
-          ctx.font = 'bold 16px IBM Plex Mono';
+          const numX = centerX + Math.cos(scaleAngle) * (radius - 55);
+          const numY = centerY + Math.sin(scaleAngle) * (radius - 55);
+          
+          // Add subtle background for text
+          ctx.fillStyle = 'rgba(10, 14, 39, 0.3)';
+          ctx.font = 'bold 18px IBM Plex Mono';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const textMetrics = ctx.measureText(i.toString());
+          ctx.fillRect(numX - textMetrics.width / 2 - 4, numY - 8, textMetrics.width + 8, 16);
+          
+          // Draw text with gradient effect
+          ctx.fillStyle = 'rgba(26, 148, 255, 1)';
+          ctx.font = 'bold 18px IBM Plex Mono';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(i.toString(), numX, numY);
