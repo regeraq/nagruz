@@ -26,8 +26,6 @@ export default function AdminFull() {
   const [, setLocation] = useLocation();
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [showCreateProduct, setShowCreateProduct] = useState(false);
-  const [showEditProduct, setShowEditProduct] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<any>(null);
   const [showCreatePromo, setShowCreatePromo] = useState(false);
   const [showCreateAdmin, setShowCreateAdmin] = useState(false);
   const [seoTitle, setSeoTitle] = useState("");
@@ -114,23 +112,6 @@ export default function AdminFull() {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setShowCreateProduct(false);
       toast({ title: "Товар создан" });
-    },
-    onError: (error: any) => {
-      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
-    },
-  });
-
-  // Update product mutation
-  const updateProduct = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("PATCH", `/api/admin/products/${data.id}`, data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      setShowEditProduct(false);
-      setEditingProduct(null);
-      toast({ title: "Товар обновлен" });
     },
     onError: (error: any) => {
       toast({ title: "Ошибка", description: error.message, variant: "destructive" });
@@ -505,7 +486,6 @@ export default function AdminFull() {
                       <TableHead>Цена</TableHead>
                       <TableHead>Количество</TableHead>
                       <TableHead>Статус</TableHead>
-                      <TableHead>Действия</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -534,87 +514,10 @@ export default function AdminFull() {
                             {product.isActive ? "Активен" : "Неактивен"}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingProduct(product);
-                              setShowEditProduct(true);
-                            }}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-
-                {/* Edit Product Dialog */}
-                <Dialog open={showEditProduct} onOpenChange={setShowEditProduct}>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Редактировать товар</DialogTitle>
-                    </DialogHeader>
-                    {editingProduct && (
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          const formData = new FormData(e.currentTarget);
-                          updateProduct.mutate({
-                            id: editingProduct.id,
-                            name: formData.get("name"),
-                            description: formData.get("description"),
-                            price: parseFloat(formData.get("price") as string),
-                            sku: formData.get("sku"),
-                            specifications: formData.get("specifications"),
-                            stock: parseInt(formData.get("stock") as string),
-                            isActive: formData.get("isActive") === "on",
-                          });
-                        }}
-                      >
-                        <div className="space-y-4">
-                          <div>
-                            <Label>Название</Label>
-                            <Input name="name" defaultValue={editingProduct.name} required />
-                          </div>
-                          <div>
-                            <Label>Описание</Label>
-                            <Textarea name="description" defaultValue={editingProduct.description} required />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label>Цена (₽)</Label>
-                              <Input name="price" type="number" defaultValue={editingProduct.price} required />
-                            </div>
-                            <div>
-                              <Label>Количество</Label>
-                              <Input name="stock" type="number" defaultValue={editingProduct.stock} required />
-                            </div>
-                          </div>
-                          <div>
-                            <Label>Артикул</Label>
-                            <Input name="sku" defaultValue={editingProduct.sku} required />
-                          </div>
-                          <div>
-                            <Label>Характеристики</Label>
-                            <Textarea name="specifications" defaultValue={editingProduct.specifications} required />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Checkbox name="isActive" defaultChecked={editingProduct.isActive} />
-                            <Label>Активен</Label>
-                          </div>
-                        </div>
-                        <DialogFooter className="mt-4">
-                          <Button type="submit" disabled={updateProduct.isPending}>
-                            {updateProduct.isPending ? "Сохранение..." : "Сохранить"}
-                          </Button>
-                        </DialogFooter>
-                      </form>
-                    )}
-                  </DialogContent>
-                </Dialog>
               </CardContent>
             </Card>
           </TabsContent>
