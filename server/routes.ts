@@ -308,14 +308,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // FIXED: Added caching for products
+  // FIXED: Added caching for products - only returns active products for customers
   app.get("/api/products", rateLimiters.general, async (req, res) => {
     try {
-      const cacheKey = 'products';
+      const cacheKey = 'products-active';
       let products = cache.get(cacheKey);
       
       if (!products) {
-        products = await storage.getProducts();
+        const allProducts = await storage.getProducts();
+        products = allProducts.filter((p: any) => p.isActive !== false);
         cache.set(cacheKey, products, CACHE_TTL.PRODUCTS);
       }
       
@@ -326,6 +327,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         message: "Ошибка при получении товаров",
       });
+    }
+  });
+
+  // Admin: Get all products (including inactive)
+  app.get("/api/admin/products", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const products = await storage.getProducts();
+      res.json({ success: true, products });
+    } catch (error) {
+      console.error("Error fetching all products:", error);
+      res.status(500).json({ success: false, message: "Failed to fetch products" });
     }
   });
 
@@ -1224,6 +1254,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(404).json({ success: false, message: "Product not found" });
         return;
       }
+
+      // Clear product caches
+      cache.delete('products');
+      cache.delete('products-active');
 
       res.json({ success: true, product });
     } catch (error) {

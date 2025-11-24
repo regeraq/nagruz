@@ -62,6 +62,22 @@ const devices = {
     acVoltage: "230–400 В",
     dcVoltage: "110–220 В"
   },
+  "nu-200": {
+    name: "НУ-200",
+    power: "200 кВт",
+    steps: "40 ступеней",
+    voltage: "AC/DC",
+    minVoltage: "230-400 В / 110-220 В",
+    maxPower: "200 кВт",
+    frequency: "50 Гц",
+    phases: "3",
+    cosφ: "0.99",
+    cooling: "Воздушное принудительное",
+    description: "Мощное нагрузочное устройство для тестирования дизель-генераторов, газопоршневых и газотурбинных установок, ИБП и аккумуляторных батарей повышенной мощности",
+    powerRange: "100–200 кВт",
+    acVoltage: "230–400 В",
+    dcVoltage: "110–220 В"
+  },
   "nu-30": {
     name: "НУ-30",
     power: "30 кВт",
@@ -81,7 +97,7 @@ const devices = {
 };
 
 export default function Home() {
-  const [selectedDevice, setSelectedDevice] = useState<"nu-100" | "nu-30">("nu-100");
+  const [selectedDevice, setSelectedDevice] = useState<"nu-100" | "nu-200" | "nu-30">("nu-100");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);

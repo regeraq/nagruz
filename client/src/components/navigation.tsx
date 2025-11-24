@@ -25,8 +25,8 @@ interface User {
 }
 
 interface NavigationProps {
-  selectedDevice?: "nu-100" | "nu-30";
-  onDeviceChange?: (device: "nu-100" | "nu-30") => void;
+  selectedDevice?: "nu-100" | "nu-200" | "nu-30";
+  onDeviceChange?: (device: "nu-100" | "nu-200" | "nu-30") => void;
 }
 
 const navLinks = [
@@ -44,6 +44,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange }: Naviga
   const queryClient = useQueryClient();
   const devices = [
     { id: "nu-100", name: "НУ-100" },
+    { id: "nu-200", name: "НУ-200" },
     { id: "nu-30", name: "НУ-30" },
   ];
 

@@ -42,10 +42,13 @@ export default function AdminFull() {
     queryKey: ["/api/auth/me"],
   });
 
-  // Fetch products
-  const { data: products = [] } = useQuery({
-    queryKey: ["/api/products"],
+  // Fetch products (all products for admin including inactive)
+  const { data: productsData = { products: [] } as any } = useQuery({
+    queryKey: ["/api/admin/products"],
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
+
+  const products = productsData?.products || productsData || [];
 
   // Fetch users
   const { data: usersData = {} as any } = useQuery({
@@ -226,6 +229,19 @@ export default function AdminFull() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/promocodes"] });
       toast({ title: "Промокод удален" });
+    },
+  });
+
+  // Toggle product active status
+  const updateProductStatus = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/admin/products/${id}`, { isActive });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ title: "Статус товара обновлен" });
     },
   });
 
@@ -486,6 +502,7 @@ export default function AdminFull() {
                       <TableHead>Цена</TableHead>
                       <TableHead>Количество</TableHead>
                       <TableHead>Статус</TableHead>
+                      <TableHead>Видимость</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -513,6 +530,17 @@ export default function AdminFull() {
                           <Badge variant={product.isActive ? "default" : "secondary"}>
                             {product.isActive ? "Активен" : "Неактивен"}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant={product.isActive ? "default" : "outline"}
+                            onClick={() => updateProductStatus.mutate({ id: product.id, isActive: !product.isActive })}
+                            disabled={updateProductStatus.isPending}
+                            data-testid={`button-toggle-product-${product.id}`}
+                          >
+                            {product.isActive ? "Скрыть" : "Показать"}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
