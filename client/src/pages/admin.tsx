@@ -28,6 +28,12 @@ export default function AdminFull() {
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [showCreatePromo, setShowCreatePromo] = useState(false);
   const [showCreateAdmin, setShowCreateAdmin] = useState(false);
+  const [seoTitle, setSeoTitle] = useState("");
+  const [seoDescription, setSeoDescription] = useState("");
+  const [seoKeywords, setSeoKeywords] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactAddress, setContactAddress] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -73,10 +79,8 @@ export default function AdminFull() {
   // Create product mutation
   const createProduct = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("/api/admin/products", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      const res = await apiRequest("POST", "/api/admin/products", data);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
@@ -91,10 +95,8 @@ export default function AdminFull() {
   // Delete products mutation
   const deleteProducts = useMutation({
     mutationFn: async (ids: string[]) => {
-      return apiRequest("/api/admin/products", {
-        method: "DELETE",
-        body: JSON.stringify({ ids }),
-      });
+      const res = await apiRequest("DELETE", "/api/admin/products", { ids });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
@@ -106,10 +108,8 @@ export default function AdminFull() {
   // Update user role
   const updateUserRole = useMutation({
     mutationFn: async ({ id, role }: { id: string; role: string }) => {
-      return apiRequest(`/api/admin/users/${id}/role`, {
-        method: "PATCH",
-        body: JSON.stringify({ role }),
-      });
+      const res = await apiRequest("PATCH", `/api/admin/users/${id}/role`, { role });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
@@ -120,10 +120,8 @@ export default function AdminFull() {
   // Block user
   const blockUser = useMutation({
     mutationFn: async ({ id, blocked }: { id: string; blocked: boolean }) => {
-      return apiRequest(`/api/admin/users/${id}/block`, {
-        method: "PATCH",
-        body: JSON.stringify({ blocked }),
-      });
+      const res = await apiRequest("PATCH", `/api/admin/users/${id}/block`, { blocked });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
@@ -134,9 +132,8 @@ export default function AdminFull() {
   // Delete user
   const deleteUser = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/admin/users/${id}`, {
-        method: "DELETE",
-      });
+      const res = await apiRequest("DELETE", `/api/admin/users/${id}`);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
@@ -147,10 +144,8 @@ export default function AdminFull() {
   // Create admin
   const createAdmin = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("/api/admin/admins", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      const res = await apiRequest("POST", "/api/admin/admins", data);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
@@ -162,10 +157,8 @@ export default function AdminFull() {
   // Update order status
   const updateOrderStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      return apiRequest(`/api/orders/${id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status }),
-      });
+      const res = await apiRequest("PATCH", `/api/admin/orders/${id}`, { paymentStatus: status });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
@@ -176,9 +169,8 @@ export default function AdminFull() {
   // Delete contact
   const deleteContact = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/admin/contacts/${id}`, {
-        method: "DELETE",
-      });
+      const res = await apiRequest("DELETE", `/api/admin/contacts/${id}`);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
@@ -189,10 +181,8 @@ export default function AdminFull() {
   // Create promo code
   const createPromoCode = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("/api/admin/promocodes", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      const res = await apiRequest("POST", "/api/admin/promocodes", data);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/promocodes"] });
@@ -204,9 +194,8 @@ export default function AdminFull() {
   // Delete promo code
   const deletePromoCode = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/admin/promocodes/${id}`, {
-        method: "DELETE",
-      });
+      const res = await apiRequest("DELETE", `/api/admin/promocodes/${id}`);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/promocodes"] });
@@ -217,14 +206,44 @@ export default function AdminFull() {
   // Toggle product active status
   const updatePromoCodeStatus = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: number }) => {
-      return apiRequest(`/api/admin/promocodes/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isActive }),
-      });
+      const res = await apiRequest("PATCH", `/api/admin/promocodes/${id}`, { isActive });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/promocodes"] });
       toast({ title: "Статус промокода обновлен" });
+    },
+  });
+
+  // Save SEO settings
+  const saveSeoSettings = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("PUT", "/api/admin/settings/seo_title", { value: data.title, type: "string" });
+      await apiRequest("PUT", "/api/admin/settings/seo_description", { value: data.description, type: "string" });
+      await apiRequest("PUT", "/api/admin/settings/seo_keywords", { value: data.keywords, type: "string" });
+      return true;
+    },
+    onSuccess: () => {
+      toast({ title: "SEO настройки сохранены" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Save contact settings
+  const saveContactSettings = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("PUT", "/api/admin/settings/contact_email", { value: data.email, type: "string" });
+      await apiRequest("PUT", "/api/admin/settings/contact_phone", { value: data.phone, type: "string" });
+      await apiRequest("PUT", "/api/admin/settings/contact_address", { value: data.address, type: "string" });
+      return true;
+    },
+    onSuccess: () => {
+      toast({ title: "Контактные данные сохранены" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
     },
   });
 
@@ -895,17 +914,34 @@ export default function AdminFull() {
                 <CardContent className="space-y-4">
                   <div>
                     <Label>Заголовок сайта</Label>
-                    <Input placeholder="Нагрузочные устройства" />
+                    <Input 
+                      placeholder="Нагрузочные устройства" 
+                      value={seoTitle}
+                      onChange={(e) => setSeoTitle(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label>Описание</Label>
-                    <Textarea placeholder="Производство и продажа нагрузочных устройств" />
+                    <Textarea 
+                      placeholder="Производство и продажа нагрузочных устройств"
+                      value={seoDescription}
+                      onChange={(e) => setSeoDescription(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label>Ключевые слова</Label>
-                    <Input placeholder="нагрузочные устройства, ну-100, ну-30" />
+                    <Input 
+                      placeholder="нагрузочные устройства, ну-100, ну-30"
+                      value={seoKeywords}
+                      onChange={(e) => setSeoKeywords(e.target.value)}
+                    />
                   </div>
-                  <Button>Сохранить SEO</Button>
+                  <Button 
+                    onClick={() => saveSeoSettings.mutate({ title: seoTitle, description: seoDescription, keywords: seoKeywords })}
+                    disabled={saveSeoSettings.isPending}
+                  >
+                    {saveSeoSettings.isPending ? "Сохранение..." : "Сохранить SEO"}
+                  </Button>
                 </CardContent>
               </Card>
 
@@ -917,17 +953,36 @@ export default function AdminFull() {
                 <CardContent className="space-y-4">
                   <div>
                     <Label>Email</Label>
-                    <Input type="email" placeholder="info@example.com" />
+                    <Input 
+                      type="email" 
+                      placeholder="info@example.com"
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label>Телефон</Label>
-                    <Input type="tel" placeholder="+7 (999) 123-45-67" />
+                    <Input 
+                      type="tel" 
+                      placeholder="+7 (999) 123-45-67"
+                      value={contactPhone}
+                      onChange={(e) => setContactPhone(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label>Адрес</Label>
-                    <Input placeholder="Москва, ул. Примерная, д. 1" />
+                    <Input 
+                      placeholder="Москва, ул. Примерная, д. 1"
+                      value={contactAddress}
+                      onChange={(e) => setContactAddress(e.target.value)}
+                    />
                   </div>
-                  <Button>Сохранить контакты</Button>
+                  <Button 
+                    onClick={() => saveContactSettings.mutate({ email: contactEmail, phone: contactPhone, address: contactAddress })}
+                    disabled={saveContactSettings.isPending}
+                  >
+                    {saveContactSettings.isPending ? "Сохранение..." : "Сохранить контакты"}
+                  </Button>
                 </CardContent>
               </Card>
             </div>

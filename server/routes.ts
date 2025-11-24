@@ -769,42 +769,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: Get all users
-  app.get("/api/admin/users", async (req, res) => {
-    try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      const allUsers = Array.from((storage as any).users.values()).map((u: any) => ({
-        id: u.id,
-        email: u.email,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        role: u.role,
-        createdAt: u.createdAt,
-      }));
-
-      res.json(allUsers);
-    } catch (error) {
-      console.error("Get users error:", error);
-      res.status(500).json({ success: false, message: "Failed to get users" });
-    }
-  });
 
   // Admin: Update product stock
   app.patch("/api/admin/products/:id/stock", async (req, res) => {
@@ -940,7 +904,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const orders = await storage.getAllOrders();
-      res.json(orders);
+      res.json({ success: true, orders });
     } catch (error) {
       console.error("Get admin orders error:", error);
       res.status(500).json({ success: false, message: "Failed to get orders" });
