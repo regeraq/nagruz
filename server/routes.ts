@@ -1282,6 +1282,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
       const user = await storage.getUserById(payload.userId);
       if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
         res.status(403).json({ success: false, message: "Not authorized" });

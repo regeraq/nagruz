@@ -413,7 +413,7 @@ export default function AdminFull() {
                               id: formData.get("id"),
                               name: formData.get("name"),
                               description: formData.get("description"),
-                              price: formData.get("price"),
+                              price: parseFloat(formData.get("price") as string),
                               sku: formData.get("sku"),
                               specifications: formData.get("specifications"),
                               stock: parseInt(formData.get("stock") as string),
