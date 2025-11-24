@@ -33,8 +33,11 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
     const centerY = size / 2;
     const radius = 120;
 
-    // Calculate target angle for current power level (0-150 scale)
-    const targetAngle = -135 + (maxPower / 150) * 270;
+    // Dynamically determine max scale based on input maxPower
+    const scaleMax = Math.ceil(maxPower / 50) * 50; // Round up to nearest 50
+    
+    // Calculate target angle for current power level
+    const targetAngle = -135 + (maxPower / scaleMax) * 270;
     const totalSteps = 50;
 
     const drawGauge = (angle: number) => {
@@ -63,8 +66,8 @@ export function PowerGauge({ maxPower }: PowerGaugeProps) {
       const minAngle = (-135 * Math.PI) / 180;
       const maxAngle = (135 * Math.PI) / 180;
 
-      for (let i = 0; i <= 150; i += 10) {
-        const scaleAngle = minAngle + ((i / 150) * (maxAngle - minAngle));
+      for (let i = 0; i <= scaleMax; i += 10) {
+        const scaleAngle = minAngle + ((i / scaleMax) * (maxAngle - minAngle));
         const isMainTick = i % 50 === 0;
         const tickLength = isMainTick ? 20 : 10;
         const tickWidth = isMainTick ? 2 : 1;
