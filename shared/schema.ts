@@ -43,6 +43,7 @@ export const products = pgTable("products", {
   stock: integer("stock").notNull().default(0),
   category: text("category"),
   imageUrl: text("image_url"),
+  images: text("images"), // Store as JSON string
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
