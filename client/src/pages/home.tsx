@@ -870,7 +870,7 @@ export default function Home() {
 
             <div className={`grid gap-6 scroll-animate ${
               productImages.length === 1 
-                ? "grid-cols-1 md:grid-cols-1 lg:grid-cols-1 max-w-2xl mx-auto" 
+                ? "grid-cols-1 md:grid-cols-1 lg:grid-cols-1 max-w-3xl mx-auto" 
                 : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
             }`}>
               {productImages.map((imageData: string, idx: number) => (
@@ -879,11 +879,11 @@ export default function Home() {
                   className="group relative overflow-hidden rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
                   data-testid={`gallery-image-${idx}`}
                 >
-                  <div className="aspect-video bg-muted relative">
+                  <div className="bg-muted relative" style={{ minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img
                       src={imageData}
                       alt={`${device.name} - Фото ${idx + 1}`}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105 p-4"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
                       }}
