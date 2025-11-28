@@ -474,6 +474,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      // FIXED: Check if enough stock available
+      if (product.stock < orderDataWithUserId.quantity) {
+        res.status(400).json({
+          success: false,
+          message: `Недостаточно товара на складе. Доступно: ${product.stock} шт.`,
+        });
+        return;
+      }
+
       // FIXED: Use UTC for consistent timezone handling
       const reservedUntil = new Date();
       reservedUntil.setUTCMinutes(reservedUntil.getUTCMinutes() + 15);
@@ -484,6 +493,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const order = await storage.createOrder(orderData);
+      
+      // FIXED: Refresh product data after order creation to get updated stock
+      const updatedProduct = await storage.getProduct(orderDataWithUserId.productId);
+      
+      // FIXED: Send notification to admins if product is out of stock
+      if (updatedProduct && updatedProduct.stock === 0) {
+        const outOfStockHtml = `
+          <div style="font-family: Arial, sans-serif; color: #333; background: #fff3cd; padding: 20px; border-radius: 5px;">
+            <h2 style="color: #d0461e; border-bottom: 2px solid #d0461e; padding-bottom: 10px;">⚠️ ТОВАР ПОЛНОСТЬЮ РАСПРОДАН</h2>
+            
+            <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #d0461e;">
+              <p style="margin: 5px 0;"><strong>Наименование товара:</strong> ${escapeHtml(updatedProduct.name)}</p>
+              <p style="margin: 5px 0;"><strong>Артикул:</strong> ${escapeHtml(updatedProduct.sku)}</p>
+              <p style="margin: 5px 0;"><strong>Модель:</strong> ${escapeHtml(updatedProduct.id)}</p>
+            </div>
+            
+            <p style="margin: 15px 0; color: #666;">Товар был полностью распродан в результате заказа <strong>#${escapeHtml(order.id)}</strong></p>
+            
+            <p style="margin-top: 20px; color: #666; font-size: 12px;">
+              Рекомендуется пополнить запасы или отметить товар как неактивный в админ-панели.
+            </p>
+          </div>
+        `;
+        
+        sendEmail(OWNER_EMAIL, `⚠️ ТОВАР ЗАКОНЧИЛСЯ: ${escapeHtml(updatedProduct.name)} (${escapeHtml(updatedProduct.sku)})`, outOfStockHtml).catch(err => {
+          console.error("Failed to send out of stock email:", err);
+        });
+      }
 
       // FIXED: XSS protection - escape all user input in email
       const ownerEmailHtml = `

@@ -313,17 +313,20 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                   <Input
                     type="number"
                     value={quantity}
-                    onChange={(e) => setQuantity(Math.min(99, Math.max(1, parseInt(e.target.value) || 1)))}
+                    onChange={(e) => {
+                      const maxStock = product?.stock || 99;
+                      setQuantity(Math.min(maxStock, Math.max(1, parseInt(e.target.value) || 1)));
+                    }}
                     className="text-center w-20"
                     min={1}
-                    max={99}
+                    max={product?.stock || 99}
                     data-testid="input-quantity"
                   />
                   <Button
                     variant="outline"
                     size="icon"
                     onClick={() => handleQuantityChange(1)}
-                    disabled={quantity >= 99}
+                    disabled={quantity >= (product?.stock || 99)}
                     data-testid="button-increase-quantity"
                   >
                     <Plus className="w-4 h-4" />
