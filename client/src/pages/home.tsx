@@ -105,6 +105,24 @@ export default function Home() {
   const device = devices[selectedDevice] || devices["nu-100"];
   const { toast } = useToast();
 
+  // Update page title and Open Graph meta tags when device changes
+  useEffect(() => {
+    const deviceMap = {
+      "nu-100": { name: "НУ-100", power: "100 кВт" },
+      "nu-200": { name: "НУ-200", power: "200 кВт" },
+      "nu-30": { name: "НУ-30", power: "30 кВт" },
+    };
+    const deviceInfo = deviceMap[selectedDevice];
+    const pageTitle = `(Нагрузочное устройство/${deviceInfo.name}) — ${deviceInfo.power}`;
+    document.title = pageTitle;
+    
+    // Update Open Graph meta tags
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) {
+      ogTitle.setAttribute("content", pageTitle);
+    }
+  }, [selectedDevice]);
+
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ['/api/products'],
   });
