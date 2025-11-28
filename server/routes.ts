@@ -316,7 +316,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!products) {
         const allProducts = await storage.getProducts();
-        products = allProducts.filter((p: any) => p.isActive !== false);
+        products = allProducts.filter((p: any) => p.isActive !== false).map((p: any) => ({
+          ...p,
+          images: p.images ? (typeof p.images === 'string' ? JSON.parse(p.images) : p.images) : []
+        }));
         cache.set(cacheKey, products, CACHE_TTL.PRODUCTS);
       }
       
@@ -352,7 +355,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const products = await storage.getProducts();
-      res.json({ success: true, products });
+      const parsedProducts = products.map((p: any) => ({
+        ...p,
+        images: p.images ? (typeof p.images === 'string' ? JSON.parse(p.images) : p.images) : []
+      }));
+      res.json({ success: true, products: parsedProducts });
     } catch (error) {
       console.error("Error fetching all products:", error);
       res.status(500).json({ success: false, message: "Failed to fetch products" });
@@ -371,7 +378,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
-      res.json(product);
+      const parsedProduct = {
+        ...product,
+        images: product.images ? (typeof product.images === 'string' ? JSON.parse(product.images) : product.images) : []
+      };
+      
+      res.json(parsedProduct);
     } catch (error) {
       console.error("Error fetching product:", error);
       res.status(500).json({
