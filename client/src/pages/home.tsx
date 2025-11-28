@@ -97,7 +97,24 @@ const devices = {
 };
 
 export default function Home() {
-  const [selectedDevice, setSelectedDevice] = useState<"nu-100" | "nu-200" | "nu-30">("nu-100");
+  // Initialize from URL parameter or default to nu-100
+  const [selectedDevice, setSelectedDeviceState] = useState<"nu-100" | "nu-200" | "nu-30">(() => {
+    const params = new URLSearchParams(window.location.search);
+    const deviceParam = params.get("device");
+    if (deviceParam === "nu-100" || deviceParam === "nu-200" || deviceParam === "nu-30") {
+      return deviceParam;
+    }
+    return "nu-100";
+  });
+
+  // Wrapper to update both state and URL
+  const setSelectedDevice = (device: "nu-100" | "nu-200" | "nu-30") => {
+    setSelectedDeviceState(device);
+    const params = new URLSearchParams(window.location.search);
+    params.set("device", device);
+    window.history.replaceState({}, "", `?${params.toString()}`);
+  };
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
