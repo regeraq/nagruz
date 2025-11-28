@@ -870,7 +870,9 @@ export default function Home() {
 
             <div className={`grid gap-6 scroll-animate ${
               productImages.length === 1 
-                ? "grid-cols-1 md:grid-cols-1 lg:grid-cols-1 max-w-3xl mx-auto" 
+                ? "grid-cols-1 max-w-3xl mx-auto" 
+                : productImages.length === 2
+                ? "grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto justify-items-center"
                 : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
             }`}>
               {productImages.map((imageData: string, idx: number) => (
