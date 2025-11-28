@@ -87,13 +87,16 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       setPaymentStatus("error");
       
       let errorMessage = error.message || "Попробуйте позже";
-      try {
-        if (errorMessage.includes('{')) {
-          const parsed = JSON.parse(errorMessage);
+      
+      // Extract message from "400: {...}" format
+      if (errorMessage.includes(": {")) {
+        try {
+          const jsonPart = errorMessage.substring(errorMessage.indexOf("{"));
+          const parsed = JSON.parse(jsonPart);
           errorMessage = parsed.message || errorMessage;
+        } catch (e) {
+          // Keep original if parsing fails
         }
-      } catch (e) {
-        // Keep original message if not JSON
       }
       
       if (errorMessage.startsWith("401")) {
@@ -102,15 +105,9 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
           description: "Пожалуйста, авторизуйтесь для оформления заказа",
           variant: "default",
         });
-      } else if (errorMessage.includes("Недостаточно")) {
-        toast({
-          title: "Товар недоступен",
-          description: errorMessage,
-          variant: "destructive",
-        });
       } else {
         toast({
-          title: "Ошибка",
+          title: "Ошибка оформления",
           description: errorMessage,
           variant: "destructive",
         });

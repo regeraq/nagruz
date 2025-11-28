@@ -191,9 +191,22 @@ export default function Profile() {
       });
     },
     onError: (error: Error) => {
+      let errorMsg = error.message;
+      
+      // Extract message from "400: {...}" format
+      if (errorMsg && errorMsg.includes(": {")) {
+        try {
+          const jsonPart = errorMsg.substring(errorMsg.indexOf("{"));
+          const parsed = JSON.parse(jsonPart);
+          errorMsg = parsed.message || errorMsg;
+        } catch (e) {
+          // Keep original if parsing fails
+        }
+      }
+      
       toast({
-        title: "Ошибка",
-        description: error.message,
+        title: "Ошибка оформления",
+        description: errorMsg,
         variant: "destructive",
       });
     },
@@ -274,9 +287,22 @@ export default function Profile() {
       });
     },
     onError: (error: Error) => {
+      let errorMsg = error.message;
+      
+      // Extract message from "400: {...}" format
+      if (errorMsg && errorMsg.includes(": {")) {
+        try {
+          const jsonPart = errorMsg.substring(errorMsg.indexOf("{"));
+          const parsed = JSON.parse(jsonPart);
+          errorMsg = parsed.message || errorMsg;
+        } catch (e) {
+          // Keep original if parsing fails
+        }
+      }
+      
       toast({
-        title: "Ошибка",
-        description: error.message,
+        title: "Ошибка оформления",
+        description: errorMsg,
         variant: "destructive",
       });
     },
