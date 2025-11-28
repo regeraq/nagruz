@@ -264,6 +264,7 @@ export default function Profile() {
         addFavorite.mutate(selectedProduct.id);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/orders/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setBuyDialog(false);
       setQuantity(1);
       setAddToFav(false);
