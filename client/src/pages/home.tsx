@@ -826,11 +826,21 @@ export default function Home() {
 
           <Card className="bg-primary/5 border-primary/20">
             <CardContent className="pt-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Новое оборудование 2025 года выпуска</h3>
-                <p className="text-sm text-muted-foreground">
-                  Соответствие всем современным стандартам качества и безопасности
-                </p>
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">Новое оборудование 2025 года выпуска</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Соответствие всем современным стандартам качества и безопасности
+                  </p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  data-testid="button-learn-more"
+                  onClick={() => scrollToSection("contact")}
+                >
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  Узнать больше
+                </Button>
               </div>
             </CardContent>
           </Card>
