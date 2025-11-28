@@ -435,6 +435,14 @@ export default function Profile() {
   };
 
   const handleBuy = (product: Product) => {
+    if (product.stock <= 0) {
+      toast({
+        title: "Товар недоступен",
+        description: `${product.name} полностью распродан`,
+        variant: "destructive",
+      });
+      return;
+    }
     setSelectedProduct(product);
     setBuyDialog(true);
     setQuantity(1);
@@ -442,7 +450,25 @@ export default function Profile() {
   };
 
   const handleBuyConfirm = () => {
-    if (selectedProduct && quantity > 0 && quantity <= 99) {
+    if (!selectedProduct) return;
+    if (selectedProduct.stock <= 0) {
+      toast({
+        title: "Товар недоступен",
+        description: `К сожалению, ${selectedProduct.name} полностью распродан`,
+        variant: "destructive",
+      });
+      setBuyDialog(false);
+      return;
+    }
+    if (quantity > selectedProduct.stock) {
+      toast({
+        title: "Недостаточно товара",
+        description: `Доступно только ${selectedProduct.stock} шт.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (quantity > 0) {
       createOrder.mutate(selectedProduct.id);
     }
   };
@@ -1138,7 +1164,8 @@ export default function Profile() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setQuantity(Math.min(99, quantity + 1))}
+                    onClick={() => setQuantity(Math.min(selectedProduct?.stock || 99, quantity + 1))}
+                    disabled={!selectedProduct || quantity >= (selectedProduct?.stock || 99)}
                     data-testid="button-quantity-plus"
                   >
                     <Plus className="w-4 h-4" />
