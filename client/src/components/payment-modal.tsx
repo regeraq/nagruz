@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Product } from "@shared/schema";
@@ -40,6 +40,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: cryptoRates, isLoading: ratesLoading } = useQuery<CryptoRates>({
     queryKey: ['/api/crypto-rates'],
@@ -75,6 +76,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
     },
     onSuccess: () => {
       setPaymentStatus("success");
+      queryClient.invalidateQueries({ queryKey: ['/api/products'] });
       toast({
         title: "Заказ оформлен!",
         description: "Мы свяжемся с вами для подтверждения",
@@ -84,23 +86,32 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
     onError: (error: any) => {
       setPaymentStatus("error");
       
-      // Check if 401 (not authenticated)
-      if (error.message && error.message.startsWith("401")) {
+      let errorMessage = error.message || "Попробуйте позже";
+      try {
+        if (errorMessage.includes('{')) {
+          const parsed = JSON.parse(errorMessage);
+          errorMessage = parsed.message || errorMessage;
+        }
+      } catch (e) {
+        // Keep original message if not JSON
+      }
+      
+      if (errorMessage.startsWith("401")) {
         toast({
           title: "Авторизация требуется",
           description: "Пожалуйста, авторизуйтесь для оформления заказа",
           variant: "default",
         });
-      } else if (error.message && error.message.includes("Недостаточно")) {
+      } else if (errorMessage.includes("Недостаточно")) {
         toast({
-          title: "Товар закончился",
-          description: error.message,
+          title: "Товар недоступен",
+          description: errorMessage,
           variant: "destructive",
         });
       } else {
         toast({
-          title: "Ошибка оформления",
-          description: error.message || "Попробуйте позже",
+          title: "Ошибка",
+          description: errorMessage,
           variant: "destructive",
         });
       }
