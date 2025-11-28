@@ -868,8 +868,12 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 scroll-animate">
-              {productImages.map((imageUrl: string, idx: number) => (
+            <div className={`grid gap-6 scroll-animate ${
+              productImages.length === 1 
+                ? "grid-cols-1 md:grid-cols-1 lg:grid-cols-1 max-w-2xl mx-auto" 
+                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+            }`}>
+              {productImages.map((imageData: string, idx: number) => (
                 <div
                   key={idx}
                   className="group relative overflow-hidden rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
@@ -877,7 +881,7 @@ export default function Home() {
                 >
                   <div className="aspect-video bg-muted relative">
                     <img
-                      src={imageUrl}
+                      src={imageData}
                       alt={`${device.name} - Фото ${idx + 1}`}
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       onError={(e) => {

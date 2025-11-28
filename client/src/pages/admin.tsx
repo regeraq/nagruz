@@ -1380,33 +1380,45 @@ export default function Admin() {
           
           <div className="space-y-4">
             <div>
-              <Label>Добавить фотографию (URL)</Label>
+              <Label>Добавить фотографию</Label>
               <div className="flex gap-2 mt-2">
                 <Input
-                  placeholder="https://example.com/image.jpg"
-                  value={newImageUrl}
-                  onChange={(e) => setNewImageUrl(e.target.value)}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={(e) => {
+                    const file = e.currentTarget.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const base64 = event.target?.result as string;
+                        setNewImageUrl(base64);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  data-testid="input-product-image"
                 />
                 <Button
                   onClick={() => {
                     if (newImageUrl && selectedProductForImages) {
-                      addProductImage.mutate({ productId: selectedProductForImages, imageUrl: newImageUrl });
+                      addProductImage.mutate({ productId: selectedProductForImages, imageBase64: newImageUrl });
                     }
                   }}
                   disabled={!newImageUrl || addProductImage.isPending}
+                  data-testid="button-upload-image"
                 >
                   <Upload className="w-4 h-4 mr-2" />
-                  Добавить
+                  {addProductImage.isPending ? "Загрузка..." : "Добавить"}
                 </Button>
               </div>
             </div>
 
             {productImages.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {productImages.map((imageUrl: string, idx: number) => (
-                  <div key={idx} className="relative group">
+                {productImages.map((imageData: string, idx: number) => (
+                  <div key={idx} className="relative group" data-testid={`admin-gallery-image-${idx}`}>
                     <img
-                      src={imageUrl}
+                      src={imageData}
                       alt={`Фото ${idx + 1}`}
                       className="w-full h-48 object-cover rounded-lg border"
                       onError={(e) => {
@@ -1419,10 +1431,11 @@ export default function Admin() {
                       className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => {
                         if (selectedProductForImages) {
-                          removeProductImage.mutate({ productId: selectedProductForImages, imageUrl });
+                          removeProductImage.mutate({ productId: selectedProductForImages, imageData });
                         }
                       }}
                       disabled={removeProductImage.isPending}
+                      data-testid="button-delete-image"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

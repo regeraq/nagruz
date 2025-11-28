@@ -1921,7 +1921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ADMIN: Add product image
+  // ADMIN: Add product image (accepts both base64 and URL)
   app.post("/api/admin/products/:id/images", async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
@@ -1937,13 +1937,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const { imageUrl } = req.body;
-      if (!imageUrl || typeof imageUrl !== 'string') {
-        res.status(400).json({ success: false, message: "Image URL required" });
+      const { imageUrl, imageBase64 } = req.body;
+      const imageData = imageBase64 || imageUrl;
+      
+      if (!imageData || typeof imageData !== 'string') {
+        res.status(400).json({ success: false, message: "Image data required" });
         return;
       }
 
-      const product = await storage.addProductImage(req.params.id, imageUrl);
+      // Validate base64 size (max 5MB)
+      if (imageData.startsWith('data:image')) {
+        const base64Size = calculateBase64Size(imageData);
+        if (base64Size > 5 * 1024 * 1024) {
+          res.status(400).json({ success: false, message: "Image too large (max 5MB)" });
+          return;
+        }
+      }
+
+      const product = await storage.addProductImage(req.params.id, imageData);
       if (!product) {
         res.status(404).json({ success: false, message: "Product not found" });
         return;
@@ -1976,13 +1987,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const { imageUrl } = req.body;
-      if (!imageUrl || typeof imageUrl !== 'string') {
-        res.status(400).json({ success: false, message: "Image URL required" });
+      const { imageUrl, imageData } = req.body;
+      const dataToRemove = imageData || imageUrl;
+      
+      if (!dataToRemove || typeof dataToRemove !== 'string') {
+        res.status(400).json({ success: false, message: "Image data required" });
         return;
       }
 
-      const product = await storage.removeProductImage(req.params.id, imageUrl);
+      const product = await storage.removeProductImage(req.params.id, dataToRemove);
       if (!product) {
         res.status(404).json({ success: false, message: "Product not found" });
         return;
