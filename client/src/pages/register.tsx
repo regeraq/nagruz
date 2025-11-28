@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ type RegisterForm = z.infer<typeof registerSchema>;
 export default function Register() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,14 +93,16 @@ export default function Register() {
         localStorage.setItem("refreshToken", result.tokens.refreshToken);
       }
 
+      // Invalidate and refetch user data
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+
       toast({
         title: "Успешно",
-        description: "Регистрация успешна. Проверьте email для подтверждения.",
+        description: "Регистрация успешна. Добро пожаловать!",
       });
 
-      // Redirect to profile
+      // Redirect to profile without reload
       setLocation("/profile");
-      window.location.reload();
     } catch (err) {
       setError("Произошла ошибка при регистрации");
       console.error("Register error:", err);

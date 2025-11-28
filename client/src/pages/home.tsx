@@ -28,6 +28,7 @@ import { useRealtimeValidation, ValidationIcon, ValidationMessage, validationRul
 const navLinks = [
   { label: "Главная", id: "hero" },
   { label: "Характеристики", id: "specifications" },
+  { label: "Галерея", id: "gallery" },
   { label: "Применение", id: "applications" },
   { label: "Документация", id: "documentation" },
   { label: "Контакты", id: "contact" },
@@ -143,6 +144,10 @@ export default function Home() {
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ['/api/products'],
   });
+
+  // Get product images for current device
+  const currentProduct = products.find((p: Product) => p.id === selectedDevice);
+  const productImages = (currentProduct as any)?.images || [];
 
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ['/api/admin/settings'],
@@ -847,6 +852,47 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Product Images Gallery - only show if images exist */}
+      {productImages.length > 0 && (
+        <section id="gallery" className="py-24 md:py-32 scroll-animate">
+          <div className="max-w-7xl mx-auto px-6 md:px-8">
+            <div className="text-center mb-16 animate-fade-up">
+              <Badge variant="secondary" className="mb-4" data-testid="badge-gallery-section">
+                Фотогалерея
+              </Badge>
+              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-gallery">
+                Фотографии устройства {device.name}
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-gallery-desc">
+                Ознакомьтесь с фотографиями нагрузочного устройства
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 scroll-animate">
+              {productImages.map((imageUrl: string, idx: number) => (
+                <div
+                  key={idx}
+                  className="group relative overflow-hidden rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
+                  data-testid={`gallery-image-${idx}`}
+                >
+                  <div className="aspect-video bg-muted relative">
+                    <img
+                      src={imageUrl}
+                      alt={`${device.name} - Фото ${idx + 1}`}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       <section id="applications" className="py-24 md:py-32 bg-muted/30">
         <div className="max-w-7xl mx-auto px-6 md:px-8">
           <div className="text-center mb-16 scroll-animate">
@@ -1170,7 +1216,7 @@ export default function Home() {
             <div>
               <h3 className="font-semibold mb-4">Навигация</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                {navLinks.map((link) => (
+                {navLinks.filter(link => link.id !== "gallery" || productImages.length > 0).map((link) => (
                   <li key={link.id}>
                     <button
                       onClick={() => scrollToSection(link.id)}

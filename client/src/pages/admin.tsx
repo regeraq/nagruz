@@ -15,14 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { 
   Package, Users, BarChart3, FileText, Settings, Plus, Edit2, Trash2, 
-  Save, X, Search, Shield, Tag, Mail, UserPlus 
+  Save, X, Search, Shield, Tag, Mail, UserPlus, Image, Bell, Upload
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale/ru";
 import { apiRequest } from "@/lib/queryClient";
 
-export default function AdminFull() {
+export default function Admin() {
   const [, setLocation] = useLocation();
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [showCreateProduct, setShowCreateProduct] = useState(false);
@@ -37,17 +37,50 @@ export default function AdminFull() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactAddress, setContactAddress] = useState("");
+  const [userSearchTerm, setUserSearchTerm] = useState("");
+  const [orderSearchTerm, setOrderSearchTerm] = useState("");
+  const [selectedProductForImages, setSelectedProductForImages] = useState<string | null>(null);
+  const [newImageUrl, setNewImageUrl] = useState("");
+  const [showNotificationDialog, setShowNotificationDialog] = useState(false);
+  const [notificationForm, setNotificationForm] = useState({
+    userId: "",
+    title: "",
+    message: "",
+    type: "info",
+    link: "",
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Fetch current user
   const { data: userData } = useQuery({
     queryKey: ["/api/auth/me"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/auth/me", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch user");
+      const data = await res.json();
+      return data.user;
+    },
   });
 
   // Fetch products (all products for admin including inactive)
   const { data: productsData = { products: [] } as any } = useQuery({
     queryKey: ["/api/admin/products"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/products", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch products");
+      return res.json();
+    },
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
@@ -56,37 +89,111 @@ export default function AdminFull() {
   // Fetch users
   const { data: usersData = {} as any } = useQuery({
     queryKey: ["/api/admin/users"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/users", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch users");
+      return res.json();
+    },
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
   // Fetch orders
   const { data: ordersData = {} as any } = useQuery({
     queryKey: ["/api/admin/orders"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/orders", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch orders");
+      return res.json();
+    },
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
   // Fetch contacts
   const { data: contactsData = {} as any } = useQuery({
     queryKey: ["/api/admin/contacts"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/contacts", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch contacts");
+      return res.json();
+    },
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
   // Fetch promocodes
   const { data: promoCodesData = {} as any } = useQuery({
     queryKey: ["/api/admin/promocodes"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/promocodes", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch promocodes");
+      return res.json();
+    },
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
   // Fetch settings
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ["/api/admin/settings"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/settings", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch settings");
+      return res.json();
+    },
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
-  const users = usersData?.users || [];
-  const orders = ordersData?.orders || [];
+  const allUsers = usersData?.users || [];
+  const allOrders = ordersData?.orders || [];
   const contacts = contactsData?.contacts || [];
   const promoCodes = promoCodesData?.promoCodes || [];
+
+  // Filter users by search term
+  const users = allUsers.filter((u: any) => {
+    if (!userSearchTerm) return true;
+    const search = userSearchTerm.toLowerCase();
+    return (
+      u.email.toLowerCase().includes(search) ||
+      (u.firstName && u.firstName.toLowerCase().includes(search)) ||
+      (u.lastName && u.lastName.toLowerCase().includes(search)) ||
+      (u.phone && u.phone.toLowerCase().includes(search))
+    );
+  });
+
+  // Filter orders by search term
+  const orders = allOrders.filter((o: any) => {
+    if (!orderSearchTerm) return true;
+    const search = orderSearchTerm.toLowerCase();
+    return (
+      o.id.toLowerCase().includes(search) ||
+      (o.customerName && o.customerName.toLowerCase().includes(search)) ||
+      (o.customerEmail && o.customerEmail.toLowerCase().includes(search)) ||
+      (o.productId && o.productId.toLowerCase().includes(search))
+    );
+  });
 
   // Load settings into form when they arrive
   useEffect(() => {
@@ -311,6 +418,79 @@ export default function AdminFull() {
     },
   });
 
+  // Get product images
+  const { data: productImages = [] } = useQuery({
+    queryKey: ["/api/admin/products", selectedProductForImages, "images"],
+    queryFn: async () => {
+      if (!selectedProductForImages) return [];
+      const token = localStorage.getItem("accessToken");
+      if (!token) return [];
+      const res = await fetch(`/api/admin/products/${selectedProductForImages}/images`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.images || [];
+    },
+    enabled: !!selectedProductForImages,
+  });
+
+  // Add product image
+  const addProductImage = useMutation({
+    mutationFn: async ({ productId, imageUrl }: { productId: string; imageUrl: string }) => {
+      const res = await apiRequest("POST", `/api/admin/products/${productId}/images`, { imageUrl });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      setNewImageUrl("");
+      toast({ title: "Фотография добавлена" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Remove product image
+  const removeProductImage = useMutation({
+    mutationFn: async ({ productId, imageUrl }: { productId: string; imageUrl: string }) => {
+      const res = await apiRequest("DELETE", `/api/admin/products/${productId}/images`, { imageUrl });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ title: "Фотография удалена" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Send notification
+  const sendNotification = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/admin/notifications/send", data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setShowNotificationDialog(false);
+      setNotificationForm({ userId: "", title: "", message: "", type: "info", link: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({ 
+        title: "Уведомление отправлено", 
+        description: data.count ? `Отправлено ${data.count} пользователям` : "Уведомление отправлено" 
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+    },
+  });
+
   const isAdmin = (userData as any)?.role === "admin" || (userData as any)?.role === "superadmin";
   const isSuperAdmin = (userData as any)?.role === "superadmin";
 
@@ -324,8 +504,8 @@ export default function AdminFull() {
     );
   }
 
-  const totalRevenue = orders.reduce((sum: number, o: any) => sum + parseFloat(o.finalAmount || 0), 0);
-  const admins = users.filter((u: any) => ["admin", "superadmin", "moderator"].includes(u.role));
+  const totalRevenue = allOrders.reduce((sum: number, o: any) => sum + parseFloat(o.finalAmount || 0), 0);
+  const admins = allUsers.filter((u: any) => ["admin", "superadmin", "moderator"].includes(u.role));
 
   return (
     <div className="container mx-auto px-4 py-8 pt-24">
@@ -364,13 +544,13 @@ export default function AdminFull() {
               <Card>
                 <CardHeader className="pb-2">
                   <CardDescription>Пользователи</CardDescription>
-                  <CardTitle className="text-3xl">{users.length}</CardTitle>
+                  <CardTitle className="text-3xl">{allUsers.length}</CardTitle>
                 </CardHeader>
               </Card>
               <Card>
                 <CardHeader className="pb-2">
                   <CardDescription>Заказы</CardDescription>
-                  <CardTitle className="text-3xl">{orders.length}</CardTitle>
+                  <CardTitle className="text-3xl">{allOrders.length}</CardTitle>
                 </CardHeader>
               </Card>
               <Card>
@@ -397,7 +577,7 @@ export default function AdminFull() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.slice(0, 5).map((order: any) => (
+                    {allOrders.slice(0, 5).map((order: any) => (
                       <TableRow key={order.id}>
                         <TableCell className="font-mono text-sm">{order.id.slice(0, 8)}</TableCell>
                         <TableCell>{order.customerName || order.customerEmail}</TableCell>
@@ -523,6 +703,7 @@ export default function AdminFull() {
                       <TableHead>Количество</TableHead>
                       <TableHead>Статус</TableHead>
                       <TableHead>Видимость</TableHead>
+                      <TableHead>Действия</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -623,6 +804,16 @@ export default function AdminFull() {
                             {product.isActive ? "Скрыть" : "Показать"}
                           </Button>
                         </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedProductForImages(product.id)}
+                          >
+                            <Image className="w-4 h-4 mr-1" />
+                            Фото
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -635,8 +826,20 @@ export default function AdminFull() {
           <TabsContent value="users" className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>Управление пользователями</CardTitle>
-                <CardDescription>Просмотр и управление пользователями</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Управление пользователями</CardTitle>
+                    <CardDescription>Просмотр и управление пользователями</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Поиск по email, имени..."
+                      className="w-64"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -826,8 +1029,20 @@ export default function AdminFull() {
           <TabsContent value="orders" className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>Управление заказами</CardTitle>
-                <CardDescription>Просмотр и управление заказами</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Управление заказами</CardTitle>
+                    <CardDescription>Просмотр и управление заказами</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Поиск по ID, клиенту..."
+                      className="w-64"
+                      value={orderSearchTerm}
+                      onChange={(e) => setOrderSearchTerm(e.target.value)}
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -1040,6 +1255,32 @@ export default function AdminFull() {
             </Card>
           </TabsContent>
 
+          {/* Notifications Tab */}
+          <TabsContent value="notifications" className="mt-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Отправка уведомлений</CardTitle>
+                    <CardDescription>Отправка уведомлений пользователям через сайт и email</CardDescription>
+                  </div>
+                  <Button onClick={() => setShowNotificationDialog(true)}>
+                    <Bell className="w-4 h-4 mr-2" />
+                    Отправить уведомление
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Alert>
+                  <AlertDescription>
+                    Уведомления будут отправлены пользователям на сайте и на их email адреса.
+                    Вы можете отправить уведомление конкретному пользователю или всем пользователям сразу.
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Settings Tab */}
           <TabsContent value="settings" className="mt-6">
             <div className="grid grid-cols-2 gap-6">
@@ -1126,6 +1367,187 @@ export default function AdminFull() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Dialog for managing product images */}
+      <Dialog open={!!selectedProductForImages} onOpenChange={(open) => !open && setSelectedProductForImages(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Управление фотографиями</DialogTitle>
+            <DialogDescription>
+              {products.find((p: any) => p.id === selectedProductForImages)?.name || "Товар"}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label>Добавить фотографию (URL)</Label>
+              <div className="flex gap-2 mt-2">
+                <Input
+                  placeholder="https://example.com/image.jpg"
+                  value={newImageUrl}
+                  onChange={(e) => setNewImageUrl(e.target.value)}
+                />
+                <Button
+                  onClick={() => {
+                    if (newImageUrl && selectedProductForImages) {
+                      addProductImage.mutate({ productId: selectedProductForImages, imageUrl: newImageUrl });
+                    }
+                  }}
+                  disabled={!newImageUrl || addProductImage.isPending}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Добавить
+                </Button>
+              </div>
+            </div>
+
+            {productImages.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {productImages.map((imageUrl: string, idx: number) => (
+                  <div key={idx} className="relative group">
+                    <img
+                      src={imageUrl}
+                      alt={`Фото ${idx + 1}`}
+                      className="w-full h-48 object-cover rounded-lg border"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => {
+                        if (selectedProductForImages) {
+                          removeProductImage.mutate({ productId: selectedProductForImages, imageUrl });
+                        }
+                      }}
+                      disabled={removeProductImage.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <Image className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Нет фотографий</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedProductForImages(null)}>
+              Закрыть
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for sending notifications */}
+      <Dialog open={showNotificationDialog} onOpenChange={setShowNotificationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Отправить уведомление</DialogTitle>
+            <DialogDescription>
+              Уведомление будет отправлено на сайт и на email пользователя
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label>Получатель</Label>
+              <Select
+                value={notificationForm.userId}
+                onValueChange={(value) => setNotificationForm({ ...notificationForm, userId: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Выберите получателя" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Всем пользователям</SelectItem>
+                  {allUsers.map((user: any) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.email} {user.firstName ? `(${user.firstName} ${user.lastName || ""})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Тип уведомления</Label>
+              <Select
+                value={notificationForm.type}
+                onValueChange={(value) => setNotificationForm({ ...notificationForm, type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="info">Информация</SelectItem>
+                  <SelectItem value="success">Успех</SelectItem>
+                  <SelectItem value="warning">Предупреждение</SelectItem>
+                  <SelectItem value="error">Ошибка</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Заголовок *</Label>
+              <Input
+                placeholder="Заголовок уведомления"
+                value={notificationForm.title}
+                onChange={(e) => setNotificationForm({ ...notificationForm, title: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label>Сообщение *</Label>
+              <Textarea
+                placeholder="Текст уведомления"
+                value={notificationForm.message}
+                onChange={(e) => setNotificationForm({ ...notificationForm, message: e.target.value })}
+                rows={4}
+              />
+            </div>
+
+            <div>
+              <Label>Ссылка (необязательно)</Label>
+              <Input
+                placeholder="/profile или https://example.com"
+                value={notificationForm.link}
+                onChange={(e) => setNotificationForm({ ...notificationForm, link: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNotificationDialog(false)}>
+              Отмена
+            </Button>
+            <Button
+              onClick={() => {
+                if (!notificationForm.title || !notificationForm.message) {
+                  toast({ title: "Ошибка", description: "Заполните все обязательные поля", variant: "destructive" });
+                  return;
+                }
+                sendNotification.mutate({
+                  userId: notificationForm.userId || undefined,
+                  title: notificationForm.title,
+                  message: notificationForm.message,
+                  type: notificationForm.type,
+                  link: notificationForm.link || undefined,
+                });
+              }}
+              disabled={sendNotification.isPending || !notificationForm.title || !notificationForm.message}
+            >
+              {sendNotification.isPending ? "Отправка..." : "Отправить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -835,21 +835,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { firstName, lastName, phone } = req.body;
-      Object.assign(user, { firstName, lastName, phone });
+      
+      // Update user in storage
+      const updatedUser = await storage.updateUser(payload.userId, { firstName, lastName, phone });
+      
+      if (!updatedUser) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
 
       res.json({
         success: true,
         user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          phone: user.phone,
-          role: user.role,
-          avatar: user.avatar,
-          isEmailVerified: user.isEmailVerified || false,
-          isPhoneVerified: user.isPhoneVerified || false,
-          createdAt: user.createdAt || new Date().toISOString(),
+          id: updatedUser.id,
+          email: updatedUser.email,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          phone: updatedUser.phone,
+          role: updatedUser.role,
+          avatar: updatedUser.avatar,
+          isEmailVerified: updatedUser.isEmailVerified || false,
+          isPhoneVerified: updatedUser.isPhoneVerified || false,
+          createdAt: updatedUser.createdAt || new Date().toISOString(),
         },
       });
     } catch (error) {
@@ -964,12 +971,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { paymentStatus } = req.body;
       const order = await storage.updateOrderStatus(req.params.id, paymentStatus);
-
+      
       if (!order) {
         res.status(404).json({ success: false, message: "Order not found" });
         return;
       }
 
+      // Send notification and email to user if order status changed
+      if (order.userId) {
+        const orderUser = await storage.getUserById(order.userId);
+        if (orderUser) {
+          const statusMessages: Record<string, string> = {
+            pending: "Ожидает оплаты",
+            paid: "Оплачен",
+            processing: "В обработке",
+            shipped: "Отправлен",
+            delivered: "Доставлен",
+            cancelled: "Отменен",
+          };
+
+          const statusMessage = statusMessages[paymentStatus] || paymentStatus;
+          const notification = await storage.sendNotificationToUser(order.userId, {
+            title: "Статус заказа изменен",
+            message: `Статус вашего заказа #${order.id.slice(0, 8)} изменен на: ${statusMessage}`,
+            type: paymentStatus === "cancelled" ? "error" : paymentStatus === "delivered" ? "success" : "info",
+            link: `/profile`,
+          });
+
+          // Send email notification
+          if (orderUser.email) {
+            const emailHtml = `
+              <div style="font-family: Arial, sans-serif; color: #333;">
+                <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">Статус заказа изменен</h2>
+                <p style="margin: 15px 0;"><strong>Номер заказа:</strong> #${escapeHtml(order.id.slice(0, 8))}</p>
+                <p style="margin: 15px 0;"><strong>Новый статус:</strong> ${escapeHtml(statusMessage)}</p>
+                <p style="margin: 15px 0; line-height: 1.6;">Вы можете просмотреть детали заказа в своем профиле на сайте.</p>
+                <p style="margin-top: 20px;"><a href="${process.env.FRONTEND_URL || 'http://localhost:5000'}/profile" style="color: #4CAF50; text-decoration: none;">Перейти в профиль →</a></p>
+              </div>
+            `;
+            sendEmail(orderUser.email, `Статус заказа #${order.id.slice(0, 8)} изменен`, emailHtml).catch(err => {
+              console.error("Failed to send order status email:", err);
+            });
+          }
+        }
+      }
+      
       res.json({ success: true, order });
     } catch (error) {
       console.error("Update order status error:", error);
@@ -1848,6 +1894,195 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Mark notification as read error:", error);
       res.status(500).json({ success: false, message: "Failed to mark as read" });
+    }
+  });
+
+  // ADMIN: Get product images
+  app.get("/api/admin/products/:id/images", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const images = await storage.getProductImages(req.params.id);
+      res.json({ success: true, images });
+    } catch (error) {
+      console.error("Get product images error:", error);
+      res.status(500).json({ success: false, message: "Failed to get images" });
+    }
+  });
+
+  // ADMIN: Add product image
+  app.post("/api/admin/products/:id/images", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { imageUrl } = req.body;
+      if (!imageUrl || typeof imageUrl !== 'string') {
+        res.status(400).json({ success: false, message: "Image URL required" });
+        return;
+      }
+
+      const product = await storage.addProductImage(req.params.id, imageUrl);
+      if (!product) {
+        res.status(404).json({ success: false, message: "Product not found" });
+        return;
+      }
+
+      // Clear product caches
+      cache.delete('products');
+      cache.delete('products-active');
+
+      res.json({ success: true, product });
+    } catch (error) {
+      console.error("Add product image error:", error);
+      res.status(500).json({ success: false, message: "Failed to add image" });
+    }
+  });
+
+  // ADMIN: Remove product image
+  app.delete("/api/admin/products/:id/images", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { imageUrl } = req.body;
+      if (!imageUrl || typeof imageUrl !== 'string') {
+        res.status(400).json({ success: false, message: "Image URL required" });
+        return;
+      }
+
+      const product = await storage.removeProductImage(req.params.id, imageUrl);
+      if (!product) {
+        res.status(404).json({ success: false, message: "Product not found" });
+        return;
+      }
+
+      // Clear product caches
+      cache.delete('products');
+      cache.delete('products-active');
+
+      res.json({ success: true, product });
+    } catch (error) {
+      console.error("Remove product image error:", error);
+      res.status(500).json({ success: false, message: "Failed to remove image" });
+    }
+  });
+
+  // ADMIN: Send notification to user
+  app.post("/api/admin/notifications/send", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { userId, title, message, type = "info", link } = req.body;
+      
+      if (!title || !message) {
+        res.status(400).json({ success: false, message: "Title and message required" });
+        return;
+      }
+
+      if (userId) {
+        // Send to specific user
+        const targetUser = await storage.getUserById(userId);
+        if (!targetUser) {
+          res.status(404).json({ success: false, message: "User not found" });
+          return;
+        }
+
+        const notification = await storage.sendNotificationToUser(userId, {
+          title: sanitizeInput(title, 200),
+          message: sanitizeInput(message, 1000),
+          type: sanitizeInput(type, 50),
+          link: link ? sanitizeInput(link, 500) : null,
+        });
+
+        // Send email notification
+        if (targetUser.email) {
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">${escapeHtml(title)}</h2>
+              <p style="margin: 15px 0; line-height: 1.6;">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
+              ${link ? `<p style="margin-top: 20px;"><a href="${escapeHtml(link)}" style="color: #4CAF50; text-decoration: none;">Перейти →</a></p>` : ''}
+            </div>
+          `;
+          sendEmail(targetUser.email, title, emailHtml).catch(err => {
+            console.error("Failed to send notification email:", err);
+          });
+        }
+
+        res.json({ success: true, notification });
+      } else {
+        // Send to all users
+        const notifications = await storage.sendNotificationToAllUsers({
+          title: sanitizeInput(title, 200),
+          message: sanitizeInput(message, 1000),
+          type: sanitizeInput(type, 50),
+          link: link ? sanitizeInput(link, 500) : null,
+        });
+
+        // Send email to all users
+        const allUsers = await storage.getAllUsers();
+        for (const targetUser of allUsers) {
+          if (targetUser.email) {
+            const emailHtml = `
+              <div style="font-family: Arial, sans-serif; color: #333;">
+                <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">${escapeHtml(title)}</h2>
+                <p style="margin: 15px 0; line-height: 1.6;">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
+                ${link ? `<p style="margin-top: 20px;"><a href="${escapeHtml(link)}" style="color: #4CAF50; text-decoration: none;">Перейти →</a></p>` : ''}
+              </div>
+            `;
+            sendEmail(targetUser.email, title, emailHtml).catch(err => {
+              console.error("Failed to send notification email:", err);
+            });
+          }
+        }
+
+        res.json({ success: true, count: notifications.length });
+      }
+    } catch (error) {
+      console.error("Send notification error:", error);
+      res.status(500).json({ success: false, message: "Failed to send notification" });
     }
   });
 

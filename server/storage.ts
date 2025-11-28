@@ -48,6 +48,11 @@ export interface IStorage {
   getSiteSettings(): Promise<any[]>;
   getSiteSetting(key: string): Promise<any>;
   setSiteSetting(key: string, value: string, type?: string, description?: string): Promise<any>;
+  getProductImages(productId: string): Promise<string[]>;
+  addProductImage(productId: string, imageUrl: string): Promise<any>;
+  removeProductImage(productId: string, imageUrl: string): Promise<any>;
+  sendNotificationToUser(userId: string, notification: any): Promise<any>;
+  sendNotificationToAllUsers(notification: any): Promise<any>;
 }
 
 export class MemStorage implements IStorage {
@@ -72,6 +77,7 @@ export class MemStorage implements IStorage {
       stock: 10,
       category: "Industrial",
       imageUrl: null,
+      images: null,
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -87,6 +93,7 @@ export class MemStorage implements IStorage {
       stock: 8,
       category: "Industrial",
       imageUrl: null,
+      images: null,
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -102,6 +109,7 @@ export class MemStorage implements IStorage {
       stock: 15,
       category: "Industrial",
       imageUrl: null,
+      images: null,
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -470,6 +478,76 @@ export class MemStorage implements IStorage {
       this.siteSettings.set(id, setting);
     }
     return setting;
+  }
+
+  async getProductImages(productId: string): Promise<string[]> {
+    const product = this.products.find((p: any) => p.id === productId);
+    if (!product) return [];
+    return (product.images as string[]) || [];
+  }
+
+  async addProductImage(productId: string, imageUrl: string): Promise<any> {
+    const product = this.products.find((p: any) => p.id === productId);
+    if (!product) return null;
+    
+    if (!product.images) {
+      product.images = [];
+    }
+    if (!Array.isArray(product.images)) {
+      product.images = [];
+    }
+    
+    if (!product.images.includes(imageUrl)) {
+      product.images.push(imageUrl);
+      product.updatedAt = new Date();
+    }
+    
+    return product;
+  }
+
+  async removeProductImage(productId: string, imageUrl: string): Promise<any> {
+    const product = this.products.find((p: any) => p.id === productId);
+    if (!product) return null;
+    
+    if (product.images && Array.isArray(product.images)) {
+      product.images = product.images.filter((img: string) => img !== imageUrl);
+      product.updatedAt = new Date();
+    }
+    
+    return product;
+  }
+
+  async sendNotificationToUser(userId: string, notification: any): Promise<any> {
+    const id = generateNumericId();
+    const newNotification = {
+      id,
+      userId,
+      ...notification,
+      isRead: false,
+      createdAt: new Date(),
+    };
+    this.notifications.set(id, newNotification);
+    return newNotification;
+  }
+
+  async sendNotificationToAllUsers(notification: any): Promise<any[]> {
+    const allUsers = Array.from(this.users.values());
+    const notifications = [];
+    
+    for (const user of allUsers) {
+      const id = generateNumericId();
+      const newNotification = {
+        id,
+        userId: user.id,
+        ...notification,
+        isRead: false,
+        createdAt: new Date(),
+      };
+      this.notifications.set(id, newNotification);
+      notifications.push(newNotification);
+    }
+    
+    return notifications;
   }
 }
 

@@ -33,6 +33,7 @@ interface NavigationProps {
 const navLinks = [
   { label: "Главная", id: "hero" },
   { label: "Характеристики", id: "specifications" },
+  { label: "Галерея", id: "gallery" },
   { label: "Применение", id: "applications" },
   { label: "Документация", id: "documentation" },
   { label: "Контакты", id: "contact" },
@@ -51,6 +52,30 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
   
   // Filter to show only available devices
   const devices = allDevices.filter(d => availableDeviceIds.includes(d.id));
+
+  // Get products to check if gallery should be shown
+  const { data: products = [] } = useQuery({
+    queryKey: ['/api/products'],
+    queryFn: async () => {
+      const res = await fetch("/api/products");
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const currentProduct = products.find((p: any) => p.id === selectedDevice);
+  const hasGallery = currentProduct && 
+    (currentProduct as any)?.images && 
+    Array.isArray((currentProduct as any).images) && 
+    (currentProduct as any).images.length > 0;
+
+  // Filter nav links based on gallery availability
+  const visibleNavLinks = navLinks.filter(link => {
+    if (link.id === "gallery") {
+      return hasGallery;
+    }
+    return true;
+  });
 
   // Get current user
   const { data: userData, isLoading: isLoadingUser } = useQuery<User | null>({
@@ -107,7 +132,6 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
       localStorage.removeItem("refreshToken");
       queryClient.clear();
       setLocation("/");
-      window.location.reload();
     }
   };
 
@@ -174,7 +198,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
             </div>
 
             <div className="hidden lg:flex items-center gap-1 flex-1 justify-center">
-              {navLinks.map((link) => {
+              {visibleNavLinks.map((link) => {
                 return (
                   <Button
                     key={link.id}
@@ -284,7 +308,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-40 lg:hidden bg-background/98 backdrop-blur-md pt-20 animate-in slide-in-from-top">
           <div className="flex flex-col gap-2 p-6">
-            {navLinks.map((link) => {
+            {visibleNavLinks.map((link) => {
               return (
                 <Button
                   key={link.id}
