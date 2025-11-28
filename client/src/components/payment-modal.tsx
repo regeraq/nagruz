@@ -160,7 +160,8 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   };
 
   const handleQuantityChange = (delta: number) => {
-    setQuantity((prev) => Math.min(99, Math.max(1, prev + delta)));
+    const maxStock = product?.stock || 99;
+    setQuantity((prev) => Math.min(maxStock, Math.max(1, prev + delta)));
   };
 
 
