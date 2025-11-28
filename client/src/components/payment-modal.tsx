@@ -91,6 +91,12 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
           description: "Пожалуйста, авторизуйтесь для оформления заказа",
           variant: "default",
         });
+      } else if (error.message && error.message.includes("Недостаточно")) {
+        toast({
+          title: "Товар закончился",
+          description: error.message,
+          variant: "destructive",
+        });
       } else {
         toast({
           title: "Ошибка оформления",

@@ -1155,9 +1155,9 @@ export default function Profile() {
                   <Input
                     type="number"
                     min="1"
-                    max="99"
+                    max={selectedProduct?.stock || 99}
                     value={quantity}
-                    onChange={(e) => setQuantity(Math.min(99, Math.max(1, parseInt(e.target.value) || 1)))}
+                    onChange={(e) => setQuantity(Math.min(selectedProduct?.stock || 99, Math.max(1, parseInt(e.target.value) || 1)))}
                     className="text-center w-16"
                     data-testid="input-quantity"
                   />
