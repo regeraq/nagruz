@@ -494,6 +494,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const order = await storage.createOrder(orderData);
       
+      // Clear cache after order to show updated stock
+      cache.delete('products');
+      cache.delete('products-active');
+      
       // FIXED: Refresh product data after order creation to get updated stock
       const updatedProduct = await storage.getProduct(orderDataWithUserId.productId);
       
