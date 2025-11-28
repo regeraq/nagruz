@@ -438,8 +438,11 @@ export default function Admin() {
 
   // Add product image
   const addProductImage = useMutation({
-    mutationFn: async ({ productId, imageUrl }: { productId: string; imageUrl: string }) => {
-      const res = await apiRequest("POST", `/api/admin/products/${productId}/images`, { imageUrl });
+    mutationFn: async ({ productId, imageUrl, imageBase64 }: { productId: string; imageUrl?: string; imageBase64?: string }) => {
+      const res = await apiRequest("POST", `/api/admin/products/${productId}/images`, { 
+        imageUrl: imageUrl,
+        imageBase64: imageBase64
+      });
       return res.json();
     },
     onSuccess: () => {
@@ -456,8 +459,11 @@ export default function Admin() {
 
   // Remove product image
   const removeProductImage = useMutation({
-    mutationFn: async ({ productId, imageUrl }: { productId: string; imageUrl: string }) => {
-      const res = await apiRequest("DELETE", `/api/admin/products/${productId}/images`, { imageUrl });
+    mutationFn: async ({ productId, imageUrl, imageData }: { productId: string; imageUrl?: string; imageData?: string }) => {
+      const res = await apiRequest("DELETE", `/api/admin/products/${productId}/images`, { 
+        imageUrl: imageUrl,
+        imageData: imageData
+      });
       return res.json();
     },
     onSuccess: () => {
