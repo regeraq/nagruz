@@ -7,7 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Product } from "@shared/schema";
 import { SiVisa, SiMastercard, SiBitcoin, SiEthereum, SiLitecoin } from "react-icons/si";
@@ -49,6 +49,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
   const { data: userData } = useQuery({
     queryKey: ['/api/auth/me'],
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   useEffect(() => {
@@ -68,10 +69,11 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       setTimeLeft(15 * 60);
       setCryptoAddress("");
       
-      if (userData?.user) {
-        setCustomerName(`${userData.user.firstName || ""} ${userData.user.lastName || ""}`.trim());
-        setCustomerEmail(userData.user.email || "");
-        setCustomerPhone(userData.user.phone || "");
+      if (userData?.success && userData?.user) {
+        const user = userData.user;
+        setCustomerName(`${user.firstName || ""} ${user.lastName || ""}`.trim());
+        setCustomerEmail(user.email || "");
+        setCustomerPhone(user.phone || "");
       } else {
         setCustomerName("");
         setCustomerEmail("");
