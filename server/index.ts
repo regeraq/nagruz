@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import cookieParser from "cookie-parser";
 import { csrfToken, csrfProtection } from "./csrf";
+import { cache } from "./cache";
 
 const app = express();
 const isDevelopment = process.env.NODE_ENV === "development";
@@ -88,6 +89,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Clear cache on server startup to ensure fresh data
+  console.log("🧹 [Server] Clearing cache on startup");
+  cache.clear();
+
   // Initialize admin account
   try {
     const { initAdminAccount } = await import("./initAdmin");
