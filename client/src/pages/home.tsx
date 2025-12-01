@@ -184,18 +184,36 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const { data: userData } = useQuery({
+    queryKey: ['/api/auth/me'],
+  });
+
   const form = useForm<InsertContactSubmission>({
     resolver: zodResolver(insertContactSubmissionSchema),
     defaultValues: {
-      name: "",
-      phone: "",
-      email: "",
+      name: userData?.user ? `${userData.user.firstName || ""} ${userData.user.lastName || ""}`.trim() : "",
+      phone: userData?.user?.phone || "",
+      email: userData?.user?.email || "",
       company: "",
       message: "",
       fileName: null,
       fileData: null,
     },
   });
+
+  useEffect(() => {
+    if (userData?.user) {
+      form.reset({
+        name: `${userData.user.firstName || ""} ${userData.user.lastName || ""}`.trim(),
+        phone: userData.user.phone || "",
+        email: userData.user.email || "",
+        company: "",
+        message: "",
+        fileName: null,
+        fileData: null,
+      });
+    }
+  }, [userData, form]);
 
   const contactMutation = useMutation({
     mutationFn: async (data: InsertContactSubmission) => {

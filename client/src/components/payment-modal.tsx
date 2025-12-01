@@ -47,6 +47,10 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
     enabled: isOpen && ["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod),
   });
 
+  const { data: userData } = useQuery({
+    queryKey: ['/api/auth/me'],
+  });
+
   useEffect(() => {
     if (isOpen && timeLeft > 0) {
       const timer = setInterval(() => {
@@ -63,11 +67,18 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       setPaymentStatus("idle");
       setTimeLeft(15 * 60);
       setCryptoAddress("");
-      setCustomerName("");
-      setCustomerEmail("");
-      setCustomerPhone("");
+      
+      if (userData?.user) {
+        setCustomerName(`${userData.user.firstName || ""} ${userData.user.lastName || ""}`.trim());
+        setCustomerEmail(userData.user.email || "");
+        setCustomerPhone(userData.user.phone || "");
+      } else {
+        setCustomerName("");
+        setCustomerEmail("");
+        setCustomerPhone("");
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, userData]);
 
 
   const createOrderMutation = useMutation({
