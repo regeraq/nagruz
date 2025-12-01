@@ -422,24 +422,38 @@ export class DrizzleStorage implements IStorage {
   }
 
   async addProductImage(productId: string, imageUrl: string): Promise<any> {
+    console.log(`🖼️ [addProductImage] Starting for product: ${productId}`);
     const product = await this.getProduct(productId);
-    if (!product) return null;
+    if (!product) {
+      console.error(`❌ [addProductImage] Product not found: ${productId}`);
+      return null;
+    }
     
+    console.log(`📦 [addProductImage] Current images in DB:`, product.images);
     let images: string[] = [];
     if (product.images) {
       try {
         images = JSON.parse(product.images);
-      } catch {
+        console.log(`✅ [addProductImage] Parsed images (count: ${images.length}):`, images);
+      } catch (e) {
+        console.error(`❌ [addProductImage] Failed to parse images:`, e);
         images = [];
       }
     }
     
     if (!images.includes(imageUrl)) {
       images.push(imageUrl);
-      await this.updateProduct(productId, { images: JSON.stringify(images) });
+      console.log(`➕ [addProductImage] Added new image. Total images now: ${images.length}`);
+      console.log(`📝 [addProductImage] Saving to DB:`, JSON.stringify(images));
+      const updated = await this.updateProduct(productId, { images: JSON.stringify(images) });
+      console.log(`✅ [addProductImage] Saved to DB. Updated product:`, { id: updated.id, images: updated.images });
+    } else {
+      console.log(`⏭️ [addProductImage] Image already exists, skipping`);
     }
     
-    return { ...product, images };
+    const result = { ...product, images };
+    console.log(`✨ [addProductImage] Returning result with ${images.length} images`);
+    return result;
   }
 
   async removeProductImage(productId: string, imageUrl: string): Promise<any> {

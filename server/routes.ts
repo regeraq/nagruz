@@ -315,17 +315,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let products = cache.get(cacheKey);
       
       if (!products) {
+        console.log(`📦 [GET /api/products] Cache miss, fetching from DB`);
         const allProducts = await storage.getProducts();
-        products = allProducts.filter((p: any) => p.isActive !== false).map((p: any) => ({
-          ...p,
-          images: p.images ? (typeof p.images === 'string' ? JSON.parse(p.images) : p.images) : []
-        }));
+        console.log(`📦 [GET /api/products] Got ${allProducts.length} total products from DB`);
+        
+        products = allProducts.filter((p: any) => p.isActive !== false).map((p: any) => {
+          const parsedImages = p.images ? (typeof p.images === 'string' ? JSON.parse(p.images) : p.images) : [];
+          console.log(`📸 [GET /api/products] Product ${p.id}: ${parsedImages.length} images found in DB`);
+          return {
+            ...p,
+            images: parsedImages
+          };
+        });
+        
+        console.log(`✅ [GET /api/products] Parsed ${products.length} active products, setting cache`);
         cache.set(cacheKey, products, CACHE_TTL.PRODUCTS);
+      } else {
+        console.log(`⚡ [GET /api/products] Using cached products (${products.length} items)`);
       }
       
       res.json(products);
     } catch (error) {
-      console.error("Error fetching products:", error);
+      console.error("❌ Error fetching products:", error);
       res.status(500).json({
         success: false,
         message: "Ошибка при получении товаров",
@@ -1978,6 +1989,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ADMIN: Add product image (accepts both base64 and URL)
   app.post("/api/admin/products/:id/images", async (req, res) => {
     try {
+      console.log(`📸 [POST /api/admin/products/:id/images] Starting image upload for product: ${req.params.id}`);
       const token = req.headers.authorization?.replace("Bearer ", "");
       if (!token) {
         res.status(401).json({ success: false, message: "Not authenticated" });
@@ -1995,32 +2007,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const imageData = imageBase64 || imageUrl;
       
       if (!imageData || typeof imageData !== 'string') {
+        console.error(`❌ [POST /api/admin/products/:id/images] No image data provided`);
         res.status(400).json({ success: false, message: "Image data required" });
         return;
       }
 
+      console.log(`📝 [POST /api/admin/products/:id/images] Image data length: ${imageData.length} chars`);
+
       // Validate base64 size (max 5MB)
       if (imageData.startsWith('data:image')) {
         const base64Size = calculateBase64Size(imageData);
+        console.log(`📦 [POST /api/admin/products/:id/images] Base64 size: ${(base64Size / 1024 / 1024).toFixed(2)}MB`);
         if (base64Size > 5 * 1024 * 1024) {
           res.status(400).json({ success: false, message: "Image too large (max 5MB)" });
           return;
         }
       }
 
+      console.log(`🔄 [POST /api/admin/products/:id/images] Calling storage.addProductImage()`);
       const product = await storage.addProductImage(req.params.id, imageData);
       if (!product) {
+        console.error(`❌ [POST /api/admin/products/:id/images] Product not found`);
         res.status(404).json({ success: false, message: "Product not found" });
         return;
       }
 
+      console.log(`🗑️ [POST /api/admin/products/:id/images] Clearing caches`);
       // Clear product caches
       cache.delete('products');
       cache.delete('products-active');
+      console.log(`✅ [POST /api/admin/products/:id/images] Caches cleared`);
 
+      console.log(`✨ [POST /api/admin/products/:id/images] SUCCESS - returning product with ${product.images ? product.images.length : 0} images`);
       res.json({ success: true, product });
     } catch (error) {
-      console.error("Add product image error:", error);
+      console.error("❌ Add product image error:", error);
       res.status(500).json({ success: false, message: "Failed to add image" });
     }
   });
