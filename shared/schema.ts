@@ -104,7 +104,8 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   finalAmount: z.union([z.string(), z.number()]).transform(v => String(v)),
   customerName: z.string().min(2, "Имя должно содержать минимум 2 символа"),
   customerEmail: z.string().email("Введите корректный email"),
-  customerPhone: z.string().min(10, "Введите корректный номер телефона"),
+  customerPhone: z.string().min(5, "Введите корректный номер телефона"),
+  paymentMethod: z.string().min(1, "Выберите способ оплаты"),
   userId: z.string().nullable().optional(),
 });
 
