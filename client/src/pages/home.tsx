@@ -147,7 +147,10 @@ export default function Home() {
 
   // Get product images for current device
   const currentProduct = products.find((p: Product) => p.id === selectedDevice);
-  const productImages = (currentProduct as any)?.images || [];
+  const imagesData = (currentProduct as any)?.images;
+  const productImages = typeof imagesData === 'string' 
+    ? ((() => { try { return JSON.parse(imagesData); } catch { return []; } })()) 
+    : (Array.isArray(imagesData) ? imagesData : []);
 
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ['/api/admin/settings'],
