@@ -1,4 +1,9 @@
-import { generateNumericId } from "./utils";
+import { db } from "./db";
+import { 
+  users, products, orders, notifications, favorites, sessions,
+  contactSubmissions, loginAttempts, promoCodes, siteSettings
+} from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
   getUserByEmail(email: string): Promise<any>;
@@ -55,82 +60,22 @@ export interface IStorage {
   sendNotificationToAllUsers(notification: any): Promise<any>;
 }
 
-export class MemStorage implements IStorage {
-  public users = new Map();
-  private sessions = new Map();
-  private notifications = new Map();
-  private contacts = new Map();
-  private orders = new Map();
-  private favorites = new Map();
-  private loginAttempts = new Map();
-  private promoCodes = new Map();
-  private siteSettings = new Map();
-  private products = [
-    {
-      id: "nu-100",
-      name: "НУ-100",
-      description: "Professional load device",
-      price: "100000",
-      currency: "RUB",
-      sku: "NU-100",
-      specifications: "100 кВт, 20 ступеней",
-      stock: 10,
-      category: "Industrial",
-      imageUrl: null,
-      images: null,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: "nu-200",
-      name: "НУ-200",
-      description: "Powerful load device",
-      price: "150000",
-      currency: "RUB",
-      sku: "NU-200",
-      specifications: "200 кВт, 40 ступеней",
-      stock: 8,
-      category: "Industrial",
-      imageUrl: null,
-      images: null,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: "nu-30",
-      name: "НУ-30",
-      description: "Compact load device",
-      price: "50000",
-      currency: "RUB",
-      sku: "NU-30",
-      specifications: "30 кВт, 6 ступеней",
-      stock: 15,
-      category: "Industrial",
-      imageUrl: null,
-      images: null,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  ];
-
+export class DrizzleStorage implements IStorage {
   async getUserByEmail(email: string) {
-    return Array.from(this.users.values()).find((u: any) => u.email === email);
+    const result = await db.select().from(users).where(eq(users.email, email));
+    return result[0] || null;
   }
 
   async getUserById(id: string) {
-    return this.users.get(id);
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result[0] || null;
   }
 
   async createUser(user: any) {
-    const id = generateNumericId();
-    const newUser = {
-      id,
+    const result = await db.insert(users).values({
+      id: user.id || undefined,
       email: user.email,
-      password: user.password || null,
-      passwordHash: user.passwordHash || user.password || null,
+      passwordHash: user.passwordHash || null,
       firstName: user.firstName || null,
       lastName: user.lastName || null,
       avatar: user.avatar || null,
@@ -139,171 +84,242 @@ export class MemStorage implements IStorage {
       isEmailVerified: user.isEmailVerified || false,
       isPhoneVerified: user.isPhoneVerified || false,
       isBlocked: user.isBlocked || false,
-      createdAt: new Date(),
-    };
-    this.users.set(id, newUser);
-    return newUser;
+    }).returning();
+    return result[0];
+  }
+
+  async updateUser(id: string, data: any) {
+    const result = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    return result[0];
   }
 
   async getSessionByToken(token: string) {
-    return Array.from(this.sessions.values()).find((s: any) => s.token === token);
+    const result = await db.select().from(sessions).where(eq(sessions.refreshToken, token));
+    return result[0] || null;
   }
 
   async createSession(session: any) {
-    const id = generateNumericId();
-    const newSession = { id, ...session };
-    this.sessions.set(id, newSession);
-    return newSession;
+    const result = await db.insert(sessions).values({
+      id: session.id || undefined,
+      userId: session.userId,
+      refreshToken: session.refreshToken,
+      expiresAt: new Date(session.expiresAt),
+      ipAddress: session.ipAddress || null,
+      userAgent: session.userAgent || null,
+    }).returning();
+    return result[0];
   }
 
   async deleteSession(id: string) {
-    return this.sessions.delete(id);
+    await db.delete(sessions).where(eq(sessions.id, id));
+    return true;
   }
 
   async getAllNotifications(userId: string) {
-    return Array.from(this.notifications.values()).filter((n: any) => n.userId === userId);
+    return await db.select().from(notifications).where(eq(notifications.userId, userId));
   }
 
   async markNotificationAsRead(id: string) {
-    const notif = this.notifications.get(id);
-    if (notif) notif.isRead = true;
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
   }
 
   async deleteNotification(id: string) {
-    return this.notifications.delete(id);
+    await db.delete(notifications).where(eq(notifications.id, id));
+    return true;
   }
 
   async clearUserNotifications(userId: string) {
-    const notificationsToDelete = Array.from(this.notifications.values()).filter((n: any) => n.userId === userId);
-    notificationsToDelete.forEach((n: any) => {
-      Array.from(this.notifications.entries()).forEach(([key, val]) => {
-        if (val === n) this.notifications.delete(key);
-      });
-    });
+    await db.delete(notifications).where(eq(notifications.userId, userId));
     return true;
   }
 
   async createNotification(notification: any) {
-    const id = generateNumericId();
-    const newNotification = { id, ...notification, createdAt: new Date() };
-    this.notifications.set(id, newNotification);
-    return newNotification;
+    const result = await db.insert(notifications).values({
+      id: notification.id || undefined,
+      userId: notification.userId,
+      type: notification.type || "info",
+      title: notification.title || "",
+      message: notification.message || "",
+      isRead: false,
+    }).returning();
+    return result[0];
   }
 
   async getProducts() {
-    return this.products;
+    return await db.select().from(products);
   }
 
   async getProduct(id: string) {
-    return this.products.find((p: any) => p.id === id);
+    const result = await db.select().from(products).where(eq(products.id, id));
+    return result[0] || null;
   }
 
-  async getContact(id: string) {
-    return this.contacts.get(id);
+  async createProduct(product: any) {
+    const result = await db.insert(products).values({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      currency: product.currency || "RUB",
+      sku: product.sku,
+      specifications: product.specifications,
+      stock: product.stock || 0,
+      category: product.category || null,
+      imageUrl: product.imageUrl || null,
+      images: product.images ? JSON.stringify(product.images) : null,
+      isActive: product.isActive !== undefined ? product.isActive : true,
+    }).returning();
+    return result[0];
+  }
+
+  async updateProduct(id: string, data: any) {
+    const updateData: any = { ...data };
+    if (updateData.images && Array.isArray(updateData.images)) {
+      updateData.images = JSON.stringify(updateData.images);
+    }
+    const result = await db.update(products).set(updateData).where(eq(products.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteProduct(id: string) {
+    await db.delete(products).where(eq(products.id, id));
+    return true;
+  }
+
+  async deleteProducts(ids: string[]) {
+    let count = 0;
+    for (const id of ids) {
+      await db.delete(products).where(eq(products.id, id));
+      count++;
+    }
+    return count;
+  }
+
+  async updateProductPrice(id: string, price: string) {
+    const result = await db.update(products).set({ price }).where(eq(products.id, id)).returning();
+    return result[0];
+  }
+
+  async updateProductInfo(id: string, data: any) {
+    const result = await db.update(products).set(data).where(eq(products.id, id)).returning();
+    return result[0];
   }
 
   async createContactSubmission(data: any) {
-    const id = generateNumericId();
-    const submission = { id, ...data, createdAt: new Date() };
-    this.contacts.set(id, submission);
-    return submission;
+    const result = await db.insert(contactSubmissions).values({
+      id: data.id || undefined,
+      name: data.name,
+      phone: data.phone,
+      email: data.email,
+      company: data.company,
+      message: data.message,
+      fileName: data.fileName || null,
+      fileData: data.fileData || null,
+    }).returning();
+    return result[0];
+  }
+
+  async getContact(id: string) {
+    const result = await db.select().from(contactSubmissions).where(eq(contactSubmissions.id, id));
+    return result[0] || null;
   }
 
   async getContactSubmissions() {
-    return Array.from(this.contacts.values());
+    return await db.select().from(contactSubmissions);
   }
 
   async getContactSubmission(id: string) {
-    return this.contacts.get(id);
+    const result = await db.select().from(contactSubmissions).where(eq(contactSubmissions.id, id));
+    return result[0] || null;
+  }
+
+  async deleteContactSubmission(id: string) {
+    await db.delete(contactSubmissions).where(eq(contactSubmissions.id, id));
+    return true;
   }
 
   async recordLoginAttempt(email: string, success: boolean) {
-    if (!this.loginAttempts.has(email)) {
-      this.loginAttempts.set(email, []);
-    }
-    const attempts = this.loginAttempts.get(email);
-    attempts.push({ timestamp: new Date(), success });
-    if (attempts.length > 100) attempts.shift();
+    await db.insert(loginAttempts).values({
+      id: undefined,
+      email,
+      success,
+      ipAddress: null,
+    });
   }
 
   async getOrder(id: string) {
-    return this.orders.get(id);
+    const result = await db.select().from(orders).where(eq(orders.id, id));
+    return result[0] || null;
   }
 
   async updateOrderStatus(id: string, status: string, details?: string) {
-    const order = this.orders.get(id);
-    if (order) {
-      order.paymentStatus = status;
-      order.paymentDetails = details;
-      order.updatedAt = new Date();
-    }
-    return order;
+    const result = await db.update(orders).set({ paymentStatus: status, paymentDetails: details }).where(eq(orders.id, id)).returning();
+    return result[0];
   }
 
   async createOrder(order: any) {
-    const product = this.products.find(p => p.id === order.productId);
-    const id = generateNumericId();
-    const quantity = order.quantity || 1;
-    const price = product ? parseFloat(product.price) : 0;
-    const totalAmount = (price * quantity).toString();
-    const newOrder = { 
-      id, 
-      ...order, 
-      quantity,
-      totalAmount,
-      finalAmount: totalAmount,
-      productName: product?.name || "",
-      productPrice: product?.price || "0",
-      createdAt: new Date(), 
-      updatedAt: new Date() 
-    };
-    this.orders.set(id, newOrder);
-    if (product && product.stock >= quantity) {
-      product.stock -= quantity;
+    const result = await db.insert(orders).values({
+      id: order.id || undefined,
+      userId: order.userId || null,
+      productId: order.productId,
+      quantity: order.quantity || 1,
+      totalAmount: order.totalAmount,
+      discountAmount: order.discountAmount || "0",
+      finalAmount: order.finalAmount,
+      promoCode: order.promoCode || null,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus || "pending",
+      customerName: order.customerName || null,
+      customerEmail: order.customerEmail || null,
+      customerPhone: order.customerPhone || null,
+      paymentDetails: order.paymentDetails || null,
+    }).returning();
+    
+    if (order.quantity) {
+      const product = await this.getProduct(order.productId);
+      if (product) {
+        await this.updateProduct(order.productId, {
+          stock: Math.max(0, (product.stock || 0) - order.quantity),
+        });
+      }
     }
-    return newOrder;
+    
+    return result[0];
   }
 
   async getUserOrders(userId: string) {
-    return Array.from(this.orders.values()).filter((o: any) => o.userId === userId);
+    return await db.select().from(orders).where(eq(orders.userId, userId));
   }
 
   async getAllOrders() {
-    return Array.from(this.orders.values());
+    return await db.select().from(orders);
   }
 
   async addToFavorites(userId: string, productId: string) {
-    const key = `${userId}:${productId}`;
-    const product = this.products.find((p: any) => p.id === productId);
-    if (!product) return null;
-    const favorite = { userId, productId, product, createdAt: new Date() };
-    this.favorites.set(key, favorite);
-    return favorite;
+    const result = await db.insert(favorites).values({
+      id: undefined,
+      userId,
+      productId,
+    }).returning();
+    return result[0];
   }
 
   async removeFavorite(userId: string, productId: string) {
-    const key = `${userId}:${productId}`;
-    return this.favorites.delete(key);
+    await db.delete(favorites).where(and(eq(favorites.userId, userId), eq(favorites.productId, productId)));
+    return true;
   }
 
   async getUserFavorites(userId: string) {
-    return Array.from(this.favorites.values()).filter((f: any) => f.userId === userId);
+    return await db.select().from(favorites).where(eq(favorites.userId, userId));
   }
 
   async validatePromoCode(code: string) {
-    const promo = Array.from(this.promoCodes.values()).find((p: any) => p.code === code);
+    const result = await db.select().from(promoCodes).where(eq(promoCodes.code, code));
+    const promo = result[0];
     
-    if (!promo) {
-      return null;
-    }
-    
-    if (promo.isActive === 0 || promo.isActive === false) {
-      return null;
-    }
-    
-    if (promo.expiresAt && new Date(promo.expiresAt) < new Date()) {
-      return null;
-    }
+    if (!promo) return null;
+    if (!promo.isActive) return null;
+    if (promo.expiresAt && new Date(promo.expiresAt) < new Date()) return null;
     
     return {
       valid: true,
@@ -313,242 +329,153 @@ export class MemStorage implements IStorage {
     };
   }
 
-  async updateProductPrice(id: string, price: string) {
-    const product = this.products.find(p => p.id === id);
-    if (product) {
-      product.price = price;
-      product.updatedAt = new Date();
-    }
-    return product;
-  }
-
-  async updateProductInfo(id: string, data: any) {
-    const product = this.products.find(p => p.id === id);
-    if (product) {
-      Object.assign(product, data, { updatedAt: new Date() });
-    }
-    return product;
-  }
-
-  async updateUser(id: string, data: any) {
-    const user = this.users.get(id);
-    if (user) {
-      Object.assign(user, data, { updatedAt: new Date() });
-    }
-    return user;
-  }
-
-  async createProduct(product: any) {
-    const id = product.id || generateNumericId();
-    const newProduct = {
-      id,
-      ...product,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    this.products.push(newProduct);
-    return newProduct;
-  }
-
-  async updateProduct(id: string, data: any) {
-    const product = this.products.find(p => p.id === id);
-    if (product) {
-      Object.assign(product, data, { updatedAt: new Date() });
-    }
-    return product;
-  }
-
-  async deleteProduct(id: string) {
-    const index = this.products.findIndex(p => p.id === id);
-    if (index !== -1) {
-      this.products.splice(index, 1);
-      return true;
-    }
-    return false;
-  }
-
-  async deleteProducts(ids: string[]) {
-    let deleted = 0;
-    for (const id of ids) {
-      const index = this.products.findIndex(p => p.id === id);
-      if (index !== -1) {
-        this.products.splice(index, 1);
-        deleted++;
-      }
-    }
-    return deleted;
-  }
-
-  async deleteContactSubmission(id: string) {
-    return this.contacts.delete(id);
-  }
-
   async getAllUsers() {
-    return Array.from(this.users.values());
+    return await db.select().from(users);
   }
 
   async updateUserRole(id: string, role: string) {
-    const user = this.users.get(id);
-    if (user) {
-      user.role = role;
-      user.updatedAt = new Date();
-    }
-    return user;
+    const result = await db.update(users).set({ role }).where(eq(users.id, id)).returning();
+    return result[0];
   }
 
   async blockUser(id: string, blocked: boolean) {
-    const user = this.users.get(id);
-    if (user) {
-      user.isBlocked = blocked;
-      user.updatedAt = new Date();
-    }
-    return user;
+    const result = await db.update(users).set({ isBlocked: blocked }).where(eq(users.id, id)).returning();
+    return result[0];
   }
 
   async deleteUser(id: string) {
-    const deleted = this.users.delete(id);
-    if (deleted) {
-      Array.from(this.sessions.values()).forEach((s: any) => {
-        if (s.userId === id) {
-          Array.from(this.sessions.entries()).forEach(([key, val]) => {
-            if (val === s) this.sessions.delete(key);
-          });
-        }
-      });
-    }
-    return deleted;
+    await db.delete(users).where(eq(users.id, id));
+    return true;
   }
 
   async getPromoCodes() {
-    return Array.from(this.promoCodes.values());
+    return await db.select().from(promoCodes);
   }
 
   async getPromoCode(id: string) {
-    return this.promoCodes.get(id);
+    const result = await db.select().from(promoCodes).where(eq(promoCodes.id, id));
+    return result[0] || null;
   }
 
   async createPromoCode(promo: any) {
-    const id = generateNumericId();
-    const newPromo = {
-      id,
-      ...promo,
-      createdAt: new Date(),
-    };
-    this.promoCodes.set(id, newPromo);
-    return newPromo;
+    const result = await db.insert(promoCodes).values({
+      id: promo.id || undefined,
+      code: promo.code,
+      discountPercent: promo.discountPercent,
+      expiresAt: promo.expiresAt ? new Date(promo.expiresAt) : null,
+      isActive: promo.isActive || 1,
+    }).returning();
+    return result[0];
   }
 
   async updatePromoCode(id: string, data: any) {
-    const promo = this.promoCodes.get(id);
-    if (promo) {
-      Object.assign(promo, data);
-    }
-    return promo;
+    const result = await db.update(promoCodes).set(data).where(eq(promoCodes.id, id)).returning();
+    return result[0];
   }
 
   async deletePromoCode(id: string) {
-    return this.promoCodes.delete(id);
+    await db.delete(promoCodes).where(eq(promoCodes.id, id));
+    return true;
   }
 
   async getSiteSettings() {
-    return Array.from(this.siteSettings.values());
+    return await db.select().from(siteSettings);
   }
 
   async getSiteSetting(key: string) {
-    return Array.from(this.siteSettings.values()).find((s: any) => s.key === key);
+    const result = await db.select().from(siteSettings).where(eq(siteSettings.key, key));
+    return result[0] || null;
   }
 
-  async setSiteSetting(key: string, value: string, type: string = 'string', description?: string) {
-    let setting = Array.from(this.siteSettings.values()).find((s: any) => s.key === key);
-    if (setting) {
-      setting.value = value;
-      setting.type = type;
-      if (description) setting.description = description;
-      setting.updatedAt = new Date();
+  async setSiteSetting(key: string, value: string, type: string = "string", description?: string) {
+    const existing = await this.getSiteSetting(key);
+    if (existing) {
+      const result = await db.update(siteSettings).set({ value, type, description }).where(eq(siteSettings.key, key)).returning();
+      return result[0];
     } else {
-      const id = generateNumericId();
-      setting = {
-        id,
+      const result = await db.insert(siteSettings).values({
+        id: undefined,
         key,
         value,
         type,
-        description: description || '',
-        updatedAt: new Date(),
-      };
-      this.siteSettings.set(id, setting);
+        description: description || "",
+      }).returning();
+      return result[0];
     }
-    return setting;
   }
 
   async getProductImages(productId: string): Promise<string[]> {
-    const product = this.products.find((p: any) => p.id === productId);
+    const product = await this.getProduct(productId);
     if (!product) return [];
-    return (product.images as string[]) || [];
+    if (!product.images) return [];
+    try {
+      return JSON.parse(product.images);
+    } catch {
+      return [];
+    }
   }
 
   async addProductImage(productId: string, imageUrl: string): Promise<any> {
-    const product = this.products.find((p: any) => p.id === productId);
+    const product = await this.getProduct(productId);
     if (!product) return null;
     
-    if (!product.images) {
-      product.images = [];
-    }
-    if (!Array.isArray(product.images)) {
-      product.images = [];
-    }
-    
-    if (!product.images.includes(imageUrl)) {
-      product.images.push(imageUrl);
-      product.updatedAt = new Date();
+    let images: string[] = [];
+    if (product.images) {
+      try {
+        images = JSON.parse(product.images);
+      } catch {
+        images = [];
+      }
     }
     
-    return product;
+    if (!images.includes(imageUrl)) {
+      images.push(imageUrl);
+      await this.updateProduct(productId, { images: JSON.stringify(images) });
+    }
+    
+    return { ...product, images };
   }
 
   async removeProductImage(productId: string, imageUrl: string): Promise<any> {
-    const product = this.products.find((p: any) => p.id === productId);
+    const product = await this.getProduct(productId);
     if (!product) return null;
     
-    if (product.images && Array.isArray(product.images)) {
-      product.images = product.images.filter((img: string) => img !== imageUrl);
-      product.updatedAt = new Date();
+    let images: string[] = [];
+    if (product.images) {
+      try {
+        images = JSON.parse(product.images);
+      } catch {
+        images = [];
+      }
     }
     
-    return product;
+    images = images.filter(img => img !== imageUrl);
+    await this.updateProduct(productId, { images: JSON.stringify(images) });
+    
+    return { ...product, images };
   }
 
   async sendNotificationToUser(userId: string, notification: any): Promise<any> {
-    const id = generateNumericId();
-    const newNotification = {
-      id,
+    return await this.createNotification({
       userId,
       ...notification,
-      isRead: false,
-      createdAt: new Date(),
-    };
-    this.notifications.set(id, newNotification);
-    return newNotification;
+    });
   }
 
   async sendNotificationToAllUsers(notification: any): Promise<any[]> {
-    const allUsers = Array.from(this.users.values());
-    const notifications = [];
+    const allUsers = await this.getAllUsers();
+    const results = [];
     
     for (const user of allUsers) {
-      const id = generateNumericId();
-      const newNotification = {
-        id,
+      const result = await this.createNotification({
         userId: user.id,
         ...notification,
-        isRead: false,
-        createdAt: new Date(),
-      };
-      this.notifications.set(id, newNotification);
-      notifications.push(newNotification);
+      });
+      results.push(result);
     }
     
-    return notifications;
+    return results;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DrizzleStorage();
