@@ -737,7 +737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth endpoints
   app.post("/api/auth/register", rateLimiters.general, async (req, res) => {
     try {
-      const { email, password, firstName, lastName } = req.body;
+      const { email, password, firstName, lastName, phone } = req.body;
       
       if (!email || !password) {
         res.status(400).json({ success: false, message: "Email and password required" });
@@ -753,9 +753,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hashedPassword = await hashPassword(password);
       const user = await storage.createUser({
         email,
-        password: hashedPassword,
+        passwordHash: hashedPassword,
         firstName: firstName || null,
         lastName: lastName || null,
+        phone: phone || null,
         role: "user",
       });
 
