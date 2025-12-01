@@ -72,8 +72,8 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createUser(user: any) {
-    // Generate numeric user ID
-    const userId = user.id || `${Date.now()}${Math.floor(Math.random() * 1000000)}`;
+    // Generate short numeric user ID (10 digits)
+    const userId = user.id || `${Math.floor(Math.random() * 10000000000)}`;
     const result = await db.insert(users).values({
       id: userId,
       email: user.email,
@@ -208,8 +208,8 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createContactSubmission(data: any) {
-    // Generate numeric submission ID
-    const submissionId = data.id || `${Date.now()}${Math.floor(Math.random() * 1000000)}`;
+    // Generate short numeric submission ID (10 digits)
+    const submissionId = data.id || `${Math.floor(Math.random() * 10000000000)}`;
     const result = await db.insert(contactSubmissions).values({
       id: submissionId,
       name: data.name,
@@ -262,8 +262,8 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createOrder(order: any) {
-    // Generate numeric order ID
-    const orderId = order.id || `${Date.now()}${Math.floor(Math.random() * 1000000)}`;
+    // Generate short numeric order ID (10 digits)
+    const orderId = order.id || `${Math.floor(Math.random() * 10000000000)}`;
     const result = await db.insert(orders).values({
       id: orderId,
       userId: order.userId || null,
