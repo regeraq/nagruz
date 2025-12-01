@@ -18,7 +18,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertContactSubmissionSchema, type InsertContactSubmission, type Product } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Navigation } from "@/components/navigation";
 import { PowerGauge } from "@/components/power-gauge";
@@ -186,14 +186,15 @@ export default function Home() {
 
   const { data: userData } = useQuery({
     queryKey: ['/api/auth/me'],
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   const form = useForm<InsertContactSubmission>({
     resolver: zodResolver(insertContactSubmissionSchema),
     defaultValues: {
-      name: userData?.user ? `${userData.user.firstName || ""} ${userData.user.lastName || ""}`.trim() : "",
-      phone: userData?.user?.phone || "",
-      email: userData?.user?.email || "",
+      name: userData?.success && userData?.user ? `${userData.user.firstName || ""} ${userData.user.lastName || ""}`.trim() : "",
+      phone: userData?.success && userData?.user?.phone ? userData.user.phone : "",
+      email: userData?.success && userData?.user?.email ? userData.user.email : "",
       company: "",
       message: "",
       fileName: null,
@@ -202,11 +203,12 @@ export default function Home() {
   });
 
   useEffect(() => {
-    if (userData?.user) {
+    if (userData?.success && userData?.user) {
+      const user = userData.user;
       form.reset({
-        name: `${userData.user.firstName || ""} ${userData.user.lastName || ""}`.trim(),
-        phone: userData.user.phone || "",
-        email: userData.user.email || "",
+        name: `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+        phone: user.phone || "",
+        email: user.email || "",
         company: "",
         message: "",
         fileName: null,
