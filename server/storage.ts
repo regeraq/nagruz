@@ -72,8 +72,8 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createUser(user: any) {
-    // Generate readable user ID with prefix for easier admin search
-    const userId = user.id || `USER_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    // Generate numeric user ID
+    const userId = user.id || `${Date.now()}${Math.floor(Math.random() * 1000000)}`;
     const result = await db.insert(users).values({
       id: userId,
       email: user.email,
@@ -208,8 +208,8 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createContactSubmission(data: any) {
-    // Generate readable submission ID with prefix for easier admin search
-    const submissionId = data.id || `CONT_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    // Generate numeric submission ID
+    const submissionId = data.id || `${Date.now()}${Math.floor(Math.random() * 1000000)}`;
     const result = await db.insert(contactSubmissions).values({
       id: submissionId,
       name: data.name,
@@ -262,8 +262,8 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createOrder(order: any) {
-    // Generate readable order ID with prefix for easier admin search
-    const orderId = order.id || `ORD_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    // Generate numeric order ID
+    const orderId = order.id || `${Date.now()}${Math.floor(Math.random() * 1000000)}`;
     const result = await db.insert(orders).values({
       id: orderId,
       userId: order.userId || null,
