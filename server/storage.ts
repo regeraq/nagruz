@@ -72,8 +72,10 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createUser(user: any) {
+    // Generate readable user ID with prefix for easier admin search
+    const userId = user.id || `USER_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const result = await db.insert(users).values({
-      id: user.id || undefined,
+      id: userId,
       email: user.email,
       passwordHash: user.passwordHash || null,
       firstName: user.firstName || null,
@@ -206,8 +208,10 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createContactSubmission(data: any) {
+    // Generate readable submission ID with prefix for easier admin search
+    const submissionId = data.id || `CONT_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const result = await db.insert(contactSubmissions).values({
-      id: data.id || undefined,
+      id: submissionId,
       name: data.name,
       phone: data.phone,
       email: data.email,
@@ -258,8 +262,10 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createOrder(order: any) {
+    // Generate readable order ID with prefix for easier admin search
+    const orderId = order.id || `ORD_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const result = await db.insert(orders).values({
-      id: order.id || undefined,
+      id: orderId,
       userId: order.userId || null,
       productId: order.productId,
       quantity: order.quantity || 1,
