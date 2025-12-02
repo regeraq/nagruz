@@ -2,10 +2,30 @@
 
 ## Overview
 
-Fully integrated B2B website for industrial load testing devices (НУ-100 and НУ-30) with Russian language support, complete authentication system, profile management with working orders/favorites/notifications, comprehensive multi-functional admin panel, and Resend email integration.
+Fully integrated B2B website for industrial load testing devices (НУ-100, НУ-200, and НУ-30) with Russian language support, complete authentication system, profile management with working orders/favorites/notifications, comprehensive multi-functional admin panel, and Resend email integration.
 
 **Status**: ✅ PRODUCTION READY  
-**Last Updated**: November 24, 2025 (Data Synchronization Complete)
+**Last Updated**: December 2, 2025 (PostgreSQL Migration Complete)
+
+## Database Configuration
+
+**IMPORTANT FOR DEPLOYMENT**: This project uses standard PostgreSQL (not cloud-specific solutions like Neon) for portability to external hosting.
+
+### Database Driver
+- Uses `pg` (node-postgres) driver instead of Neon serverless
+- Standard PostgreSQL connection via DATABASE_URL
+- Compatible with any PostgreSQL hosting provider
+
+### Admin Account
+- **Email**: rostext@gmail.com
+- **Password**: 125607
+- **Role**: superadmin
+
+### Default Products
+Three products are auto-created on startup:
+- НУ-100 (100 кВт, 20 ступеней) - 100,000 RUB
+- НУ-200 (200 кВт, 40 ступеней) - 150,000 RUB  
+- НУ-30 (30 кВт, 6 ступеней) - 50,000 RUB
 
 ## User Preferences
 
@@ -49,12 +69,17 @@ Preferred communication style: Simple, everyday language.
 - Submission IDs included in emails for tracking
 - User IDs included in order emails for identification
 
-**Data Storage**: In-memory storage (MemStorage) with Map-based data structures.
+**Data Storage**: PostgreSQL with Drizzle ORM (standard pg driver for portability).
 
 **ID Generation**: 
-- NEW: Simple numeric IDs (instead of UUID) - sequential timestamps for easier human reference
+- Simple numeric IDs for human readability
 - Format: Simple integer sequence (e.g., 1763935804)
 - All entities: users, sessions, notifications, contacts, orders use numeric IDs
+
+**Database Files**:
+- `server/db.ts` - PostgreSQL connection using pg driver
+- `server/storage.ts` - Database operations interface (DatabaseStorage)
+- `shared/schema.ts` - Drizzle schema definitions
 
 **Security Enhancements**:
 - Rate limiting on all endpoints (contact, orders, crypto-rates, general)
@@ -136,7 +161,7 @@ Preferred communication style: Simple, everyday language.
 
 ## Key Implementation Notes
 
-**In-Memory Storage**: Currently all data is in-memory. On app restart, data resets but this is suitable for development/demo.
+**PostgreSQL Storage**: Data persists in PostgreSQL database. Schema managed by Drizzle ORM with `npm run db:push` for migrations.
 
 **Email Workflow**: 
 - Contact form → Email to admin with submission ID
@@ -180,13 +205,31 @@ Preferred communication style: Simple, everyday language.
 6. **Homepage Integration**: Contact information on homepage now pulls from admin-configured settings
 7. **Cache Invalidation**: All mutations properly invalidate relevant caches for immediate UI updates
 
+## Recent Updates (Session 4 - PostgreSQL Migration - December 2, 2025)
+
+1. **PostgreSQL Migration**: Migrated from Neon serverless to standard PostgreSQL with pg driver
+2. **Database Portability**: Uses standard node-postgres for deployment to any PostgreSQL hosting
+3. **Admin Initialization**: Auto-creates superadmin (rostext@gmail.com) and 3 default products on startup
+4. **JWT Authentication**: Working access/refresh token system with secure password hashing
+5. **Auto-Fill Functionality**: Payment modal and contact forms auto-populate from user profile
+6. **Image Storage**: Product images stored as JSON array in database (admin can upload via admin panel)
+7. **Security Verified**: Rate limiting, CSRF, XSS protection, SQL injection prevention via Drizzle ORM
+
 ## Deployment Ready
 
 The application is production-ready with:
-- ✅ Complete authentication system
-- ✅ Working order management
+- ✅ PostgreSQL database (portable to any hosting)
+- ✅ Complete authentication system with JWT tokens
+- ✅ Working order management with user profile auto-fill
 - ✅ Email notifications via Resend
 - ✅ Admin panel with full functionality
-- ✅ Security measures implemented
+- ✅ Security measures (rate limiting, CSRF, XSS, SQL injection protection)
 - ✅ Error handling and validation
-- ✅ Rate limiting and CSRF protection
+- ✅ Product image management
+
+### Deployment Instructions
+1. Set up PostgreSQL database on your hosting
+2. Configure DATABASE_URL environment variable
+3. Run `npm run db:push` to create tables
+4. Set RESEND_API_KEY and OWNER_EMAIL for email functionality
+5. Deploy and access admin panel at /admin with rostext@gmail.com / 125607
