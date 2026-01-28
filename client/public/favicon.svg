@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#bg)" rx="20"/>
+  <g transform="translate(50,50)">
+    <!-- Спидометр -->
+    <circle cx="0" cy="0" r="35" fill="none" stroke="white" stroke-width="3" opacity="0.3"/>
+    <circle cx="0" cy="0" r="28" fill="none" stroke="white" stroke-width="2.5" opacity="0.5"/>
+    <!-- Шкала -->
+    <path d="M -25 -5 L -30 0 L -25 5" fill="white" opacity="0.8"/>
+    <path d="M 0 -30 L 0 -35" stroke="white" stroke-width="2.5" opacity="0.8"/>
+    <path d="M 25 -5 L 30 0 L 25 5" fill="white" opacity="0.8"/>
+    <path d="M 17.5 21.5 L 21 25" stroke="white" stroke-width="2" opacity="0.6"/>
+    <path d="M -17.5 21.5 L -21 25" stroke="white" stroke-width="2" opacity="0.6"/>
+    <!-- Стрелка (показывает около 70%) -->
+    <line x1="0" y1="0" x2="0" y2="-22" stroke="white" stroke-width="3" stroke-linecap="round" transform="rotate(-20)"/>
+    <!-- Центр -->
+    <circle cx="0" cy="0" r="4" fill="white"/>
+  </g>
+</svg>
+
+
+
+

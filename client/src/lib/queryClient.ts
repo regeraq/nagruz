@@ -2,8 +2,60 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let errorMessage = "Произошла ошибка";
+    
+    try {
+      const text = await res.text();
+      if (text) {
+        try {
+          const json = JSON.parse(text);
+          // Use server-provided message if available
+          if (json.message) {
+            errorMessage = json.message;
+          } else {
+            // Map status codes to user-friendly messages
+            if (res.status === 401) {
+              errorMessage = "Требуется авторизация";
+            } else if (res.status === 403) {
+              errorMessage = "Доступ запрещен";
+            } else if (res.status === 404) {
+              errorMessage = "Ресурс не найден";
+            } else if (res.status === 400) {
+              errorMessage = "Неверный запрос";
+            } else if (res.status >= 500) {
+              errorMessage = "Ошибка сервера. Попробуйте позже";
+            }
+          }
+        } catch {
+          // If JSON parsing fails, use status-based message
+          if (res.status === 401) {
+            errorMessage = "Требуется авторизация";
+          } else if (res.status === 403) {
+            errorMessage = "Доступ запрещен";
+          } else if (res.status === 404) {
+            errorMessage = "Ресурс не найден";
+          } else if (res.status >= 500) {
+            errorMessage = "Ошибка сервера. Попробуйте позже";
+          }
+        }
+      }
+    } catch {
+      // Fallback to status-based message
+      if (res.status === 401) {
+        errorMessage = "Требуется авторизация";
+      } else if (res.status === 403) {
+        errorMessage = "Доступ запрещен";
+      } else if (res.status === 404) {
+        errorMessage = "Ресурс не найден";
+      } else if (res.status >= 500) {
+        errorMessage = "Ошибка сервера. Попробуйте позже";
+      }
+    }
+    
+    const error: any = new Error(errorMessage);
+    error.status = res.status;
+    error.response = { status: res.status };
+    throw error;
   }
 }
 
@@ -113,7 +165,8 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: 5 * 60 * 1000, // 5 minutes - keep data fresh longer
+      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache longer (formerly cacheTime)
       retry: false,
     },
     mutations: {

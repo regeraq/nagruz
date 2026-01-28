@@ -86,7 +86,6 @@ setInterval(() => {
 
 // Cache TTL constants
 export const CACHE_TTL = {
-  CRYPTO_RATES: 30 * 1000, // 30 seconds
   PRODUCTS: 5 * 60 * 1000, // 5 minutes
   PROMO_CODES: 60 * 1000, // 1 minute
 } as const;

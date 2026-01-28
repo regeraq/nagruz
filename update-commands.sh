@@ -1,0 +1,62 @@
+#!/bin/bash
+set -e
+
+cd /var/www/loaddevice
+
+echo "📍 Текущий коммит:"
+git rev-parse HEAD || echo "unknown"
+echo ""
+
+echo "📥 Получение обновлений из GitHub..."
+git fetch origin
+
+LOCAL=$(git rev-parse @)
+REMOTE=$(git rev-parse origin/main)
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+    echo "✅ Проект уже актуален. Обновлений нет."
+    exit 0
+fi
+
+echo "🔄 Обнаружены новые изменения!"
+echo "   Локальный: $LOCAL"
+echo "   Удаленный: $REMOTE"
+echo ""
+
+echo "📥 Обновление кода..."
+git reset --hard origin/main
+git clean -fd
+
+echo ""
+echo "📦 Установка зависимостей..."
+npm install --production=false
+
+echo ""
+echo "🔨 Сборка проекта..."
+npm run build
+
+echo ""
+echo "🗄️  Применение миграций базы данных..."
+npm run db:push || echo "⚠️  Миграции применены или отсутствуют"
+
+echo ""
+echo "🔄 Перезапуск приложения..."
+if pm2 list | grep -q "loaddevice"; then
+    pm2 restart loaddevice
+    echo "✅ Приложение перезапущено"
+else
+    echo "⚠️  Приложение не найдено в PM2, запускаю..."
+    pm2 start dist/index.js --name loaddevice --max-memory-restart 500M
+fi
+
+pm2 save
+
+echo ""
+echo "📊 Статус приложения:"
+pm2 status
+
+echo ""
+echo "✅ Обновление завершено!"
+echo "📍 Новый коммит:"
+git rev-parse HEAD
+

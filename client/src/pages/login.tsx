@@ -39,11 +39,12 @@ export default function Login() {
     setError(null);
 
     try {
-      // Get CSRF token
+      // Get CSRF token first (required for login)
       const csrfResponse = await fetch("/api/csrf-token", { credentials: "include" });
       const csrfData = await csrfResponse.json();
       const csrfToken = csrfData.token;
 
+      // Login immediately after getting token
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
@@ -84,16 +85,17 @@ export default function Login() {
         localStorage.setItem("refreshToken", result.tokens.refreshToken);
       }
 
-      // Invalidate and refetch user data
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      // Invalidate and refetch user data (don't await - do it in background)
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
 
+      // Redirect immediately
+      setLocation("/profile");
+      
+      // Show toast after redirect
       toast({
         title: "Успешно",
         description: "Вход выполнен успешно",
       });
-
-      // Redirect to profile or home without reload
-      setLocation("/profile");
     } catch (err) {
       setError("Произошла ошибка при входе");
       console.error("Login error:", err);

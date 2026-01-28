@@ -1,3 +1,25 @@
+//удалить что ниже
+// === ДОБАВЬТЕ ЭТО В НАЧАЛО ФАЙЛА ===
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Определяем __dirname для ES модулей
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Загружаем .env файл из корня проекта
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+// Проверяем загрузку переменных окружения
+console.log('=== ЗАГРУЗКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ===');
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✓ установлен' : '✗ НЕ установлен!');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'не установлен');
+console.log('PORT:', process.env.PORT || '5000 (по умолчанию)');
+console.log('====================================');
+// === КОНЕЦ ДОБАВЛЕНИЯ ===
+//если что удалить что выше
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -18,14 +40,14 @@ declare module 'http' {
 app.use(cookieParser());
 
 // Security: Different body size limits for different content types
-// Large limit only for file uploads, smaller for regular API
+// Large limit for file uploads (contact forms with attachments)
 app.use(express.json({
-  limit: '1mb', // Reduced from 30mb for most endpoints
+  limit: '15mb', // Increased for file uploads (base64 encoded files can be large)
   verify: (req, _res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+app.use(express.urlencoded({ extended: false, limit: '15mb' }));
 
 // CSRF protection: Generate tokens for GET requests
 app.use(csrfToken);
@@ -54,6 +76,27 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   // Referrer policy
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  // Content Security Policy
+  // Allow same-origin, inline scripts/styles for React/Vite, and external APIs
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // unsafe-eval needed for Vite in dev
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://api.resend.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ');
+  res.setHeader('Content-Security-Policy', csp);
+  
+  // Strict Transport Security (HSTS) - only in production with HTTPS
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
+  
   next();
 });
 
@@ -154,11 +197,21 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+  
+  // Listen on all interfaces to allow access from other devices on the network
+  const isWindows = process.platform === 'win32';
+  const host = '0.0.0.0'; // Listen on all network interfaces
+  
   server.listen({
     port,
-    host: "0.0.0.0",
-    reusePort: true,
+    host,
+    ...(isWindows ? {} : { reusePort: true }),
   }, () => {
     log(`serving on port ${port} (${isDevelopment ? 'development' : 'production'})`);
+    log(`🌐 Server accessible at:`);
+    log(`   - http://localhost:${port}`);
+    log(`   - http://127.0.0.1:${port}`);
+    log(`   - http://<your-local-ip>:${port} (for other devices on your network)`);
+    log(`   To find your local IP, run: ipconfig (Windows) or ifconfig (Mac/Linux)`);
   });
 })();

@@ -124,13 +124,6 @@ export const rateLimiters = {
     message: 'Слишком много запросов на проверку промокода.',
   }),
 
-  // Crypto rates: 60 requests per minute
-  cryptoRates: createRateLimiter({
-    windowMs: 60 * 1000, // 1 minute
-    max: 60,
-    message: 'Слишком много запросов курсов.',
-  }),
-
   // General API: 100 requests per minute
   general: createRateLimiter({
     windowMs: 60 * 1000, // 1 minute

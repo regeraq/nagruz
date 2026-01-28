@@ -8,11 +8,13 @@ interface PowerGaugeProps {
 export function PowerGauge({ maxPower, useEnhancedScale = false }: PowerGaugeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number>();
-  const needleAngleRef = useRef<number>(-135);
+  const startAngle = -135; // Начальный угол стрелки
+  const needleAngleRef = useRef<number>(startAngle);
   const hoverStepRef = useRef<number>(0);
   const isHoveringRef = useRef<boolean>(false);
   const isInitialLoadRef = useRef<boolean>(true);
   const loadStepRef = useRef<number>(0);
+  const startAnimationRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     // Reset animation state on power change
@@ -26,7 +28,9 @@ export function PowerGauge({ maxPower, useEnhancedScale = false }: PowerGaugePro
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const size = 300;
+    // Responsive canvas size
+    const isMobile = window.innerWidth < 640;
+    const size = isMobile ? 240 : 300;
     canvas.width = size;
     canvas.height = size;
 
@@ -40,7 +44,7 @@ export function PowerGauge({ maxPower, useEnhancedScale = false }: PowerGaugePro
       : 150;                             // Fixed: always 150 for NU-100 and NU-30
     
     // Calculate target angle for current power level
-    const targetAngle = -135 + (maxPower / scaleMax) * 270;
+    const targetAngle = startAngle + (maxPower / scaleMax) * 270;
     const totalSteps = 50;
 
     const drawGauge = (angle: number) => {
@@ -174,20 +178,40 @@ export function PowerGauge({ maxPower, useEnhancedScale = false }: PowerGaugePro
       let angle = needleAngleRef.current;
       let shouldContinue = false;
 
-      if (isHoveringRef.current && hoverStepRef.current < totalSteps) {
-        shouldContinue = true;
-        const progress = hoverStepRef.current / totalSteps;
-        angle = -135 + (targetAngle - (-135)) * easeOutCubic(progress);
-        hoverStepRef.current++;
-      } else if (isInitialLoadRef.current && loadStepRef.current < totalSteps) {
+      // Анимация при наведении - запускается каждый раз заново от начального угла
+      if (isHoveringRef.current) {
+        if (hoverStepRef.current < totalSteps) {
+          shouldContinue = true;
+          const progress = hoverStepRef.current / totalSteps;
+          // Анимация всегда от начального угла до целевого при каждом наведении
+          angle = startAngle + (targetAngle - startAngle) * easeOutCubic(progress);
+          hoverStepRef.current++;
+          needleAngleRef.current = angle;
+        } else {
+          // Анимация завершена, стрелка на целевом значении
+          needleAngleRef.current = targetAngle;
+        }
+      } 
+      // Анимация при первой загрузке
+      else if (isInitialLoadRef.current && loadStepRef.current < totalSteps) {
         shouldContinue = true;
         const progress = loadStepRef.current / totalSteps;
-        angle = -135 + (targetAngle - (-135)) * easeOutCubic(progress);
+        angle = startAngle + (targetAngle - startAngle) * easeOutCubic(progress);
         needleAngleRef.current = angle;
         loadStepRef.current++;
       } else if (isInitialLoadRef.current) {
         isInitialLoadRef.current = false;
         needleAngleRef.current = targetAngle;
+      }
+      // Когда не наведено и не первая загрузка - возвращаем стрелку в начальное положение
+      else {
+        if (Math.abs(needleAngleRef.current - startAngle) > 0.1) {
+          shouldContinue = true;
+          angle = needleAngleRef.current + (startAngle - needleAngleRef.current) * 0.15;
+          needleAngleRef.current = angle;
+        } else {
+          needleAngleRef.current = startAngle;
+        }
       }
 
       drawGauge(angle);
@@ -197,7 +221,19 @@ export function PowerGauge({ maxPower, useEnhancedScale = false }: PowerGaugePro
       }
     };
 
-    animate();
+    // Функция для запуска/перезапуска анимации
+    const startAnimation = () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      animate();
+    };
+
+    // Сохраняем функцию для использования в обработчиках событий
+    startAnimationRef.current = startAnimation;
+
+    // Запускаем анимацию
+    startAnimation();
 
     return () => {
       if (animationFrameRef.current) {
@@ -208,13 +244,21 @@ export function PowerGauge({ maxPower, useEnhancedScale = false }: PowerGaugePro
 
   return (
     <div
-      className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/20 hover:shadow-primary/40 transition-all duration-700 group hover:scale-105 hover:shadow-primary/50 cursor-pointer"
+      className="flex flex-col items-center justify-center gap-4 sm:gap-6 p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl border border-primary/30 bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl shadow-2xl shadow-primary/30 hover:border-primary/20 hover:shadow-primary/40 transition-all duration-700 group hover:scale-105 hover:shadow-primary/50 cursor-pointer w-full max-w-[280px] sm:max-w-[300px] mx-auto"
       onMouseEnter={() => {
-        isHoveringRef.current = true;
+        // Сбрасываем счетчик для перезапуска анимации каждый раз при наведении
         hoverStepRef.current = 0;
+        isHoveringRef.current = true;
+        // Возвращаем стрелку в начальное положение для новой анимации
+        needleAngleRef.current = startAngle;
+        // Перезапускаем анимацию через сохраненную функцию
+        if (startAnimationRef.current) {
+          startAnimationRef.current();
+        }
       }}
       onMouseLeave={() => {
         isHoveringRef.current = false;
+        hoverStepRef.current = 0;
       }}
     >
       <canvas
@@ -223,7 +267,7 @@ export function PowerGauge({ maxPower, useEnhancedScale = false }: PowerGaugePro
       />
 
       <div className="text-center">
-        <div className="text-4xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-primary via-tech-cyan to-primary animate-gradient-shift">
+        <div className="text-2xl sm:text-3xl md:text-4xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-primary via-tech-cyan to-primary animate-gradient-shift">
           {maxPower} кВт
         </div>
       </div>

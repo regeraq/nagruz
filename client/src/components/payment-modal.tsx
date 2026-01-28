@@ -1,16 +1,18 @@
 import { useState, useEffect } from "react";
-import { X, Plus, Minus, CreditCard, QrCode, Clock, CheckCircle2, AlertCircle, Loader2, TrendingUp } from "lucide-react";
+import { X, Plus, Minus, CreditCard, QrCode, Clock, CheckCircle2, AlertCircle, Loader2, Package, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Product } from "@shared/schema";
-import { SiVisa, SiMastercard, SiBitcoin, SiEthereum, SiLitecoin } from "react-icons/si";
+import { SiVisa, SiMastercard } from "react-icons/si";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -18,15 +20,7 @@ interface PaymentModalProps {
   product: Product | null;
 }
 
-interface CryptoRates {
-  btc: number;
-  eth: number;
-  usdt: number;
-  ltc: number;
-}
-
-type PaymentMethod = "card" | "sbp" | "bitcoin" | "ethereum" | "usdt" | "litecoin";
-
+type PaymentMethod = "card" | "sbp";
 type PaymentStatus = "idle" | "processing" | "success" | "error";
 
 export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
@@ -35,17 +29,16 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("idle");
   const [timeLeft, setTimeLeft] = useState(15 * 60);
-  const [cryptoAddress, setCryptoAddress] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [consentPersonalData, setConsentPersonalData] = useState(false);
+  const [consentDataProcessing, setConsentDataProcessing] = useState(false);
+  const [consentPublicOffer, setConsentPublicOffer] = useState(false);
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [validatedPromoCode, setValidatedPromoCode] = useState<{ code: string; discountPercent: number } | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  const { data: cryptoRates, isLoading: ratesLoading } = useQuery<CryptoRates>({
-    queryKey: ['/api/crypto-rates'],
-    enabled: isOpen && ["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod),
-  });
 
   const { data: userData } = useQuery({
     queryKey: ['/api/auth/me'],
@@ -67,7 +60,8 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       setDiscount(0);
       setPaymentStatus("idle");
       setTimeLeft(15 * 60);
-      setCryptoAddress("");
+      setPromoCodeInput("");
+      setValidatedPromoCode(null);
       
       if (userData?.success && userData?.user) {
         const user = userData.user;
@@ -79,9 +73,70 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
         setCustomerEmail("");
         setCustomerPhone("");
       }
+      setConsentPersonalData(false);
+      setConsentDataProcessing(false);
+      setConsentPublicOffer(false);
     }
   }, [isOpen, userData]);
 
+  // Validate promo code mutation
+  const validatePromoCodeMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Промокод недействителен");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.success && data.promoCode) {
+        setValidatedPromoCode({
+          code: data.promoCode.code,
+          discountPercent: data.promoCode.discountPercent,
+        });
+        setDiscount(data.promoCode.discountPercent);
+        toast({
+          title: "Промокод применен!",
+          description: `Скидка ${data.promoCode.discountPercent}%`,
+          variant: "default",
+        });
+      }
+    },
+    onError: (error: any) => {
+      setValidatedPromoCode(null);
+      setDiscount(0);
+      toast({
+        title: "Промокод недействителен",
+        description: error.message || "Проверьте правильность ввода",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Debounce promo code validation
+  useEffect(() => {
+    if (!promoCodeInput.trim()) {
+      setValidatedPromoCode(null);
+      setDiscount(0);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      const normalizedCode = promoCodeInput.trim().toUpperCase();
+      if (normalizedCode.length > 0) {
+        validatePromoCodeMutation.mutate(normalizedCode);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [promoCodeInput]);
 
   const createOrderMutation = useMutation({
     mutationFn: async (orderData: any) => {
@@ -101,7 +156,6 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       
       let errorMessage = error.message || "Попробуйте позже";
       
-      // Extract message from "400: {...}" format
       if (errorMessage.includes(": {")) {
         try {
           const jsonPart = errorMessage.substring(errorMessage.indexOf("{"));
@@ -132,39 +186,8 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
   const price = parseFloat(product.price);
   const totalAmount = price * quantity;
-  const discountAmount = (totalAmount * discount) / 100;
+  const discountAmount = validatedPromoCode ? (totalAmount * validatedPromoCode.discountPercent) / 100 : 0;
   const finalAmount = totalAmount - discountAmount;
-
-  const getCryptoAmount = () => {
-    if (!cryptoRates) return 0;
-    switch (paymentMethod) {
-      case "bitcoin":
-        return finalAmount / cryptoRates.btc;
-      case "ethereum":
-        return finalAmount / cryptoRates.eth;
-      case "usdt":
-        return finalAmount / cryptoRates.usdt;
-      case "litecoin":
-        return finalAmount / cryptoRates.ltc;
-      default:
-        return 0;
-    }
-  };
-
-  const getCryptoSymbol = () => {
-    switch (paymentMethod) {
-      case "bitcoin":
-        return "BTC";
-      case "ethereum":
-        return "ETH";
-      case "usdt":
-        return "USDT";
-      case "litecoin":
-        return "LTC";
-      default:
-        return "";
-    }
-  };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -180,17 +203,10 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
     }).format(amount);
   };
 
-  const formatCrypto = (amount: number) => {
-    if (amount === 0) return "0";
-    if (amount < 0.0001) return amount.toExponential(4);
-    return amount.toFixed(8).replace(/\.?0+$/, '');
-  };
-
   const handleQuantityChange = (delta: number) => {
     const maxStock = product?.stock || 99;
     setQuantity((prev) => Math.min(maxStock, Math.max(1, prev + delta)));
   };
-
 
   const handleProposal = () => {
     onClose();
@@ -202,7 +218,6 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const handlePayment = () => {
     if (paymentStatus === "processing") return;
 
-    // Trim and validate all fields
     const trimmedName = customerName.trim();
     const trimmedEmail = customerEmail.trim();
     const trimmedPhone = customerPhone.trim();
@@ -216,12 +231,20 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       return;
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
       toast({
         title: "Ошибка",
         description: "Пожалуйста, введите корректный email адрес",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!consentPersonalData || !consentDataProcessing || !consentPublicOffer) {
+      toast({
+        title: "Ошибка",
+        description: "Необходимо дать согласие на обработку персональных данных и принять условия публичной оферты",
         variant: "destructive",
       });
       return;
@@ -235,7 +258,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       totalAmount: totalAmount.toString(),
       discountAmount: discountAmount.toString(),
       finalAmount: finalAmount.toString(),
-      promoCode: null,
+      promoCode: validatedPromoCode?.code || null,
       paymentMethod,
       paymentStatus: "pending",
       customerName: trimmedName,
@@ -243,12 +266,9 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       customerPhone: trimmedPhone,
       paymentDetails: JSON.stringify({
         method: paymentMethod,
-        cryptoAddress: cryptoAddress || undefined,
-        cryptoAmount: ["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) ? getCryptoAmount() : undefined,
       }),
     };
 
-    // FIXED: Removed artificial delay - process order immediately
     createOrderMutation.mutate(orderData);
   };
 
@@ -258,14 +278,6 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
         return <CreditCard className="w-5 h-5" />;
       case "sbp":
         return <QrCode className="w-5 h-5" />;
-      case "bitcoin":
-        return <SiBitcoin className="w-5 h-5 text-orange-500" />;
-      case "ethereum":
-        return <SiEthereum className="w-5 h-5 text-blue-500" />;
-      case "usdt":
-        return <TrendingUp className="w-5 h-5 text-green-500" />;
-      case "litecoin":
-        return <TrendingUp className="w-5 h-5 text-gray-500" />;
       default:
         return <CreditCard className="w-5 h-5" />;
     }
@@ -279,11 +291,11 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
         data-testid="modal-overlay"
       />
 
-      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-card/95 backdrop-blur-xl border border-card-border rounded-xl shadow-2xl animate-fade-scale">
-        <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-xl border-b border-card-border p-6">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold" data-testid="text-order-title">
+      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-card/95 backdrop-blur-xl border border-card-border rounded-xl shadow-2xl animate-fade-scale mx-2 sm:mx-4">
+        <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-xl border-b border-card-border p-4 sm:p-6">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl sm:text-2xl font-bold" data-testid="text-order-title">
                 Оформление заказа
               </h2>
               <div className="flex items-center gap-2 mt-2">
@@ -308,10 +320,11 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
             <div className="space-y-4">
-              <div className="flex gap-4 p-4 bg-muted/30 rounded-lg" data-testid="card-product-info">
+              <div className="flex gap-4 p-4 bg-muted/30 rounded-lg border" data-testid="card-product-info">
+                <Package className="w-12 h-12 text-primary flex-shrink-0 mt-1" />
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg" data-testid="text-product-name">
                     {product.name}
@@ -322,6 +335,11 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                   <p className="text-sm text-muted-foreground mt-2" data-testid="text-product-description">
                     {product.description}
                   </p>
+                  <div className="mt-3">
+                    <Badge variant="secondary">
+                      На складе: {product.stock} шт.
+                    </Badge>
+                  </div>
                 </div>
               </div>
 
@@ -362,6 +380,36 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
               </div>
 
               <div className="space-y-3">
+                <Label>Промокод</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="Введите промокод"
+                    value={promoCodeInput}
+                    onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                    className="flex-1"
+                    data-testid="input-promo-code"
+                  />
+                  {validatedPromoCode && (
+                    <Badge variant="default" className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {validatedPromoCode.discountPercent}%
+                    </Badge>
+                  )}
+                  {validatePromoCodeMutation.isPending && (
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+                {validatedPromoCode && (
+                  <p className="text-sm text-green-600 dark:text-green-400">
+                    Промокод "{validatedPromoCode.code}" применен. Скидка {validatedPromoCode.discountPercent}%
+                  </p>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
                 <Label>Ваши контактные данные</Label>
                 <Input
                   value={customerName}
@@ -383,126 +431,123 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                   maxLength={11}
                   data-testid="input-customer-phone"
                 />
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between" data-testid="price-subtotal">
-                  <span className="text-muted-foreground">Сумма:</span>
-                  <span className="font-mono">{formatPrice(totalAmount)}</span>
-                </div>
-                {discount > 0 && (
-                  <div className="flex justify-between text-green-600" data-testid="price-discount">
-                    <span>Скидка ({discount}%):</span>
-                    <span className="font-mono">-{formatPrice(discountAmount)}</span>
-                  </div>
-                )}
-                <Separator />
-                <div className="flex justify-between text-lg font-semibold" data-testid="price-total">
-                  <span>Итого:</span>
-                  <span className="font-mono">
-                    {["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) ? (
-                      <span>
-                        {ratesLoading ? (
-                          <Loader2 className="w-4 h-4 inline animate-spin" />
-                        ) : (
-                          `${formatCrypto(getCryptoAmount())} ${getCryptoSymbol()}`
-                        )}
-                      </span>
-                    ) : (
-                      formatPrice(finalAmount)
-                    )}
-                  </span>
-                </div>
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    Мы свяжемся с вами для подтверждения заказа и уточнения деталей доставки
+                  </AlertDescription>
+                </Alert>
               </div>
             </div>
 
             <div className="space-y-4">
-              <Label>Способ оплаты</Label>
+              <div>
+                <Label className="text-base font-semibold mb-3 block">Способ оплаты</Label>
+                <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3 p-4 border rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer" data-testid="payment-method-card">
+                      <RadioGroupItem value="card" id="card" />
+                      <Label htmlFor="card" className="flex-1 flex items-center gap-3 cursor-pointer">
+                        <CreditCard className="w-5 h-5 text-primary" />
+                        <span className="font-medium">Банковская карта</span>
+                        <div className="ml-auto flex gap-1">
+                          <SiVisa className="w-8 h-5 opacity-60" />
+                          <SiMastercard className="w-8 h-5 opacity-60" />
+                        </div>
+                      </Label>
+                    </div>
 
-              <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-card">
-                    <RadioGroupItem value="card" id="card" />
-                    <Label htmlFor="card" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      {getPaymentMethodIcon("card")}
-                      <span>Банковская карта</span>
-                      <div className="ml-auto flex gap-1">
-                        <SiVisa className="w-8 h-5 opacity-60" />
-                        <SiMastercard className="w-8 h-5 opacity-60" />
-                      </div>
-                    </Label>
+                    <div className="flex items-center space-x-3 p-4 border rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer" data-testid="payment-method-sbp">
+                      <RadioGroupItem value="sbp" id="sbp" />
+                      <Label htmlFor="sbp" className="flex-1 flex items-center gap-3 cursor-pointer">
+                        <QrCode className="w-5 h-5 text-primary" />
+                        <span className="font-medium">СБП (QR-код)</span>
+                      </Label>
+                    </div>
                   </div>
+                </RadioGroup>
+              </div>
 
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-sbp">
-                    <RadioGroupItem value="sbp" id="sbp" />
-                    <Label htmlFor="sbp" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      <QrCode className="w-5 h-5" />
-                      <span>СБП (QR-код)</span>
-                    </Label>
-                  </div>
+              <Separator />
 
-                  <Separator className="my-3" />
-                  <p className="text-xs text-muted-foreground px-3">Криптовалюта</p>
-
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-bitcoin">
-                    <RadioGroupItem value="bitcoin" id="bitcoin" />
-                    <Label htmlFor="bitcoin" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      <SiBitcoin className="w-5 h-5 text-orange-500" />
-                      <span>Bitcoin (BTC)</span>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-ethereum">
-                    <RadioGroupItem value="ethereum" id="ethereum" />
-                    <Label htmlFor="ethereum" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      <SiEthereum className="w-5 h-5 text-blue-500" />
-                      <span>Ethereum (ETH)</span>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-usdt">
-                    <RadioGroupItem value="usdt" id="usdt" />
-                    <Label htmlFor="usdt" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      <TrendingUp className="w-5 h-5 text-green-500" />
-                      <span>USDT (Tether)</span>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2 p-3 border rounded-lg hover-elevate" data-testid="payment-method-litecoin">
-                    <RadioGroupItem value="litecoin" id="litecoin" />
-                    <Label htmlFor="litecoin" className="flex-1 flex items-center gap-2 cursor-pointer">
-                      <SiLitecoin className="w-5 h-5 text-gray-500" />
-                      <span>Litecoin (LTC)</span>
-                    </Label>
-                  </div>
+              <div className="space-y-2 p-4 bg-muted/30 rounded-lg border">
+                <div className="flex justify-between text-sm" data-testid="price-subtotal">
+                  <span className="text-muted-foreground">Сумма:</span>
+                  <span className="font-mono font-medium">{formatPrice(totalAmount)}</span>
                 </div>
-              </RadioGroup>
-
-
-              {["bitcoin", "ethereum", "usdt", "litecoin"].includes(paymentMethod) && (
-                <div className="mt-4 space-y-3 p-4 bg-muted/30 rounded-lg">
-                  <Label>Адрес {getCryptoSymbol()} кошелька</Label>
-                  <Input
-                    value={cryptoAddress}
-                    onChange={(e) => setCryptoAddress(e.target.value)}
-                    placeholder={`Введите адрес вашего ${getCryptoSymbol()} кошелька`}
-                    data-testid="input-crypto-address"
-                  />
-                  <p className="text-xs text-muted-foreground">Комиссия сети: ~0.5%</p>
+                {discount > 0 && (
+                  <div className="flex justify-between text-sm text-green-600" data-testid="price-discount">
+                    <span>Скидка ({discount}%):</span>
+                    <span className="font-mono font-medium">-{formatPrice(discountAmount)}</span>
+                  </div>
+                )}
+                <Separator className="my-2" />
+                <div className="flex justify-between text-lg font-bold" data-testid="price-total">
+                  <span>Итого:</span>
+                  <span className="font-mono text-primary">{formatPrice(finalAmount)}</span>
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
           <Separator />
 
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="space-y-3">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="consent-personal-data-payment"
+                checked={consentPersonalData}
+                onCheckedChange={(checked) => setConsentPersonalData(checked === true)}
+                className="mt-1"
+                required
+              />
+              <Label htmlFor="consent-personal-data-payment" className="text-sm leading-relaxed cursor-pointer">
+                Я даю согласие на обработку персональных данных *
+              </Label>
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="consent-data-processing-payment"
+                checked={consentDataProcessing}
+                onCheckedChange={(checked) => setConsentDataProcessing(checked === true)}
+                className="mt-1"
+                required
+              />
+              <Label htmlFor="consent-data-processing-payment" className="text-sm leading-relaxed cursor-pointer">
+                Я принимаю условия{" "}
+                <a href="/data-processing-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Политики обработки персональных данных
+                </a>{" "}
+                и{" "}
+                <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Политики конфиденциальности
+                </a> *
+              </Label>
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="consent-public-offer-payment"
+                checked={consentPublicOffer}
+                onCheckedChange={(checked) => setConsentPublicOffer(checked === true)}
+                className="mt-1"
+                required
+              />
+              <Label htmlFor="consent-public-offer-payment" className="text-sm leading-relaxed cursor-pointer">
+                Я принимаю условия{" "}
+                <a href="/public-offer" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Публичной оферты
+                </a> *
+              </Label>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <Button
               variant="outline"
               onClick={onClose}
-              className="flex-1"
+              className="flex-1 h-11 sm:h-12 text-sm sm:text-base"
               data-testid="button-back-to-shopping"
             >
               Вернуться к покупкам
@@ -510,15 +555,15 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
             <Button
               variant="outline"
               onClick={handleProposal}
-              className="flex-1"
+              className="flex-1 h-11 sm:h-12 text-sm sm:text-base"
               data-testid="button-request-proposal"
             >
               Коммерческое предложение
             </Button>
             <Button
               onClick={handlePayment}
-              disabled={paymentStatus === "processing" || paymentStatus === "success" || timeLeft === 0}
-              className="flex-1"
+              disabled={paymentStatus === "processing" || paymentStatus === "success" || timeLeft === 0 || !consentPersonalData || !consentDataProcessing || !consentPublicOffer}
+              className="flex-1 h-11 sm:h-12 text-sm sm:text-base bg-primary hover:bg-primary/90"
               data-testid="button-confirm-payment"
             >
               {paymentStatus === "processing" && (
@@ -544,23 +589,27 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
           </div>
 
           {paymentStatus === "success" && (
-            <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg text-center" data-testid="status-success">
-              <CheckCircle2 className="w-12 h-12 mx-auto mb-2 text-green-600" />
-              <p className="font-semibold text-green-600">Заказ успешно оформлен!</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Мы свяжемся с вами в ближайшее время для подтверждения
-              </p>
-            </div>
+            <Alert className="border-green-500/20 bg-green-500/10" data-testid="status-success">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertDescription>
+                <p className="font-semibold text-green-600">Заказ успешно оформлен!</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Мы свяжемся с вами в ближайшее время для подтверждения и уточнения деталей
+                </p>
+              </AlertDescription>
+            </Alert>
           )}
 
           {paymentStatus === "error" && (
-            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-center" data-testid="status-error">
-              <AlertCircle className="w-12 h-12 mx-auto mb-2 text-destructive" />
-              <p className="font-semibold text-destructive">Ошибка оформления заказа</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Попробуйте еще раз или свяжитесь с нами
-              </p>
-            </div>
+            <Alert variant="destructive" data-testid="status-error">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <p className="font-semibold">Ошибка оформления заказа</p>
+                <p className="text-sm mt-1">
+                  Попробуйте еще раз или свяжитесь с нами через форму обратной связи
+                </p>
+              </AlertDescription>
+            </Alert>
           )}
         </div>
       </div>

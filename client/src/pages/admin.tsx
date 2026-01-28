@@ -2,7 +2,6 @@ import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,15 +14,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { 
   Package, Users, BarChart3, FileText, Settings, Plus, Edit2, Trash2, 
-  Save, X, Search, Shield, Tag, Mail, UserPlus, Image, Bell, Upload
+  Save, X, Search, Shield, Tag, Mail, UserPlus, Image, Bell, Upload, Database, Download,
+  FileText as FileTextIcon, Phone, Cookie
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale/ru";
 import { apiRequest } from "@/lib/queryClient";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar } from "recharts";
 
 export default function Admin() {
   const [, setLocation] = useLocation();
+  const [activeTab, setActiveTab] = useState<string>("analytics");
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [showCreatePromo, setShowCreatePromo] = useState(false);
@@ -37,8 +40,26 @@ export default function Admin() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactAddress, setContactAddress] = useState("");
+  // Privacy policy settings
+  const [operatorName, setOperatorName] = useState("");
+  const [operatorInn, setOperatorInn] = useState("");
+  const [operatorOgrn, setOperatorOgrn] = useState("");
+  const [responsiblePerson, setResponsiblePerson] = useState("");
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [orderSearchTerm, setOrderSearchTerm] = useState("");
+  
+  // Content management state
+  const [contentKey, setContentKey] = useState("");
+  const [contentValue, setContentValue] = useState("");
+  const [contentPage, setContentPage] = useState("");
+  const [contentSection, setContentSection] = useState("");
+  
+  // Site contacts state
+  const [newContact, setNewContact] = useState({ type: "", value: "", label: "", order: 0 });
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  
+  // Cookie settings state
+  const [cookieSettings, setCookieSettings] = useState({ enabled: true, message: "", acceptButtonText: "", declineButtonText: "" });
   const [selectedProductForImages, setSelectedProductForImages] = useState<string | null>(null);
   const [newImageUrl, setNewImageUrl] = useState("");
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
@@ -118,8 +139,8 @@ export default function Admin() {
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
-  // Fetch contacts
-  const { data: contactsData = {} as any } = useQuery({
+  // Fetch contact submissions
+  const { data: contactSubmissionsData = {} as any } = useQuery({
     queryKey: ["/api/admin/contacts"],
     queryFn: async () => {
       const token = localStorage.getItem("accessToken");
@@ -128,10 +149,63 @@ export default function Admin() {
         headers: { Authorization: `Bearer ${token}` },
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to fetch contacts");
+      if (!res.ok) throw new Error("Failed to fetch contact submissions");
       return res.json();
     },
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
+  });
+
+  // Fetch site content
+  const { data: siteContentData = {} as any } = useQuery({
+    queryKey: ["/api/admin/content"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/content", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch site content");
+      return res.json();
+    },
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
+  });
+
+  // Fetch site contacts
+  const { data: siteContactsData = {} as any } = useQuery({
+    queryKey: ["/api/admin/site-contacts"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/site-contacts", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch site contacts");
+      return res.json();
+    },
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
+  });
+
+  // Fetch cookie settings
+  const { data: cookieSettingsData = {} as any } = useQuery({
+    queryKey: ["/api/admin/cookie-settings"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/cookie-settings", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch cookie settings");
+      return res.json();
+    },
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
+    onSuccess: (data) => {
+      if (data.success && data.settings) {
+        setCookieSettings(data.settings);
+      }
+    },
   });
 
   // Fetch promocodes
@@ -166,10 +240,31 @@ export default function Admin() {
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
+  // Fetch admin stats (including userActivityByDay)
+  const { data: statsData = {} as any } = useQuery({
+    queryKey: ["/api/admin/stats"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/stats", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch stats");
+      return res.json();
+    },
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
+  });
+
   const allUsers = usersData?.users || [];
   const allOrders = ordersData?.orders || [];
-  const contacts = contactsData?.contacts || [];
+  const contactSubmissions = contactSubmissionsData?.contacts || [];
+  const siteContentItems = siteContentData?.content || [];
+  const siteContactsItems = siteContactsData?.contacts || [];
   const promoCodes = promoCodesData?.promoCodes || [];
+  const stats = statsData?.stats || {};
+  const userActivityByDay = stats.userActivityByDay || [];
+  const totalRevenue = stats.totalRevenue || 0;
 
   // Filter users by search term
   const users = allUsers.filter((u: any) => {
@@ -205,6 +300,10 @@ export default function Admin() {
       const contactEmailSetting = settings.find((s: any) => s.key === "contact_email");
       const contactPhoneSetting = settings.find((s: any) => s.key === "contact_phone");
       const contactAddressSetting = settings.find((s: any) => s.key === "contact_address");
+      const operatorNameSetting = settings.find((s: any) => s.key === "operator_name");
+      const operatorInnSetting = settings.find((s: any) => s.key === "operator_inn");
+      const operatorOgrnSetting = settings.find((s: any) => s.key === "operator_ogrn");
+      const responsiblePersonSetting = settings.find((s: any) => s.key === "responsible_person");
 
       if (seoTitle) setSeoTitle(seoTitle.value || "");
       if (seoDesc) setSeoDescription(seoDesc.value || "");
@@ -212,6 +311,10 @@ export default function Admin() {
       if (contactEmailSetting) setContactEmail(contactEmailSetting.value || "");
       if (contactPhoneSetting) setContactPhone(contactPhoneSetting.value || "");
       if (contactAddressSetting) setContactAddress(contactAddressSetting.value || "");
+      if (operatorNameSetting) setOperatorName(operatorNameSetting.value || "");
+      if (operatorInnSetting) setOperatorInn(operatorInnSetting.value || "");
+      if (operatorOgrnSetting) setOperatorOgrn(operatorOgrnSetting.value || "");
+      if (responsiblePersonSetting) setResponsiblePerson(responsiblePersonSetting.value || "");
     }
   }, [settingsData]);
 
@@ -477,6 +580,29 @@ export default function Admin() {
     },
   });
 
+  // Save privacy policy settings (operator data)
+  const savePrivacyPolicySettings = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("PUT", "/api/admin/settings/operator_name", { value: data.operatorName, type: "string", description: "Полное наименование оператора персональных данных" });
+      await apiRequest("PUT", "/api/admin/settings/operator_inn", { value: data.operatorInn, type: "string", description: "ИНН оператора персональных данных" });
+      if (data.operatorOgrn !== undefined) {
+        await apiRequest("PUT", "/api/admin/settings/operator_ogrn", { value: data.operatorOgrn, type: "string", description: "ОГРН/ОГРНИП оператора персональных данных" });
+      }
+      if (data.responsiblePerson !== undefined) {
+        await apiRequest("PUT", "/api/admin/settings/responsible_person", { value: data.responsiblePerson, type: "string", description: "ФИО ответственного за организацию обработки персональных данных" });
+      }
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Данные оператора сохранены" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: "Произошла ошибка. Попробуйте позже.", variant: "destructive" });
+    },
+  });
+
   // Send notification
   const sendNotification = useMutation({
     mutationFn: async (data: any) => {
@@ -510,106 +636,192 @@ export default function Admin() {
     );
   }
 
-  const totalRevenue = allOrders.reduce((sum: number, o: any) => sum + parseFloat(o.finalAmount || 0), 0);
   const admins = allUsers.filter((u: any) => ["admin", "superadmin", "moderator"].includes(u.role));
 
+  const navItems = [
+    { id: "analytics", label: "Аналитика", icon: BarChart3 },
+    { id: "products", label: "Товары", icon: Package },
+    { id: "users", label: "Пользователи", icon: Users },
+    { id: "admins", label: "Админы", icon: Shield },
+    { id: "orders", label: "Заказы", icon: FileText },
+    { id: "contacts", label: "Заявки", icon: Mail },
+    { id: "promocodes", label: "Промокоды", icon: Tag },
+    { id: "content", label: "Контент", icon: FileTextIcon },
+    { id: "site-contacts", label: "Контакты", icon: Phone },
+    { id: "compliance", label: "Compliance", icon: Cookie },
+    { id: "privacy", label: "Политика", icon: Shield },
+    { id: "notifications", label: "Уведомления", icon: Bell },
+    { id: "settings", label: "Настройки", icon: Settings },
+    { id: "database", label: "БД", icon: Database },
+  ];
+
   return (
-    <div className="container mx-auto px-4 py-8 pt-24">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-4xl font-bold">Админ-панель</h1>
-          <div className="flex items-center gap-4">
-            <Badge variant="outline">{userData?.role}</Badge>
-            <Button variant="outline" onClick={() => setLocation("/")}>
+    <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8 pt-20 sm:pt-24">
+      <div className="max-w-[1600px] mx-auto">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">Админ-панель</h1>
+          <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
+            <Badge variant="outline" className="text-xs sm:text-sm">{userData?.role}</Badge>
+            <Button variant="outline" onClick={() => setLocation("/")} className="text-xs sm:text-sm h-9 sm:h-10 flex-1 sm:flex-none">
               На главную
             </Button>
           </div>
         </div>
 
-        <Tabs defaultValue="analytics" className="w-full">
-          <TabsList className="grid w-full grid-cols-8 gap-1">
-            <TabsTrigger value="analytics"><BarChart3 className="w-4 h-4 mr-1" />Аналитика</TabsTrigger>
-            <TabsTrigger value="products"><Package className="w-4 h-4 mr-1" />Товары</TabsTrigger>
-            <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" />Пользователи</TabsTrigger>
-            <TabsTrigger value="admins"><Shield className="w-4 h-4 mr-1" />Админы</TabsTrigger>
-            <TabsTrigger value="orders"><FileText className="w-4 h-4 mr-1" />Заказы</TabsTrigger>
-            <TabsTrigger value="contacts"><Mail className="w-4 h-4 mr-1" />Заявки</TabsTrigger>
-            <TabsTrigger value="promocodes"><Tag className="w-4 h-4 mr-1" />Промокоды</TabsTrigger>
-            <TabsTrigger value="settings"><Settings className="w-4 h-4 mr-1" />Настройки</TabsTrigger>
-          </TabsList>
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Sidebar Navigation */}
+          <aside className="w-full lg:w-64 flex-shrink-0">
+            <nav className="bg-card border border-border rounded-lg p-2 space-y-1 sticky top-24">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      activeTab === item.id
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
 
-          {/* Analytics Tab */}
-          <TabsContent value="analytics" className="mt-6 space-y-6">
-            <div className="grid grid-cols-4 gap-4">
+          {/* Main Content */}
+          <main className="flex-1 min-w-0">
+
+            {/* Analytics Section */}
+            {activeTab === "analytics" && (
+              <div className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>Всего товаров</CardDescription>
-                  <CardTitle className="text-3xl">{products.length}</CardTitle>
+                <CardHeader className="pb-2 p-3 sm:p-6">
+                  <CardDescription className="text-xs sm:text-sm">Всего товаров</CardDescription>
+                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{products.length}</CardTitle>
                 </CardHeader>
               </Card>
               <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>Пользователи</CardDescription>
-                  <CardTitle className="text-3xl">{allUsers.length}</CardTitle>
+                <CardHeader className="pb-2 p-3 sm:p-6">
+                  <CardDescription className="text-xs sm:text-sm">Пользователи</CardDescription>
+                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{allUsers.length}</CardTitle>
                 </CardHeader>
               </Card>
               <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>Заказы</CardDescription>
-                  <CardTitle className="text-3xl">{allOrders.length}</CardTitle>
+                <CardHeader className="pb-2 p-3 sm:p-6">
+                  <CardDescription className="text-xs sm:text-sm">Заказы</CardDescription>
+                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{allOrders.length}</CardTitle>
                 </CardHeader>
               </Card>
               <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>Выручка</CardDescription>
-                  <CardTitle className="text-3xl">{totalRevenue.toFixed(0)} ₽</CardTitle>
+                <CardHeader className="pb-2 p-3 sm:p-6">
+                  <CardDescription className="text-xs sm:text-sm">Выручка</CardDescription>
+                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{totalRevenue.toFixed(0)} ₽</CardTitle>
                 </CardHeader>
               </Card>
             </div>
 
+            {/* User Activity Chart */}
+            {userActivityByDay && userActivityByDay.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Активность пользователей (последние 30 дней)</CardTitle>
+                  <CardDescription>Регистрации и входы по дням</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer
+                    config={{
+                      registrations: { label: "Регистрации", color: "hsl(var(--chart-1))" },
+                      logins: { label: "Входы", color: "hsl(var(--chart-2))" },
+                    }}
+                    className="min-h-[300px] w-full"
+                  >
+                    <AreaChart data={userActivityByDay}>
+                      <CartesianGrid vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tickFormatter={(value) => format(new Date(value), "dd.MM", { locale: ru })}
+                      />
+                      <YAxis tickLine={false} axisLine={false} tickMargin={8} />
+                      <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                      <Area
+                        dataKey="registrations"
+                        type="natural"
+                        fill="var(--color-registrations)"
+                        fillOpacity={0.4}
+                        stroke="var(--color-registrations)"
+                        stackId="a"
+                      />
+                      <Area
+                        dataKey="logins"
+                        type="natural"
+                        fill="var(--color-logins)"
+                        fillOpacity={0.4}
+                        stroke="var(--color-logins)"
+                        stackId="a"
+                      />
+                    </AreaChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
-              <CardHeader>
-                <CardTitle>Последние заказы</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg md:text-xl">Последние заказы</CardTitle>
               </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Пользователь</TableHead>
-                      <TableHead>Сумма</TableHead>
-                      <TableHead>Статус</TableHead>
-                      <TableHead>Дата</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {allOrders.slice(0, 5).map((order: any) => (
-                      <TableRow key={order.id}>
-                        <TableCell className="font-mono text-sm">{order.id.slice(0, 8)}</TableCell>
-                        <TableCell>{order.customerName || order.customerEmail}</TableCell>
-                        <TableCell>{order.finalAmount} ₽</TableCell>
-                        <TableCell>
-                          <Badge>{order.paymentStatus}</Badge>
-                        </TableCell>
-                        <TableCell>{format(new Date(order.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <CardContent className="p-4 sm:p-6">
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <div className="inline-block min-w-full align-middle px-4 sm:px-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs sm:text-sm">ID</TableHead>
+                          <TableHead className="text-xs sm:text-sm">Пользователь</TableHead>
+                          <TableHead className="text-xs sm:text-sm">Сумма</TableHead>
+                          <TableHead className="text-xs sm:text-sm">Статус</TableHead>
+                          <TableHead className="text-xs sm:text-sm">Дата</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allOrders.slice(0, 5).map((order: any) => (
+                          <TableRow key={order.id}>
+                            <TableCell className="font-mono text-xs sm:text-sm">{order.id.slice(0, 8)}</TableCell>
+                            <TableCell className="text-xs sm:text-sm">{order.customerName || order.customerEmail}</TableCell>
+                            <TableCell className="text-xs sm:text-sm">{order.finalAmount} ₽</TableCell>
+                            <TableCell className="text-xs sm:text-sm">
+                              <Badge className="text-xs">{order.paymentStatus}</Badge>
+                            </TableCell>
+                            <TableCell className="text-xs sm:text-sm">{format(new Date(order.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               </CardContent>
             </Card>
-          </TabsContent>
+              </div>
+            )}
 
-          {/* Products Tab */}
-          <TabsContent value="products" className="mt-6">
+            {/* Products Section */}
+            {activeTab === "products" && (
+              <div className="mt-4 sm:mt-6">
             <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
+              <CardHeader className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                   <div>
-                    <CardTitle>Управление товарами</CardTitle>
-                    <CardDescription>Создание, редактирование и удаление товаров</CardDescription>
+                    <CardTitle className="text-base sm:text-lg md:text-xl">Управление товарами</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">Создание, редактирование и удаление товаров</CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     {selectedProducts.size > 0 && (
                       <Button variant="destructive" onClick={() => deleteProducts.mutate(Array.from(selectedProducts))}>
                         <Trash2 className="w-4 h-4 mr-2" />
@@ -687,12 +899,14 @@ export default function Admin() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">
-                        <Checkbox
+              <CardContent className="p-4 sm:p-6">
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <div className="inline-block min-w-full align-middle px-4 sm:px-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-8 sm:w-12">
+                            <Checkbox
                           checked={selectedProducts.size === products.length && products.length > 0}
                           onCheckedChange={() => {
                             if (selectedProducts.size === products.length) {
@@ -703,13 +917,13 @@ export default function Admin() {
                           }}
                         />
                       </TableHead>
-                      <TableHead>Название</TableHead>
-                      <TableHead>Артикул</TableHead>
-                      <TableHead>Цена</TableHead>
-                      <TableHead>Количество</TableHead>
-                      <TableHead>Статус</TableHead>
-                      <TableHead>Видимость</TableHead>
-                      <TableHead>Действия</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Название</TableHead>
+                      <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Артикул</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Цена</TableHead>
+                      <TableHead className="text-xs sm:text-sm hidden md:table-cell">Количество</TableHead>
+                      <TableHead className="text-xs sm:text-sm hidden md:table-cell">Статус</TableHead>
+                      <TableHead className="text-xs sm:text-sm hidden lg:table-cell">Видимость</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Действия</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -729,16 +943,16 @@ export default function Admin() {
                             }}
                           />
                         </TableCell>
-                        <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell>{product.sku}</TableCell>
-                        <TableCell>
+                        <TableCell className="font-medium text-xs sm:text-sm">{product.name}</TableCell>
+                        <TableCell className="text-xs sm:text-sm hidden sm:table-cell">{product.sku}</TableCell>
+                        <TableCell className="text-xs sm:text-sm">
                           {editingProductId === product.id ? (
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                               <Input
                                 type="number"
                                 value={editPrice}
                                 onChange={(e) => setEditPrice(e.target.value)}
-                                className="w-24"
+                                className="w-20 sm:w-24 h-8 text-xs"
                                 data-testid={`input-price-${product.id}`}
                               />
                               <Button
@@ -753,6 +967,7 @@ export default function Admin() {
                                 }}
                                 disabled={updateProductPriceStock.isPending}
                                 data-testid={`button-save-${product.id}`}
+                                className="text-xs h-8"
                               >
                                 Сохранить
                               </Button>
@@ -771,13 +986,13 @@ export default function Admin() {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-xs sm:text-sm hidden md:table-cell">
                           {editingProductId === product.id ? (
                             <Input
                               type="number"
                               value={editStock}
                               onChange={(e) => setEditStock(e.target.value)}
-                              className="w-16"
+                              className="w-16 h-8 text-xs"
                               data-testid={`input-stock-${product.id}`}
                             />
                           ) : (
@@ -794,42 +1009,48 @@ export default function Admin() {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <Badge variant={product.isActive ? "default" : "secondary"}>
+                        <TableCell className="text-xs sm:text-sm hidden md:table-cell">
+                          <Badge variant={product.isActive ? "default" : "secondary"} className="text-xs">
                             {product.isActive ? "Активен" : "Неактивен"}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-xs sm:text-sm hidden lg:table-cell">
                           <Button
                             size="sm"
                             variant={product.isActive ? "default" : "outline"}
                             onClick={() => updateProductStatus.mutate({ id: product.id, isActive: !product.isActive })}
                             disabled={updateProductStatus.isPending}
                             data-testid={`button-toggle-product-${product.id}`}
+                            className="text-xs h-7 sm:h-8"
                           >
                             {product.isActive ? "Скрыть" : "Показать"}
                           </Button>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-xs sm:text-sm">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => setSelectedProductForImages(product.id)}
+                            className="text-xs h-7 sm:h-8"
                           >
-                            <Image className="w-4 h-4 mr-1" />
-                            Фото
+                            <Image className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                            <span className="hidden sm:inline">Фото</span>
                           </Button>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                    </Table>
+                  </div>
+                </div>
               </CardContent>
             </Card>
-          </TabsContent>
+              </div>
+            )}
 
-          {/* Users Tab */}
-          <TabsContent value="users" className="mt-6">
+            {/* Users Section */}
+            {activeTab === "users" && (
+              <div className="mt-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -922,10 +1143,12 @@ export default function Admin() {
                 </Table>
               </CardContent>
             </Card>
-          </TabsContent>
+              </div>
+            )}
 
-          {/* Admins Tab */}
-          <TabsContent value="admins" className="mt-6">
+            {/* Admins Section */}
+            {activeTab === "admins" && (
+              <div className="mt-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1029,10 +1252,12 @@ export default function Admin() {
                 </Table>
               </CardContent>
             </Card>
-          </TabsContent>
+              </div>
+            )}
 
-          {/* Orders Tab */}
-          <TabsContent value="orders" className="mt-6">
+            {/* Orders Section */}
+            {activeTab === "orders" && (
+              <div className="mt-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1100,10 +1325,12 @@ export default function Admin() {
                 </Table>
               </CardContent>
             </Card>
-          </TabsContent>
+              </div>
+            )}
 
-          {/* Contacts Tab */}
-          <TabsContent value="contacts" className="mt-6">
+            {/* Contacts Section */}
+            {activeTab === "contacts" && (
+              <div className="mt-6">
             <Card>
               <CardHeader>
                 <CardTitle>Заявки с сайта</CardTitle>
@@ -1123,7 +1350,7 @@ export default function Admin() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {contacts.map((contact: any) => (
+                    {contactSubmissions.map((contact: any) => (
                       <TableRow key={contact.id}>
                         <TableCell>{contact.name}</TableCell>
                         <TableCell>{contact.email}</TableCell>
@@ -1150,10 +1377,12 @@ export default function Admin() {
                 </Table>
               </CardContent>
             </Card>
-          </TabsContent>
+              </div>
+            )}
 
-          {/* Promo Codes Tab */}
-          <TabsContent value="promocodes" className="mt-6">
+            {/* Promocodes Section */}
+            {activeTab === "promocodes" && (
+              <div className="mt-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1177,7 +1406,7 @@ export default function Admin() {
                           e.preventDefault();
                           const formData = new FormData(e.currentTarget);
                           createPromoCode.mutate({
-                            code: formData.get("code"),
+                            code: (formData.get("code") as string)?.trim().toUpperCase() || "",
                             discountPercent: parseInt(formData.get("discountPercent") as string),
                             expiresAt: formData.get("expiresAt") ? new Date(formData.get("expiresAt") as string) : null,
                             isActive: 1,
@@ -1259,10 +1488,493 @@ export default function Admin() {
                 </Table>
               </CardContent>
             </Card>
-          </TabsContent>
+              </div>
+            )}
 
-          {/* Notifications Tab */}
-          <TabsContent value="notifications" className="mt-6">
+            {/* Content Section */}
+            {activeTab === "content" && (
+              <div className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Управление контентом сайта</CardTitle>
+                <CardDescription>Редактирование текстов и описаний на сайте</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Ключ контента</Label>
+                    <Input
+                      value={contentKey}
+                      onChange={(e) => setContentKey(e.target.value)}
+                      placeholder="Например: main-description"
+                    />
+                  </div>
+                  <div>
+                    <Label>Страница</Label>
+                    <Input
+                      value={contentPage}
+                      onChange={(e) => setContentPage(e.target.value)}
+                      placeholder="Например: home"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Раздел</Label>
+                  <Input
+                    value={contentSection}
+                    onChange={(e) => setContentSection(e.target.value)}
+                    placeholder="Например: hero"
+                  />
+                </div>
+                <div>
+                  <Label>Содержимое</Label>
+                  <Textarea
+                    value={contentValue}
+                    onChange={(e) => setContentValue(e.target.value)}
+                    placeholder="Введите текст..."
+                    rows={5}
+                  />
+                </div>
+                <Button
+                  onClick={async () => {
+                    if (!contentKey || !contentValue) {
+                      toast({ title: "Ошибка", description: "Заполните ключ и содержимое", variant: "destructive" });
+                      return;
+                    }
+                    try {
+                      const token = localStorage.getItem("accessToken");
+                      const res = await fetch(`/api/admin/content/${contentKey}`, {
+                        method: "PUT",
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ value: contentValue, page: contentPage, section: contentSection }),
+                      });
+                      if (!res.ok) throw new Error("Failed to save content");
+                      toast({ title: "Успешно", description: "Контент сохранен" });
+                      queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
+                      setContentKey("");
+                      setContentValue("");
+                      setContentPage("");
+                      setContentSection("");
+                    } catch (error: any) {
+                      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+                    }
+                  }}
+                >
+                  Сохранить контент
+                </Button>
+
+                <div className="mt-6">
+                  <Label>Существующий контент</Label>
+                  <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
+                    {siteContentItems.map((item: any) => (
+                      <div key={item.key} className="p-3 border rounded-lg flex justify-between items-center">
+                        <div>
+                          <div className="font-semibold">{item.key}</div>
+                          <div className="text-sm text-muted-foreground">{item.value?.substring(0, 50)}...</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setContentKey(item.key);
+                              setContentValue(item.value);
+                              setContentPage(item.page || "");
+                              setContentSection(item.section || "");
+                            }}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              if (!confirm("Удалить контент?")) return;
+                              try {
+                                const token = localStorage.getItem("accessToken");
+                                const res = await fetch(`/api/admin/content/${item.key}`, {
+                                  method: "DELETE",
+                                  headers: { Authorization: `Bearer ${token}` },
+                                });
+                                if (!res.ok) throw new Error("Failed to delete");
+                                toast({ title: "Успешно", description: "Контент удален" });
+                                queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
+                              } catch (error: any) {
+                                toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+              </div>
+            )}
+
+            {/* Site Contacts Section */}
+            {activeTab === "site-contacts" && (
+              <div className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Контакты сайта</CardTitle>
+                <CardDescription>Управление контактной информацией (телефон, email, соцсети)</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-4 gap-4">
+                  <div>
+                    <Label>Тип</Label>
+                    <Select
+                      value={newContact.type}
+                      onValueChange={(value) => setNewContact({ ...newContact, type: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Выберите тип" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="phone">Телефон</SelectItem>
+                        <SelectItem value="email">Email</SelectItem>
+                        <SelectItem value="telegram">Telegram</SelectItem>
+                        <SelectItem value="address">Адрес</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Значение</Label>
+                    <Input
+                      value={newContact.value}
+                      onChange={(e) => setNewContact({ ...newContact, value: e.target.value })}
+                      placeholder="+7 (999) 123-45-67"
+                    />
+                  </div>
+                  <div>
+                    <Label>Подпись</Label>
+                    <Input
+                      value={newContact.label}
+                      onChange={(e) => setNewContact({ ...newContact, label: e.target.value })}
+                      placeholder="Основной телефон"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      onClick={async () => {
+                        if (!newContact.type || !newContact.value) {
+                          toast({ title: "Ошибка", description: "Заполните тип и значение", variant: "destructive" });
+                          return;
+                        }
+                        try {
+                          const token = localStorage.getItem("accessToken");
+                          const res = await fetch("/api/admin/site-contacts", {
+                            method: "POST",
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(newContact),
+                          });
+                          if (!res.ok) throw new Error("Failed to create contact");
+                          toast({ title: "Успешно", description: "Контакт добавлен" });
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/site-contacts"] });
+                          setNewContact({ type: "", value: "", label: "", order: 0 });
+                        } catch (error: any) {
+                          toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+                        }
+                      }}
+                      className="w-full"
+                    >
+                      Добавить
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <Label>Существующие контакты</Label>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Тип</TableHead>
+                        <TableHead>Значение</TableHead>
+                        <TableHead>Подпись</TableHead>
+                        <TableHead>Действия</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {siteContactsItems.map((contact: any) => (
+                        <TableRow key={contact.id}>
+                          <TableCell>{contact.type}</TableCell>
+                          <TableCell>{contact.value}</TableCell>
+                          <TableCell>{contact.label || "-"}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditingContactId(contact.id)}
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={async () => {
+                                  if (!confirm("Удалить контакт?")) return;
+                                  try {
+                                    const token = localStorage.getItem("accessToken");
+                                    const res = await fetch(`/api/admin/site-contacts/${contact.id}`, {
+                                      method: "DELETE",
+                                      headers: { Authorization: `Bearer ${token}` },
+                                    });
+                                    if (!res.ok) throw new Error("Failed to delete");
+                                    toast({ title: "Успешно", description: "Контакт удален" });
+                                    queryClient.invalidateQueries({ queryKey: ["/api/admin/site-contacts"] });
+                                  } catch (error: any) {
+                                    toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+              </div>
+            )}
+
+            {/* Compliance Section */}
+            {activeTab === "compliance" && (
+              <div className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Настройки соответствия РКН</CardTitle>
+                <CardDescription>Управление Cookie баннером и политиками</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={cookieSettings.enabled}
+                    onCheckedChange={(checked) => setCookieSettings({ ...cookieSettings, enabled: checked as boolean })}
+                  />
+                  <Label>Включить Cookie баннер</Label>
+                </div>
+                <div>
+                  <Label>Текст сообщения</Label>
+                  <Textarea
+                    value={cookieSettings.message || ""}
+                    onChange={(e) => setCookieSettings({ ...cookieSettings, message: e.target.value })}
+                    placeholder="Мы используем cookies для улучшения работы сайта"
+                    rows={3}
+                  />
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Текст кнопки "Принять"</Label>
+                    <Input
+                      value={cookieSettings.acceptButtonText || ""}
+                      onChange={(e) => setCookieSettings({ ...cookieSettings, acceptButtonText: e.target.value })}
+                      placeholder="Принять"
+                    />
+                  </div>
+                  <div>
+                    <Label>Текст кнопки "Отклонить"</Label>
+                    <Input
+                      value={cookieSettings.declineButtonText || ""}
+                      onChange={(e) => setCookieSettings({ ...cookieSettings, declineButtonText: e.target.value })}
+                      placeholder="Отклонить"
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={async () => {
+                    try {
+                      const token = localStorage.getItem("accessToken");
+                      const res = await fetch("/api/admin/cookie-settings", {
+                        method: "PUT",
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(cookieSettings),
+                      });
+                      if (!res.ok) throw new Error("Failed to save settings");
+                      toast({ title: "Успешно", description: "Настройки сохранены" });
+                      queryClient.invalidateQueries({ queryKey: ["/api/admin/cookie-settings"] });
+                    } catch (error: any) {
+                      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+                    }
+                  }}
+                >
+                  Сохранить настройки
+                </Button>
+              </CardContent>
+            </Card>
+              </div>
+            )}
+
+            {/* Privacy Section */}
+            {activeTab === "privacy" && (
+              <div className="mt-6">
+                <Card>
+              <CardHeader>
+                <CardTitle>Редактирование Политики конфиденциальности</CardTitle>
+                <CardDescription>
+                  Заполните данные оператора персональных данных для соответствия требованиям 152-ФЗ
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <Alert>
+                  <AlertDescription>
+                    <strong>Важно:</strong> Согласно Федеральному закону № 152-ФЗ «О персональных данных», 
+                    в Политике конфиденциальности должна быть указана полная информация об операторе. 
+                    Заполните все обязательные поля перед запуском сайта в production.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="operator-name">Полное наименование оператора *</Label>
+                    <Input
+                      id="operator-name"
+                      placeholder="ООО 'Название компании' или ИП Иванов Иван Иванович"
+                      value={operatorName}
+                      onChange={(e) => setOperatorName(e.target.value)}
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Укажите полное наименование юридического лица или ФИО индивидуального предпринимателя
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="operator-inn">ИНН оператора *</Label>
+                    <Input
+                      id="operator-inn"
+                      placeholder="1234567890 или 123456789012"
+                      value={operatorInn}
+                      onChange={(e) => setOperatorInn(e.target.value.replace(/\D/g, ''))}
+                      className="mt-2"
+                      maxLength={12}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ИНН юридического лица (10 цифр) или ИП (12 цифр)
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="operator-ogrn">ОГРН/ОГРНИП оператора *</Label>
+                    <Input
+                      id="operator-ogrn"
+                      placeholder="1234567890123 или 123456789012345"
+                      value={operatorOgrn}
+                      onChange={(e) => setOperatorOgrn(e.target.value.replace(/\D/g, ''))}
+                      className="mt-2"
+                      maxLength={15}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ОГРН юридического лица (13 цифр) или ОГРНИП индивидуального предпринимателя (15 цифр)
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="responsible-person">Ответственный за организацию обработки персональных данных *</Label>
+                    <Input
+                      id="responsible-person"
+                      placeholder="Иванов Иван Иванович"
+                      value={responsiblePerson}
+                      onChange={(e) => setResponsiblePerson(e.target.value)}
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Укажите ФИО ответственного за организацию обработки персональных данных согласно требованиям 152-ФЗ
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>Адрес оператора</Label>
+                    <Input
+                      placeholder="Москва, ул. Примерная, д. 1"
+                      value={contactAddress}
+                      onChange={(e) => setContactAddress(e.target.value)}
+                      className="mt-2"
+                      disabled
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Адрес берется из раздела "Настройки → Контактные данные"
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>Email для связи</Label>
+                    <Input
+                      type="email"
+                      placeholder="info@example.com"
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
+                      className="mt-2"
+                      disabled
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Email берется из раздела "Настройки → Контактные данные"
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>Телефон для связи</Label>
+                    <Input
+                      type="tel"
+                      placeholder="+7 (999) 123-45-67"
+                      value={contactPhone}
+                      onChange={(e) => setContactPhone(e.target.value)}
+                      className="mt-2"
+                      disabled
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Телефон берется из раздела "Настройки → Контактные данные"
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={() => savePrivacyPolicySettings.mutate({ operatorName, operatorInn, operatorOgrn, responsiblePerson })}
+                    disabled={savePrivacyPolicySettings.isPending || !operatorName || !operatorInn || !operatorOgrn || !responsiblePerson}
+                    className="w-full"
+                  >
+                    {savePrivacyPolicySettings.isPending ? "Сохранение..." : "Сохранить данные оператора"}
+                  </Button>
+
+                  <Alert>
+                    <AlertDescription>
+                      <strong>Где отображаются эти данные:</strong> Данные оператора автоматически 
+                      подставляются в раздел "1. Общие положения и идентификация оператора" на страницах{" "}
+                      <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        Политика конфиденциальности
+                      </a>{" "}
+                      и{" "}
+                      <a href="/data-processing-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        Политика обработки персональных данных
+                      </a>.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              </CardContent>
+            </Card>
+              </div>
+            )}
+
+            {/* Notifications Section */}
+            {activeTab === "notifications" && (
+              <div className="mt-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1285,10 +1997,12 @@ export default function Admin() {
                 </Alert>
               </CardContent>
             </Card>
-          </TabsContent>
+              </div>
+            )}
 
-          {/* Settings Tab */}
-          <TabsContent value="settings" className="mt-6">
+            {/* Settings Section */}
+            {activeTab === "settings" && (
+              <div className="mt-6">
             <div className="grid grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
@@ -1370,8 +2084,69 @@ export default function Admin() {
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
-        </Tabs>
+              </div>
+            )}
+
+            {/* Database Section */}
+            {activeTab === "database" && (
+              <div className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Управление базой данных</CardTitle>
+                <CardDescription>Выгрузка и управление базой данных</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Alert>
+                  <AlertDescription>
+                    Выгрузка базы данных создаст полный SQL-дамп всех таблиц и данных. 
+                    Файл можно использовать для восстановления базы данных.
+                  </AlertDescription>
+                </Alert>
+                <Button
+                  onClick={async () => {
+                    try {
+                      const token = localStorage.getItem("accessToken");
+                      const response = await fetch("/api/admin/database/export", {
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                        },
+                      });
+                      if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.message || "Failed to export database");
+                      }
+                      const blob = await response.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `database-backup-${new Date().toISOString().split('T')[0]}.sql`;
+                      document.body.appendChild(a);
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                      document.body.removeChild(a);
+                      toast({
+                        title: "Успешно",
+                        description: "База данных успешно выгружена",
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: "Ошибка",
+                        description: error.message || "Не удалось выгрузить базу данных",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  className="w-full"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Выгрузить базу данных (SQL)
+                </Button>
+              </CardContent>
+            </Card>
+              </div>
+            )}
+          </main>
+        </div>
       </div>
 
       {/* Dialog for managing product images */}

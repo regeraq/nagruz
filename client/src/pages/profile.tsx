@@ -588,78 +588,78 @@ export default function Profile() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 pt-24">
+    <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8 pt-20 sm:pt-24">
       <div className="max-w-4xl mx-auto">
         <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Avatar className="w-20 h-20">
+          <CardHeader className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <Avatar className="w-16 h-16 sm:w-20 sm:h-20">
                   <AvatarImage src={userData.avatar || undefined} />
-                  <AvatarFallback className="text-2xl">{getUserInitials()}</AvatarFallback>
+                  <AvatarFallback className="text-lg sm:text-2xl">{getUserInitials()}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <CardTitle>
+                  <CardTitle className="text-base sm:text-lg md:text-xl">
                     {userData.firstName && userData.lastName
                       ? `${userData.firstName} ${userData.lastName}`
                       : userData.email}
                   </CardTitle>
-                  <CardDescription>{userData.email}</CardDescription>
+                  <CardDescription className="text-xs sm:text-sm">{userData.email}</CardDescription>
                 </div>
               </div>
               {!isEditing && (
-                <Button variant="outline" onClick={() => setIsEditing(true)} data-testid="button-edit-profile">
-                  <Edit2 className="w-4 h-4 mr-2" />
+                <Button variant="outline" onClick={() => setIsEditing(true)} data-testid="button-edit-profile" className="w-full sm:w-auto text-sm h-9 sm:h-10">
+                  <Edit2 className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
                   Редактировать
                 </Button>
               )}
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             <Tabs defaultValue="profile" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="profile" data-testid="tab-profile">
-                  <User className="w-4 h-4 mr-2" />
-                  Профиль
+              <TabsList className="grid w-full grid-cols-4 h-auto">
+                <TabsTrigger value="profile" data-testid="tab-profile" className="text-xs sm:text-sm py-2 sm:py-2.5">
+                  <User className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Профиль</span>
                 </TabsTrigger>
-                <TabsTrigger value="orders" data-testid="tab-orders">
-                  <Package className="w-4 h-4 mr-2" />
-                  Заказы
+                <TabsTrigger value="orders" data-testid="tab-orders" className="text-xs sm:text-sm py-2 sm:py-2.5">
+                  <Package className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Заказы</span>
                   {orders.length > 0 && (
-                    <Badge variant="secondary" className="ml-2">
+                    <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">
                       {orders.length}
                     </Badge>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="favorites" data-testid="tab-favorites">
-                  <Heart className="w-4 h-4 mr-2" />
-                  Избранное
+                <TabsTrigger value="favorites" data-testid="tab-favorites" className="text-xs sm:text-sm py-2 sm:py-2.5">
+                  <Heart className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Избранное</span>
                   {favorites.length > 0 && (
-                    <Badge variant="secondary" className="ml-2">
+                    <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">
                       {favorites.length}
                     </Badge>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="notifications" data-testid="tab-notifications">
-                  <Bell className="w-4 h-4 mr-2" />
-                  Уведомления
+                <TabsTrigger value="notifications" data-testid="tab-notifications" className="text-xs sm:text-sm py-2 sm:py-2.5">
+                  <Bell className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Уведомления</span>
                   {notifications.filter((n: any) => !n.isRead).length > 0 && (
-                    <Badge variant="destructive" className="ml-2">
+                    <Badge variant="destructive" className="ml-1 sm:ml-2 text-xs">
                       {notifications.filter((n: any) => !n.isRead).length}
                     </Badge>
                   )}
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="profile" className="space-y-4 mt-6">
+              <TabsContent value="profile" className="space-y-4 mt-4 sm:mt-6">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Личные данные</CardTitle>
-                    <CardDescription>Управление вашими личными данными</CardDescription>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-base sm:text-lg md:text-xl">Личные данные</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">Управление вашими личными данными</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-4 sm:p-6">
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="firstName">Имя</Label>
                           {isEditing ? (
@@ -670,6 +670,7 @@ export default function Profile() {
                                 placeholder="Введите имя"
                                 disabled={updateProfile.isPending}
                                 data-testid="input-first-name"
+                                className="h-11 sm:h-12 text-sm"
                               />
                               {errors.firstName && (
                                 <p className="text-sm text-destructive">{errors.firstName.message}</p>
@@ -692,6 +693,7 @@ export default function Profile() {
                                 placeholder="Введите фамилию"
                                 disabled={updateProfile.isPending}
                                 data-testid="input-last-name"
+                                className="h-11 sm:h-12 text-sm"
                               />
                               {errors.lastName && (
                                 <p className="text-sm text-destructive">{errors.lastName.message}</p>
@@ -733,6 +735,7 @@ export default function Profile() {
                               placeholder="+7 (999) 123-45-67"
                               disabled={updateProfile.isPending}
                               data-testid="input-phone"
+                              className="h-11 sm:h-12 text-sm"
                             />
                             {errors.phone && (
                               <p className="text-sm text-destructive">{errors.phone.message}</p>
@@ -766,13 +769,14 @@ export default function Profile() {
                       </div>
 
                       {isEditing && (
-                        <div className="flex gap-2 pt-4">
+                        <div className="flex flex-col sm:flex-row gap-2 pt-4">
                           <Button
                             type="submit"
                             disabled={updateProfile.isPending || !isDirty}
                             data-testid="button-save-profile"
+                            className="w-full sm:w-auto h-11 sm:h-10 text-sm"
                           >
-                            <Save className="w-4 h-4 mr-2" />
+                            <Save className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
                             {updateProfile.isPending ? "Сохранение..." : "Сохранить"}
                           </Button>
                           <Button
@@ -781,6 +785,7 @@ export default function Profile() {
                             onClick={handleCancel}
                             disabled={updateProfile.isPending}
                             data-testid="button-cancel-profile"
+                            className="w-full sm:w-auto h-11 sm:h-10 text-sm"
                           >
                             <X className="w-4 h-4 mr-2" />
                             Отмена
@@ -806,32 +811,34 @@ export default function Profile() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="orders" className="mt-6">
+              <TabsContent value="orders" className="mt-4 sm:mt-6">
                 <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
+                  <CardHeader className="p-4 sm:p-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                       <div>
-                        <CardTitle>История заказов</CardTitle>
-                        <CardDescription>Все ваши заказы в одном месте</CardDescription>
+                        <CardTitle className="text-base sm:text-lg md:text-xl">История заказов</CardTitle>
+                        <CardDescription className="text-xs sm:text-sm">Все ваши заказы в одном месте</CardDescription>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setOrderSort(orderSort === "newest" ? "oldest" : "newest")}
                           data-testid="button-sort-orders"
+                          className="text-xs sm:text-sm h-8 sm:h-9 flex-1 sm:flex-none"
                         >
                           {orderSort === "newest" ? "Сначала новые" : "Сначала старые"}
                         </Button>
                       </div>
                     </div>
                     {orders.length > 0 && (
-                      <div className="flex gap-2 flex-wrap mt-4">
+                      <div className="flex gap-1.5 sm:gap-2 flex-wrap mt-3 sm:mt-4 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
                         <Button
                           variant={orderFilter === "all" ? "default" : "outline"}
                           size="sm"
                           onClick={() => setOrderFilter("all")}
                           data-testid="filter-all"
+                          className="text-xs sm:text-sm h-8 sm:h-9 whitespace-nowrap"
                         >
                           Все ({orders.length})
                         </Button>
@@ -840,14 +847,17 @@ export default function Profile() {
                           size="sm"
                           onClick={() => setOrderFilter("pending")}
                           data-testid="filter-pending"
+                          className="text-xs sm:text-sm h-8 sm:h-9 whitespace-nowrap"
                         >
-                          Ожидают оплаты ({orders.filter((o: any) => o.paymentStatus === "pending").length})
+                          <span className="hidden sm:inline">Ожидают оплаты</span>
+                          <span className="sm:hidden">Ожидают</span> ({orders.filter((o: any) => o.paymentStatus === "pending").length})
                         </Button>
                         <Button
                           variant={orderFilter === "paid" ? "default" : "outline"}
                           size="sm"
                           onClick={() => setOrderFilter("paid")}
                           data-testid="filter-paid"
+                          className="text-xs sm:text-sm h-8 sm:h-9 whitespace-nowrap"
                         >
                           Оплачены ({orders.filter((o: any) => o.paymentStatus === "paid").length})
                         </Button>
@@ -856,6 +866,7 @@ export default function Profile() {
                           size="sm"
                           onClick={() => setOrderFilter("processing")}
                           data-testid="filter-processing"
+                          className="text-xs sm:text-sm h-8 sm:h-9 whitespace-nowrap"
                         >
                           В обработке ({orders.filter((o: any) => o.paymentStatus === "processing").length})
                         </Button>
@@ -864,6 +875,7 @@ export default function Profile() {
                           size="sm"
                           onClick={() => setOrderFilter("shipped")}
                           data-testid="filter-shipped"
+                          className="text-xs sm:text-sm h-8 sm:h-9 whitespace-nowrap"
                         >
                           Отправлены ({orders.filter((o: any) => o.paymentStatus === "shipped").length})
                         </Button>
@@ -872,6 +884,7 @@ export default function Profile() {
                           size="sm"
                           onClick={() => setOrderFilter("delivered")}
                           data-testid="filter-delivered"
+                          className="text-xs sm:text-sm h-8 sm:h-9 whitespace-nowrap"
                         >
                           Доставлены ({orders.filter((o: any) => o.paymentStatus === "delivered").length})
                         </Button>
@@ -880,6 +893,7 @@ export default function Profile() {
                           size="sm"
                           onClick={() => setOrderFilter("cancelled")}
                           data-testid="filter-cancelled"
+                          className="text-xs sm:text-sm h-8 sm:h-9 whitespace-nowrap"
                         >
                           Отменены ({orders.filter((o: any) => o.paymentStatus === "cancelled").length})
                         </Button>
@@ -942,27 +956,27 @@ export default function Profile() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="favorites" className="mt-6">
+              <TabsContent value="favorites" className="mt-4 sm:mt-6">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Избранное</CardTitle>
-                    <CardDescription>Сохраненные товары</CardDescription>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-base sm:text-lg md:text-xl">Избранное</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">Сохраненные товары</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-4 sm:p-6">
                     {favorites.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Heart className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                        <p className="text-muted-foreground">У вас пока нет избранных товаров</p>
+                      <div className="text-center py-8 sm:py-12">
+                        <Heart className="w-10 h-10 sm:w-12 sm:h-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-sm sm:text-base text-muted-foreground">У вас пока нет избранных товаров</p>
                       </div>
                     ) : (
-                      <div className="space-y-4">
+                      <div className="space-y-3 sm:space-y-4">
                         {favorites.map((favorite: any) => (
                           <Card key={favorite.productId} data-testid={`card-favorite-${favorite.productId}`}>
-                            <CardContent className="pt-6">
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                  <p className="font-semibold" data-testid={`text-favorite-name-${favorite.productId}`}>{favorite.product?.name || "Товар"}</p>
-                                  <p className="text-sm text-muted-foreground">
+                            <CardContent className="pt-4 sm:pt-6 p-4 sm:p-6">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-sm sm:text-base" data-testid={`text-favorite-name-${favorite.productId}`}>{favorite.product?.name || "Товар"}</p>
+                                  <p className="text-xs sm:text-sm text-muted-foreground">
                                     {favorite.product?.price} ₽
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-1">
@@ -972,15 +986,16 @@ export default function Profile() {
                                     Добавлено {format(new Date(favorite.createdAt), "d MMMM yyyy", { locale: ru })}
                                   </p>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 w-full sm:w-auto">
                                   <Button 
                                     variant="default" 
                                     size="sm"
                                     onClick={() => handleBuy(favorite.product)}
                                     disabled={!favorite.product || favorite.product.stock === 0}
                                     data-testid={`button-buy-favorite-${favorite.productId}`}
+                                    className="flex-1 sm:flex-none h-9 sm:h-8 text-xs sm:text-sm"
                                   >
-                                    <ShoppingCart className="w-4 h-4 mr-2" />
+                                    <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                                     Купить
                                   </Button>
                                   <Button 
@@ -989,8 +1004,9 @@ export default function Profile() {
                                     onClick={() => removeFavorite.mutate(favorite.productId)}
                                     disabled={removeFavorite.isPending}
                                     data-testid={`button-delete-favorite-${favorite.productId}`}
+                                    className="h-9 w-9 sm:h-8 sm:w-8"
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                                   </Button>
                                 </div>
                               </div>
@@ -1003,13 +1019,13 @@ export default function Profile() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="notifications" className="mt-6">
+              <TabsContent value="notifications" className="mt-4 sm:mt-6">
                 <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
+                  <CardHeader className="p-4 sm:p-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                       <div>
-                        <CardTitle>Уведомления</CardTitle>
-                        <CardDescription>Центр уведомлений</CardDescription>
+                        <CardTitle className="text-base sm:text-lg md:text-xl">Уведомления</CardTitle>
+                        <CardDescription className="text-xs sm:text-sm">Центр уведомлений</CardDescription>
                       </div>
                       {notifications.length > 0 && (
                         <Button 
@@ -1018,17 +1034,18 @@ export default function Profile() {
                           onClick={() => clearNotifications.mutate()}
                           disabled={clearNotifications.isPending}
                           data-testid="button-clear-notifications"
+                          className="w-full sm:w-auto h-9 sm:h-8 text-xs sm:text-sm"
                         >
                           Очистить все
                         </Button>
                       )}
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-4 sm:p-6">
                     {notifications.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Bell className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                        <p className="text-muted-foreground">У вас нет уведомлений</p>
+                      <div className="text-center py-8 sm:py-12">
+                        <Bell className="w-10 h-10 sm:w-12 sm:h-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-sm sm:text-base text-muted-foreground">У вас нет уведомлений</p>
                       </div>
                     ) : (
                       <div className="space-y-2">

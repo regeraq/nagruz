@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,6 +26,8 @@ export default function Contacts() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [consentPersonalData, setConsentPersonalData] = useState(false);
+  const [consentDataProcessing, setConsentDataProcessing] = useState(false);
 
   const { data: userData } = useQuery({
     queryKey: ['/api/auth/me'],
@@ -45,6 +48,16 @@ export default function Contacts() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!consentPersonalData || !consentDataProcessing) {
+      toast({
+        title: "Ошибка",
+        description: "Необходимо дать согласие на обработку персональных данных",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsSubmitting(true);
     setSubmitSuccess(false);
 
@@ -64,6 +77,8 @@ export default function Contacts() {
           company: "",
           message: "",
         });
+        setConsentPersonalData(false);
+        setConsentDataProcessing(false);
         setSubmitSuccess(true);
         queryClient.invalidateQueries({ queryKey: ['/api/contact'] });
       }
@@ -79,23 +94,23 @@ export default function Contacts() {
   };
 
   return (
-    <div className="min-h-screen pt-20">
-      <div className="max-w-7xl mx-auto px-6 md:px-8 py-12">
-        <Breadcrumbs items={[{ label: "Контакты" }]} className="mb-8" />
+    <div className="min-h-screen pt-16 sm:pt-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-10 md:py-12">
+        <Breadcrumbs items={[{ label: "Контакты" }]} className="mb-6 sm:mb-8" />
 
-        <div className="text-center mb-16 animate-fade-up">
-          <Badge variant="secondary" className="mb-4">
+        <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
+          <Badge variant="secondary" className="mb-3 sm:mb-4">
             Контакты
           </Badge>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2">
             Свяжитесь с нами
           </h1>
-          <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+          <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2">
             Мы всегда готовы ответить на ваши вопросы и помочь с выбором оборудования
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8 mb-16">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 mb-10 sm:mb-12 md:mb-16">
           <Card className="scroll-animate">
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -169,27 +184,27 @@ export default function Contacts() {
           </Card>
         </div>
 
-        <Separator className="my-16" />
+        <Separator className="my-10 sm:my-12 md:my-16" />
 
-        <div className="grid lg:grid-cols-2 gap-12 mb-16">
+        <div className="grid sm:grid-cols-2 gap-6 sm:gap-8 md:gap-12 mb-10 sm:mb-12 md:mb-16">
           <Card className="scroll-animate">
-            <CardHeader>
-              <CardTitle>Режим работы</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-lg md:text-xl">Режим работы</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
+            <CardContent className="p-4 sm:p-6">
+              <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-primary" />
+                  <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
                   <div>
-                    <p className="font-medium">Понедельник - Пятница</p>
-                    <p className="text-sm text-muted-foreground">9:00 - 18:00 МСК</p>
+                    <p className="font-medium text-sm sm:text-base">Понедельник - Пятница</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground">9:00 - 18:00 МСК</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-muted-foreground" />
+                  <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
                   <div>
-                    <p className="font-medium">Суббота - Воскресенье</p>
-                    <p className="text-sm text-muted-foreground">Выходной</p>
+                    <p className="font-medium text-sm sm:text-base">Суббота - Воскресенье</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground">Выходной</p>
                   </div>
                 </div>
               </div>
@@ -197,32 +212,32 @@ export default function Contacts() {
           </Card>
 
           <Card className="scroll-animate">
-            <CardHeader>
-              <CardTitle>Дополнительные контакты</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-lg md:text-xl">Дополнительные контакты</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
+            <CardContent className="p-4 sm:p-6">
+              <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-3">
-                  <Send className="h-5 w-5 text-primary" />
+                  <Send className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
                   <div>
-                    <p className="font-medium">Telegram</p>
+                    <p className="font-medium text-sm sm:text-base">Telegram</p>
                     <a
                       href="https://t.me/nu_equipment"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline"
+                      className="text-xs sm:text-sm text-primary hover:underline"
                     >
                       @nu_equipment
                     </a>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Mail className="h-5 w-5 text-primary" />
+                  <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
                   <div>
-                    <p className="font-medium">Для заказов</p>
+                    <p className="font-medium text-sm sm:text-base">Для заказов</p>
                     <a
                       href="mailto:orders@nm-100.ru"
-                      className="text-sm text-primary hover:underline"
+                      className="text-xs sm:text-sm text-primary hover:underline"
                     >
                       orders@nm-100.ru
                     </a>
@@ -234,22 +249,22 @@ export default function Contacts() {
         </div>
 
         <Card className="scroll-animate bg-primary/5 border-primary/20">
-          <CardHeader>
-            <CardTitle>Форма обратной связи</CardTitle>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-base sm:text-lg md:text-xl">Форма обратной связи</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             {submitSuccess && (
               <Alert className="mb-4">
-                <AlertDescription>
+                <AlertDescription className="text-xs sm:text-sm">
                   ✓ Заявка успешно отправлена! Мы свяжемся с вами в ближайшее время.
                 </AlertDescription>
               </Alert>
             )}
             
-            <form onSubmit={handleSubmit} className="space-y-4" id="contact">
-              <div className="grid md:grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4" id="contact">
+              <div className="grid sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <Label htmlFor="name">Имя *</Label>
+                  <Label htmlFor="name" className="text-xs sm:text-sm">Имя *</Label>
                   <Input
                     id="name"
                     value={formData.name}
@@ -257,10 +272,11 @@ export default function Contacts() {
                     placeholder="Ваше имя"
                     required
                     data-testid="input-contact-name"
+                    className="h-11 sm:h-12 text-sm mt-1.5 sm:mt-2"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="email">Email *</Label>
+                  <Label htmlFor="email" className="text-xs sm:text-sm">Email *</Label>
                   <Input
                     id="email"
                     type="email"
@@ -269,13 +285,14 @@ export default function Contacts() {
                     placeholder="your@email.com"
                     required
                     data-testid="input-contact-email"
+                    className="h-11 sm:h-12 text-sm mt-1.5 sm:mt-2"
                   />
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <Label htmlFor="phone">Телефон *</Label>
+                  <Label htmlFor="phone" className="text-xs sm:text-sm">Телефон *</Label>
                   <Input
                     id="phone"
                     value={formData.phone}
@@ -283,22 +300,24 @@ export default function Contacts() {
                     placeholder="+7 (XXX) XXX-XX-XX"
                     required
                     data-testid="input-contact-phone"
+                    className="h-11 sm:h-12 text-sm mt-1.5 sm:mt-2"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="company">Компания</Label>
+                  <Label htmlFor="company" className="text-xs sm:text-sm">Компания</Label>
                   <Input
                     id="company"
                     value={formData.company}
                     onChange={(e) => setFormData({...formData, company: e.target.value})}
                     placeholder="Название компании"
                     data-testid="input-contact-company"
+                    className="h-11 sm:h-12 text-sm mt-1.5 sm:mt-2"
                   />
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="message">Сообщение *</Label>
+                <Label htmlFor="message" className="text-xs sm:text-sm">Сообщение *</Label>
                 <Textarea
                   id="message"
                   value={formData.message}
@@ -307,14 +326,49 @@ export default function Contacts() {
                   required
                   rows={5}
                   data-testid="textarea-contact-message"
+                  className="text-sm mt-1.5 sm:mt-2 min-h-[120px] sm:min-h-[140px]"
                 />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="consent-personal-data-contacts"
+                    checked={consentPersonalData}
+                    onCheckedChange={(checked) => setConsentPersonalData(checked === true)}
+                    className="mt-1"
+                    required
+                  />
+                  <Label htmlFor="consent-personal-data-contacts" className="text-xs sm:text-sm leading-relaxed cursor-pointer">
+                    Я даю согласие на обработку персональных данных *
+                  </Label>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="consent-data-processing-contacts"
+                    checked={consentDataProcessing}
+                    onCheckedChange={(checked) => setConsentDataProcessing(checked === true)}
+                    className="mt-1"
+                    required
+                  />
+                  <Label htmlFor="consent-data-processing-contacts" className="text-xs sm:text-sm leading-relaxed cursor-pointer">
+                    Я принимаю условия{" "}
+                    <a href="/data-processing-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      Политики обработки персональных данных
+                    </a>{" "}
+                    и{" "}
+                    <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      Политики конфиденциальности
+                    </a> *
+                  </Label>
+                </div>
               </div>
 
               <Button 
                 type="submit" 
-                disabled={isSubmitting}
+                disabled={isSubmitting || !consentPersonalData || !consentDataProcessing}
                 data-testid="button-submit-contact"
-                className="w-full"
+                className="w-full h-11 sm:h-12 text-sm sm:text-base"
               >
                 {isSubmitting ? (
                   <>

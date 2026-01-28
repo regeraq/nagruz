@@ -119,19 +119,27 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
     };
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      const refreshToken = localStorage.getItem("refreshToken");
-      if (refreshToken) {
-        await apiRequest("POST", "/api/auth/logout", { refreshToken });
-      }
-    } catch (error) {
-      console.error("Logout error:", error);
-    } finally {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      queryClient.clear();
-      setLocation("/");
+  const handleLogout = () => {
+    // Clear tokens immediately for instant logout
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    
+    // Invalidate user-related queries
+    queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    
+    // Refetch products to ensure gallery images are reloaded
+    queryClient.invalidateQueries({ queryKey: ['/api/products'] });
+    queryClient.refetchQueries({ queryKey: ['/api/products'] });
+    
+    // Redirect immediately
+    setLocation("/");
+    
+    // Fire-and-forget logout API call (don't wait for response)
+    const refreshToken = localStorage.getItem("refreshToken");
+    if (refreshToken) {
+      apiRequest("POST", "/api/auth/logout", { refreshToken }).catch(() => {
+        // Ignore errors - logout is already complete on client side
+      });
     }
   };
 
@@ -156,16 +164,16 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
             : "bg-background/50 backdrop-blur-sm"
         }`}
       >
-        <nav className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="flex items-center justify-between h-16 md:h-20">
-            <div className="flex items-center gap-4">
+        <nav className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16 md:h-20">
+            <div className="flex items-center gap-2 sm:gap-4">
               <button
                 onClick={() => setLocation("/")}
                 data-testid="button-logo"
-                className="flex items-center gap-2 hover-elevate active-elevate-2 rounded-md px-2 py-1"
+                className="flex items-center gap-1 sm:gap-2 hover-elevate active-elevate-2 rounded-md px-1 sm:px-2 py-1"
               >
-                <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center flex-shrink-0">
-                  <Gauge className="w-5 h-5 text-primary-foreground" />
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary rounded-md flex items-center justify-center flex-shrink-0">
+                  <Gauge className="w-4 h-4 sm:w-5 sm:h-5 text-primary-foreground" />
                 </div>
               </button>
               
@@ -306,8 +314,8 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
       </header>
 
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden bg-background/98 backdrop-blur-md pt-20 animate-in slide-in-from-top">
-          <div className="flex flex-col gap-2 p-6">
+        <div className="fixed inset-0 z-40 lg:hidden bg-background/98 backdrop-blur-md pt-14 sm:pt-20 animate-in slide-in-from-top">
+          <div className="flex flex-col gap-2 p-4 sm:p-6">
             {visibleNavLinks.map((link) => {
               return (
                 <Button

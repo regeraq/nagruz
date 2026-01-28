@@ -2,6 +2,7 @@ import type { Express } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { pool } from "./db";
 import { hashPassword, verifyPassword, generateAccessToken, verifyAccessToken, generateRefreshToken } from "./auth";
 import { insertContactSubmissionSchema, insertOrderSchema } from "@shared/schema";
 import { z } from "zod";
@@ -16,8 +17,14 @@ import { rateLimiters } from "./rateLimiter";
 import { cache, CACHE_TTL } from "./cache";
 import { csrfProtection } from "./csrf";
 
+// SECURITY: API keys must be in environment variables, no hardcoded fallbacks
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const OWNER_EMAIL = process.env.OWNER_EMAIL || "owner@example.com";
+const OWNER_EMAIL = process.env.OWNER_EMAIL || "rostext@gmail.com";
+const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev"; // Use verified domain for production
+
+if (!RESEND_API_KEY) {
+  console.warn("⚠️ RESEND_API_KEY not set in environment variables. Email functionality will be disabled.");
+}
 
 // Constants
 const MAX_FILE_SIZE_MB = 10;
@@ -30,14 +37,15 @@ const ALLOWED_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ];
 const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
-const API_TIMEOUT_MS = 10000; // 10 seconds
+const API_TIMEOUT_MS = 10000; // 10 seconds for regular emails
+const API_TIMEOUT_WITH_ATTACHMENT_MS = 120000; // 120 seconds (2 minutes) for emails with attachments
 
 /**
  * FIXED: Email sending with timeout and better error handling
  */
 async function sendEmail(to: string, subject: string, html: string) {
   if (!RESEND_API_KEY) {
-    console.warn("RESEND_API_KEY not configured");
+    console.warn("⚠️ RESEND_API_KEY not configured");
     return { success: false, message: "Email service not configured" };
   }
 
@@ -46,91 +54,187 @@ async function sendEmail(to: string, subject: string, html: string) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
+    // Resend requires verified domain to send to external emails
+    // For production, you need to verify your domain in Resend Dashboard
+    // Test domain onboarding@resend.dev only works for the email used during Resend signup
+    const emailPayload = {
+      from: RESEND_FROM_EMAIL,
+      to,
+      subject,
+      html,
+      reply_to: OWNER_EMAIL, // Set reply-to to actual email
+    };
+
+    console.log("📧 [sendEmail] Sending email:", { to, subject, from: emailPayload.from });
+
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
-      body: JSON.stringify({
-        from: "onboarding@resend.dev",
-        to,
-        subject,
-        html,
-      }),
+      body: JSON.stringify(emailPayload),
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
     const data = await response.json();
-    console.log("Email sent:", { to, subject, success: response.ok, data });
-    return { success: response.ok, data };
+    
+    if (!response.ok) {
+      console.error("❌ [sendEmail] Resend API error:", { 
+        status: response.status, 
+        statusText: response.statusText,
+        data 
+      });
+      
+      // Special handling for domain verification error
+      if (data.message && data.message.includes("domain is not verified")) {
+        console.error("⚠️ [sendEmail] DOMAIN VERIFICATION REQUIRED:");
+        console.error("   Resend requires a verified domain to send to external emails.");
+        console.error("   Please verify your domain at: https://resend.com/domains");
+        console.error("   Current from email:", RESEND_FROM_EMAIL);
+        console.error("   See RESEND_DOMAIN_VERIFICATION.md for instructions");
+      }
+      
+      return { success: false, error: data.message || "Failed to send email", data };
+    }
+
+    console.log("✅ [sendEmail] Email sent successfully:", { to, subject, id: data.id });
+    return { success: true, data };
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      console.error("Email sending timeout");
+      console.error("⏱️ [sendEmail] Email sending timeout");
       return { success: false, error: "Timeout" };
     }
-    console.error("Error sending email:", error);
-    return { success: false, error };
+    console.error("❌ [sendEmail] Error sending email:", error);
+    return { success: false, error: error.message || "Unknown error" };
   }
 }
 
 /**
- * FIXED: Crypto rates with caching and timeout
+ * Send email with attachment support
  */
-async function getCryptoRates(): Promise<{ btc: number; eth: number; usdt: number; ltc: number }> {
-  // Check cache first
-  const cacheKey = 'crypto-rates';
-  const cached = cache.get<{ btc: number; eth: number; usdt: number; ltc: number }>(cacheKey);
-  if (cached) {
-    return cached;
+async function sendEmailWithAttachment(emailData: {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  attachments?: Array<{
+    filename: string;
+    content: string;
+    type?: string;
+  }>;
+  reply_to?: string;
+}) {
+  if (!RESEND_API_KEY) {
+    console.warn("⚠️ RESEND_API_KEY not configured");
+    return { success: false, message: "Email service not configured" };
   }
 
   try {
-    // FIXED: Add timeout
+    const hasAttachments = !!(emailData.attachments && emailData.attachments.length > 0);
+    const timeoutMs = hasAttachments ? API_TIMEOUT_WITH_ATTACHMENT_MS : API_TIMEOUT_MS;
+    
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const response = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,litecoin&vs_currencies=rub',
-      { signal: controller.signal }
-    );
+    // Resend API format for attachments: content should be base64 string
+    const emailPayload: any = {
+      from: RESEND_FROM_EMAIL,
+      to: emailData.to,
+      subject: emailData.subject,
+      html: emailData.html,
+      reply_to: emailData.reply_to || OWNER_EMAIL,
+    };
+
+    // Format attachments for Resend API
+    if (hasAttachments) {
+      emailPayload.attachments = emailData.attachments!.map(att => ({
+        filename: att.filename,
+        content: att.content, // Base64 string
+      }));
+    }
+
+    const attachmentSize = hasAttachments 
+      ? emailPayload.attachments.reduce((sum: number, att: any) => sum + (att.content?.length || 0), 0)
+      : 0;
+
+    console.log("📧 [sendEmailWithAttachment] Sending email:", { 
+      to: emailData.to, 
+      subject: emailData.subject,
+      attachmentsCount: emailData.attachments?.length || 0,
+      hasAttachments,
+      attachmentSizeKB: Math.round(attachmentSize / 1024),
+      timeoutMs
+    });
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify(emailPayload),
+      signal: controller.signal,
+    });
 
     clearTimeout(timeoutId);
 
+    const data = await response.json();
+    
     if (!response.ok) {
-      throw new Error(`API returned ${response.status}`);
+      console.error("❌ [sendEmailWithAttachment] Resend API error:", { 
+        status: response.status, 
+        statusText: response.statusText,
+        data,
+        payload: {
+          to: emailPayload.to,
+          subject: emailPayload.subject,
+          attachmentsCount: emailPayload.attachments?.length || 0
+        }
+      });
+      
+      // Special handling for domain verification error
+      if (data.message && data.message.includes("domain is not verified")) {
+        console.error("⚠️ [sendEmailWithAttachment] DOMAIN VERIFICATION REQUIRED:");
+        console.error("   Resend requires a verified domain to send to external emails.");
+        console.error("   Please verify your domain at: https://resend.com/domains");
+        console.error("   Current from email:", RESEND_FROM_EMAIL);
+        console.error("   See RESEND_DOMAIN_VERIFICATION.md for instructions");
+      }
+      
+      return { success: false, error: data.message || "Failed to send email", data };
     }
 
-    const data = await response.json();
-    const rates = {
-      btc: data.bitcoin?.rub || 0,
-      eth: data.ethereum?.rub || 0,
-      usdt: data.tether?.rub || 0,
-      ltc: data.litecoin?.rub || 0,
-    };
-
-    // Cache the result
-    cache.set(cacheKey, rates, CACHE_TTL.CRYPTO_RATES);
-
-    return rates;
+    console.log("✅ [sendEmailWithAttachment] Email sent successfully:", { 
+      to: emailData.to, 
+      subject: emailData.subject, 
+      id: data.id,
+      attachmentsCount: emailData.attachments?.length || 0
+    });
+    return { success: true, data };
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      console.error("Crypto rates API timeout");
-    } else {
-      console.error("Error fetching crypto rates:", error);
+      // This should not happen as we handle AbortError in the try block above
+      console.error("⏱️ [sendEmailWithAttachment] Email sending timeout (unexpected)");
+      return { success: false, error: "Timeout", timeout: true };
     }
     
-    // Return cached value if available, even if expired
-    const staleCache = cache.get<{ btc: number; eth: number; usdt: number; ltc: number }>(cacheKey);
-    if (staleCache) {
-      return staleCache;
+    // Handle network errors that weren't caught in the fetch try block
+    if (error.cause?.code === 'ECONNRESET' || error.cause?.code === 'ECONNREFUSED' || error.message?.includes('fetch failed')) {
+      console.error("❌ [sendEmailWithAttachment] Network error (catch block):", {
+        code: error.cause?.code,
+        message: error.message
+      });
+      return { success: false, error: "Network error - connection reset (file may be too large)", timeout: false, networkError: true };
     }
     
-    return { btc: 0, eth: 0, usdt: 0, ltc: 0 };
+    console.error("❌ [sendEmailWithAttachment] Error sending email:", error);
+    return { success: false, error: error.message || "Unknown error" };
   }
 }
+
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // CSRF token endpoint
@@ -155,21 +259,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // FIXED: Added rate limiting and caching
-  app.get("/api/crypto-rates", rateLimiters.cryptoRates, async (req, res) => {
-    try {
-      const rates = await getCryptoRates();
-      res.json(rates);
-    } catch (error) {
-      console.error("Error fetching crypto rates:", error);
-      res.status(500).json({
-        success: false,
-        message: "Ошибка при получении курсов криптовалют",
-      });
-    }
-  });
-  // FIXED: Added rate limiting, authentication requirement, and input sanitization
-  app.post("/api/contact", rateLimiters.contact, express.json({ limit: '15mb' }), async (req, res) => {
+  // FIXED: Added CSRF protection, rate limiting, authentication requirement, and input sanitization
+  app.post("/api/contact", csrfProtection, rateLimiters.contact, express.json({ limit: '15mb' }), async (req, res) => {
     try {
       // FIXED: Require authentication for contact submissions
       const token = req.headers.authorization?.replace("Bearer ", "");
@@ -194,8 +285,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedData = insertContactSubmissionSchema.parse(req.body);
       
-      // FIXED: Validate and sanitize file data
-      if (validatedData.fileData && validatedData.fileName) {
+      // Check if file upload is enabled
+      const fileUploadEnabled = await storage.getSiteSetting("enable_file_upload");
+      const isFileUploadEnabled = fileUploadEnabled?.value === "true" || fileUploadEnabled?.value === true;
+      
+      // If file upload is disabled, reject file data
+      if (!isFileUploadEnabled && (validatedData.fileData || validatedData.fileName)) {
+        res.status(400).json({
+          success: false,
+          message: "Загрузка файлов временно отключена",
+        });
+        return;
+      }
+      
+      // FIXED: Validate and sanitize file data (only if file upload is enabled)
+      if (isFileUploadEnabled && validatedData.fileData && validatedData.fileName) {
         const dataUrlMatch = validatedData.fileData.match(/^data:([^;]+);base64,(.+)$/);
         const base64Data = dataUrlMatch ? dataUrlMatch[2] : validatedData.fileData;
         const declaredMimeType = dataUrlMatch ? dataUrlMatch[1] : null;
@@ -233,23 +337,203 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const submission = await storage.createContactSubmission(validatedData);
       
-      // FIXED: XSS protection - escape all user input
+      // FIXED: XSS protection - escape all user input with beautiful HTML template
       const ownerEmailHtml = `
-        <h2>Новая коммерческое предложение</h2>
-        <p><strong>ID заявки:</strong> ${escapeHtml(submission.id)}</p>
-        <p><strong>Имя:</strong> ${escapeHtml(validatedData.name)}</p>
-        <p><strong>Email:</strong> ${escapeHtml(validatedData.email)}</p>
-        <p><strong>Телефон:</strong> ${escapeHtml(validatedData.phone)}</p>
-        <p><strong>Компания:</strong> ${escapeHtml(validatedData.company || 'Не указана')}</p>
-        <p><strong>Сообщение:</strong></p>
-        <p>${escapeHtml(validatedData.message).replace(/\n/g, '<br>')}</p>
-        ${validatedData.fileName ? `<p><strong>Файл:</strong> ${escapeHtml(validatedData.fileName)}</p>` : ''}
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+          <div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;">📧 Новое коммерческое предложение</h1>
+            </div>
+            
+            <!-- Content -->
+            <div style="padding: 30px;">
+              <!-- ID заявки -->
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                <p style="margin: 0; color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">ID заявки</p>
+                <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: bold; color: #333; font-family: monospace;">${escapeHtml(submission.id)}</p>
+              </div>
+              
+              <!-- Контактная информация -->
+              <h3 style="color: #333; margin-top: 25px; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px;">👤 Контактная информация</h3>
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #666; width: 150px;"><strong>Имя:</strong></td>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #333;">${escapeHtml(validatedData.name)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #666;"><strong>Email:</strong></td>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #333;">
+                    <a href="mailto:${escapeHtml(validatedData.email)}" style="color: #667eea; text-decoration: none;">${escapeHtml(validatedData.email)}</a>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #666;"><strong>Телефон:</strong></td>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #333;">
+                    <a href="tel:${escapeHtml(validatedData.phone)}" style="color: #667eea; text-decoration: none;">${escapeHtml(validatedData.phone)}</a>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #666;"><strong>Компания:</strong></td>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #333;">${escapeHtml(validatedData.company || 'Не указана')}</td>
+                </tr>
+              </table>
+              
+              <!-- Сообщение -->
+              <h3 style="color: #333; margin-top: 25px; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px;">💬 Сообщение</h3>
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; line-height: 1.6; color: #333;">
+                ${escapeHtml(validatedData.message).replace(/\n/g, '<br>')}
+              </div>
+              
+              ${validatedData.fileName ? `
+              <!-- Файл -->
+              <div style="background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
+                <p style="margin: 0; color: #856404;">
+                  <strong>📎 Прикрепленный файл:</strong> ${escapeHtml(validatedData.fileName)}
+                </p>
+                <p style="margin: 5px 0 0 0; font-size: 12px; color: #856404;">Файл прикреплен к письму</p>
+              </div>
+              ` : ''}
+              
+              <!-- Footer -->
+              <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center; color: #999; font-size: 12px;">
+                <p style="margin: 0;">Это автоматическое уведомление с сайта</p>
+                <p style="margin: 5px 0 0 0;">Дата получения: ${new Date().toLocaleString('ru-RU', { dateStyle: 'long', timeStyle: 'short' })}</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
       `;
 
-      // Send email asynchronously (don't block response)
-      sendEmail(OWNER_EMAIL, `Новое коммерческое предложение (ID: ${submission.id}) от ${escapeHtml(validatedData.name)}`, ownerEmailHtml).catch(err => {
-        console.error("Failed to send email:", err);
-      });
+      // Prepare email with attachment if file exists
+      const emailData: {
+        from: string;
+        to: string;
+        subject: string;
+        html: string;
+        reply_to: string;
+        attachments?: Array<{ filename: string; content: string }>;
+      } = {
+        from: RESEND_FROM_EMAIL,
+        to: OWNER_EMAIL,
+        subject: `Новое коммерческое предложение (ID: ${submission.id}) от ${escapeHtml(validatedData.name)}`,
+        html: ownerEmailHtml,
+        reply_to: validatedData.email || OWNER_EMAIL, // Reply to sender's email
+      };
+
+      // Add attachment if file exists and file upload is enabled
+      if (isFileUploadEnabled && validatedData.fileName && validatedData.fileData) {
+        try {
+          // Extract base64 data (Resend expects pure base64 string without data URL prefix)
+          let base64Data: string;
+          
+          if (validatedData.fileData.includes(',')) {
+            // Remove data:type;base64, prefix
+            base64Data = validatedData.fileData.split(',')[1];
+          } else {
+            // Already base64 without prefix
+            base64Data = validatedData.fileData;
+          }
+          
+          // Validate base64
+          if (!base64Data || base64Data.length === 0) {
+            throw new Error("Empty base64 data");
+          }
+          
+          emailData.attachments = [{
+            filename: validatedData.fileName,
+            content: base64Data, // Pure base64 string for Resend
+          }];
+          
+          const sizeKB = Math.round(base64Data.length / 1024);
+          const sizeMB = (sizeKB / 1024).toFixed(2);
+          console.log("📎 [Contact] Adding attachment:", { 
+            filename: validatedData.fileName, 
+            size: base64Data.length,
+            sizeKB,
+            sizeMB: `${sizeMB} MB`,
+            note: sizeKB > 5000 ? "⚠️ Large file - may cause timeout" : "✓ File size OK"
+          });
+          
+          // Warn if file is very large
+          if (sizeKB > 10000) {
+            console.warn("⚠️ [Contact] Very large attachment detected. Consider compressing the file.");
+          }
+        } catch (attachmentError: any) {
+          console.error("❌ [Contact] Error processing attachment:", attachmentError);
+          console.error("   Will send email without attachment");
+          // Continue without attachment if there's an error
+        }
+      }
+
+      // Send email asynchronously (don't block response) - send immediately
+      console.log("📧 [Contact] Sending commercial proposal email to:", OWNER_EMAIL);
+      sendEmailWithAttachment(emailData)
+          .then(result => {
+            if (result.success) {
+              console.log("✅ [Contact] Commercial proposal email sent successfully", {
+                id: result.data?.id,
+                hasAttachment: !!(emailData.attachments && emailData.attachments.length > 0)
+              });
+            } else {
+              const isTimeout = result.timeout === true || result.error?.includes("Timeout") || result.error?.includes("timeout");
+              const isNetworkError = result.networkError === true || result.error?.includes("Network error") || result.error?.includes("connection reset");
+              console.error("❌ [Contact] Failed to send commercial proposal email:", {
+                error: result.error,
+                data: result.data,
+                isTimeout,
+                isNetworkError
+              });
+              
+              // Fallback: try sending without attachment if attachment failed (timeout or network error)
+              if (emailData.attachments && emailData.attachments.length > 0) {
+                if (isTimeout) {
+                  console.log("🔄 [Contact] Timeout detected - attempting to send email without attachment as fallback");
+                } else if (isNetworkError) {
+                  console.log("🔄 [Contact] Network error detected - attempting to send email without attachment as fallback");
+                } else {
+                  console.log("🔄 [Contact] Attempting to send email without attachment as fallback");
+                }
+                sendEmail(emailData.to, emailData.subject, emailData.html)
+                  .then(fallbackResult => {
+                    if (fallbackResult.success) {
+                      console.log("✅ [Contact] Fallback email sent successfully (without attachment)");
+                    } else {
+                      console.error("❌ [Contact] Fallback email also failed:", fallbackResult.error);
+                    }
+                  })
+                  .catch(fallbackErr => {
+                    console.error("❌ [Contact] Fallback email error:", fallbackErr);
+                  });
+              }
+            }
+          })
+          .catch(err => {
+            console.error("❌ [Contact] Error sending commercial proposal email:", err);
+            
+            // Fallback on catch as well (timeout, network errors, etc.)
+            if (emailData.attachments && emailData.attachments.length > 0) {
+              console.log("🔄 [Contact] Attempting fallback after catch error (likely timeout)");
+              sendEmail(emailData.to, emailData.subject, emailData.html)
+                .then(fallbackResult => {
+                  if (fallbackResult.success) {
+                    console.log("✅ [Contact] Fallback email sent successfully (without attachment)");
+                  } else {
+                    console.error("❌ [Contact] Fallback email also failed:", fallbackResult.error);
+                  }
+                })
+                .catch(fallbackErr => {
+                  console.error("❌ [Contact] Fallback email error:", fallbackErr);
+                });
+            }
+          });
       
       res.status(201).json({
         success: true,
@@ -312,16 +596,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/products", rateLimiters.general, async (req, res) => {
     try {
       const cacheKey = 'products-active';
-      let products = cache.get(cacheKey);
+      // Check for cache-busting parameter
+      const cacheBust = req.query._t || req.query.timestamp;
+      let products = cacheBust ? null : cache.get(cacheKey);
       
       if (!products) {
-        console.log(`📦 [GET /api/products] Cache miss, fetching from DB`);
+        console.log(`📦 [GET /api/products] Cache miss${cacheBust ? ' (cache bust)' : ''}, fetching from DB`);
         const allProducts = await storage.getProducts();
         console.log(`📦 [GET /api/products] Got ${allProducts.length} total products from DB`);
         
         products = allProducts.filter((p: any) => p.isActive !== false).map((p: any) => {
-          const parsedImages = p.images ? (typeof p.images === 'string' ? JSON.parse(p.images) : p.images) : [];
-          console.log(`📸 [GET /api/products] Product ${p.id}: ${parsedImages.length} images found in DB`);
+          let parsedImages: string[] = [];
+          if (p.images) {
+            try {
+              if (typeof p.images === 'string') {
+                // Try to parse as JSON
+                if (p.images.trim().startsWith('[') || p.images.trim().startsWith('"')) {
+                  parsedImages = JSON.parse(p.images);
+                } else {
+                  // If it's not JSON, treat as single image URL
+                  parsedImages = [p.images];
+                }
+              } else if (Array.isArray(p.images)) {
+                parsedImages = p.images;
+              } else {
+                parsedImages = [];
+              }
+              
+              // Ensure all images are strings (URLs)
+              parsedImages = parsedImages.filter((img: any) => img && typeof img === 'string' && img.length > 0);
+            } catch (e) {
+              console.error(`❌ [GET /api/products] Failed to parse images for product ${p.id}:`, e, 'Raw images:', p.images);
+              parsedImages = [];
+            }
+          }
+          console.log(`📸 [GET /api/products] Product ${p.id} (${p.name}): ${parsedImages.length} images`, parsedImages);
           return {
             ...p,
             images: parsedImages
@@ -329,7 +638,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         
         console.log(`✅ [GET /api/products] Parsed ${products.length} active products, setting cache`);
-        cache.set(cacheKey, products, CACHE_TTL.PRODUCTS);
+        if (!cacheBust) {
+          cache.set(cacheKey, products, CACHE_TTL.PRODUCTS);
+        }
       } else {
         console.log(`⚡ [GET /api/products] Using cached products (${products.length} items)`);
       }
@@ -417,12 +728,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
-      // FIXED: Sanitize input
-      const sanitizedCode = sanitizeInput(code, 50);
+      // FIXED: Sanitize input (trim whitespace, but don't change case)
+      const sanitizedCode = code.trim().toUpperCase();
       
-      const promo = { valid: false, discount: 0, code: code, discountPercent: 0 }; // await storage.validatePromoCode(sanitizedCode);
+      console.log(`🔍 [validatePromo] Validating code: "${sanitizedCode}"`);
       
-      if (!promo) {
+      const promo = await storage.validatePromoCode(sanitizedCode);
+      
+      if (!promo || !promo.valid) {
+        console.log(`❌ [validatePromo] Code "${sanitizedCode}" is invalid`);
         res.status(404).json({
           success: false,
           message: "Промокод недействителен или истек",
@@ -430,8 +744,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
+      console.log(`✅ [validatePromo] Code "${sanitizedCode}" is valid, discount: ${promo.discountPercent}%`);
+      
       res.json({
         success: true,
+        promoCode: {
+          code: promo.code,
+          discountPercent: promo.discountPercent,
+        },
         discountPercent: promo.discountPercent,
         code: promo.code,
       });
@@ -444,8 +764,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // FIXED: Added rate limiting and XSS protection (CSRF disabled for stateless REST API)
-  app.post("/api/orders", rateLimiters.orders, async (req, res) => {
+  // FIXED: Added CSRF protection, rate limiting and XSS protection
+  app.post("/api/orders", csrfProtection, rateLimiters.orders, async (req, res) => {
     try {
       // FIXED: Require authentication for orders
       const token = req.headers.authorization?.replace("Bearer ", "");
@@ -537,63 +857,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // FIXED: XSS protection - escape all user input in email
+      // FIXED: XSS protection - escape all user input in email with beautiful HTML template
       const ownerEmailHtml = `
-        <div style="font-family: Arial, sans-serif; color: #333;">
-          <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">Новый заказ</h2>
-          
-          <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0;">
-            <p style="margin: 5px 0;"><strong>ID заказа:</strong> <code style="background: #eee; padding: 3px 6px;">${escapeHtml(order.id)}</code></p>
-            <p style="margin: 5px 0;"><strong>ID пользователя:</strong> <code style="background: #eee; padding: 3px 6px;">${escapeHtml(order.userId || 'Гость')}</code></p>
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+          <div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); padding: 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;">🛒 Новый заказ</h1>
+            </div>
+            
+            <!-- Content -->
+            <div style="padding: 30px;">
+              <!-- ID заказа -->
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
+                <p style="margin: 0; color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Номер заказа</p>
+                <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: bold; color: #333; font-family: monospace;">#${escapeHtml(order.id)}</p>
+              </div>
+              
+              <!-- Контактные данные -->
+              <h3 style="color: #333; margin-top: 25px; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px;">👤 Контактные данные клиента</h3>
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #666; width: 150px;"><strong>Имя:</strong></td>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #333;">${escapeHtml(order.customerName || 'Не указано')}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #666;"><strong>Email:</strong></td>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #333;">
+                    ${order.customerEmail ? `<a href="mailto:${escapeHtml(order.customerEmail)}" style="color: #4CAF50; text-decoration: none;">${escapeHtml(order.customerEmail)}</a>` : 'Не указано'}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #666;"><strong>Телефон:</strong></td>
+                  <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #333;">
+                    ${order.customerPhone ? `<a href="tel:${escapeHtml(order.customerPhone)}" style="color: #4CAF50; text-decoration: none;">${escapeHtml(order.customerPhone)}</a>` : 'Не указано'}
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Детали заказа -->
+              <h3 style="color: #333; margin-top: 25px; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px;">📦 Детали заказа</h3>
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr style="background: #f0f0f0;">
+                  <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Параметр</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Значение</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #666;">Товар</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #333; font-weight: bold;">${escapeHtml(product.name)}</td>
+                </tr>
+                <tr style="background: #fafafa;">
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #666;">Артикул</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #333;">${escapeHtml(product.sku)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #666;">Количество</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #333;">${order.quantity} шт.</td>
+                </tr>
+                <tr style="background: #fafafa;">
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #666;">Сумма</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #333; font-size: 18px; font-weight: bold; color: #4CAF50;">${escapeHtml(order.finalAmount)} ₽</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #666;">Способ оплаты</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #333;">${escapeHtml(order.paymentMethod)}</td>
+                </tr>
+                <tr style="background: #fafafa;">
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #666;">Статус</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #333;">
+                    <span style="background: ${order.paymentStatus === 'paid' ? '#4CAF50' : order.paymentStatus === 'pending' ? '#ff9800' : '#f44336'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                      ${escapeHtml(order.paymentStatus)}
+                    </span>
+                  </td>
+                </tr>
+                ${order.reservedUntil ? `
+                <tr>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #666;">Резервация до</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: #333;">${new Date(order.reservedUntil).toLocaleString('ru-RU')}</td>
+                </tr>
+                ` : ''}
+              </table>
+              
+              <!-- Footer -->
+              <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center; color: #999; font-size: 12px;">
+                <p style="margin: 0;">Это автоматическое уведомление. Пожалуйста, свяжитесь с клиентом по предоставленным контактным данным.</p>
+                <p style="margin: 5px 0 0 0;">Дата заказа: ${new Date(order.createdAt).toLocaleString('ru-RU', { dateStyle: 'long', timeStyle: 'short' })}</p>
+              </div>
+            </div>
           </div>
-          
-          <h3 style="color: #1a1a1a; margin-top: 20px;">Контактные данные клиента:</h3>
-          <ul style="list-style: none; padding: 0;">
-            <li style="padding: 5px 0;"><strong>Имя:</strong> ${escapeHtml(order.customerName || 'Не указано')}</li>
-            <li style="padding: 5px 0;"><strong>Email:</strong> ${escapeHtml(order.customerEmail || 'Не указано')}</li>
-            <li style="padding: 5px 0;"><strong>Телефон:</strong> ${escapeHtml(order.customerPhone || 'Не указано')}</li>
-          </ul>
-          
-          <h3 style="color: #1a1a1a; margin-top: 20px;">Детали заказа:</h3>
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr style="background: #f0f0f0;">
-              <td style="padding: 8px; border: 1px solid #ddd;"><strong>Параметр</strong></td>
-              <td style="padding: 8px; border: 1px solid #ddd;"><strong>Значение</strong></td>
-            </tr>
-            <tr>
-              <td style="padding: 8px; border: 1px solid #ddd;">Товар</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(product.name)}</td>
-            </tr>
-            <tr style="background: #fafafa;">
-              <td style="padding: 8px; border: 1px solid #ddd;">Артикул</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(product.sku)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px; border: 1px solid #ddd;">Количество</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${order.quantity} шт.</td>
-            </tr>
-            <tr style="background: #fafafa;">
-              <td style="padding: 8px; border: 1px solid #ddd;">Сумма</td>
-              <td style="padding: 8px; border: 1px solid #ddd;"><strong>${escapeHtml(order.finalAmount)} РУБ</strong></td>
-            </tr>
-            <tr>
-              <td style="padding: 8px; border: 1px solid #ddd;">Способ оплаты</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(order.paymentMethod)}</td>
-            </tr>
-            <tr style="background: #fafafa;">
-              <td style="padding: 8px; border: 1px solid #ddd;">Статус</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(order.paymentStatus)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px; border: 1px solid #ddd;">Резервация до</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${order.reservedUntil ? new Date(order.reservedUntil).toLocaleString('ru-RU') : 'Не установлено'}</td>
-            </tr>
-          </table>
-          
-          <p style="margin-top: 20px; color: #666; font-size: 12px;">
-            Это автоматическое письмо. Пожалуйста, свяжитесь с клиентом по предоставленным контактным данным.
-          </p>
-        </div>
+        </body>
+        </html>
       `;
 
       // Send email asynchronously
@@ -746,7 +1105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Auth endpoints
-  app.post("/api/auth/register", rateLimiters.general, async (req, res) => {
+  app.post("/api/auth/register", csrfProtection, rateLimiters.general, async (req, res) => {
     try {
       const { email, password, firstName, lastName, phone } = req.body;
       
@@ -771,6 +1130,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: "user",
       });
 
+      // Save personal data consent (152-ФЗ compliance)
+      const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0] || 
+                      req.socket.remoteAddress || 
+                      'unknown';
+      const userAgent = req.headers['user-agent'] || null;
+      
+      try {
+        await storage.createPersonalDataConsent({
+          userId: user.id,
+          consentType: "registration",
+          isConsented: true,
+          consentText: "Согласен на обработку персональных данных и с политикой обработки персональных данных",
+          ipAddress: clientIp,
+          userAgent: userAgent,
+        });
+      } catch (consentError) {
+        console.error("Error saving consent:", consentError);
+        // Don't fail registration if consent saving fails
+      }
+
       const accessToken = generateAccessToken({
         userId: user.id,
         email: user.email,
@@ -791,7 +1170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/login", rateLimiters.general, async (req, res) => {
+  app.post("/api/auth/login", csrfProtection, rateLimiters.general, async (req, res) => {
     try {
       const { email, password } = req.body;
 
@@ -1065,14 +1444,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Send email notification
           if (orderUser.email) {
+            const statusColor = paymentStatus === "paid" ? "#4CAF50" : paymentStatus === "cancelled" ? "#f44336" : "#ff9800";
             const emailHtml = `
-              <div style="font-family: Arial, sans-serif; color: #333;">
-                <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">Статус заказа изменен</h2>
-                <p style="margin: 15px 0;"><strong>Номер заказа:</strong> #${escapeHtml(order.id.slice(0, 8))}</p>
-                <p style="margin: 15px 0;"><strong>Новый статус:</strong> ${escapeHtml(statusMessage)}</p>
-                <p style="margin: 15px 0; line-height: 1.6;">Вы можете просмотреть детали заказа в своем профиле на сайте.</p>
-                <p style="margin-top: 20px;"><a href="${process.env.FRONTEND_URL || 'http://localhost:5000'}/profile" style="color: #4CAF50; text-decoration: none;">Перейти в профиль →</a></p>
-              </div>
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              </head>
+              <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+                <div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <!-- Header -->
+                  <div style="background: linear-gradient(135deg, ${statusColor} 0%, ${statusColor}dd 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;">📦 Статус заказа изменен</h1>
+                  </div>
+                  
+                  <!-- Content -->
+                  <div style="padding: 30px;">
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid ${statusColor};">
+                      <p style="margin: 0; color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Номер заказа</p>
+                      <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: bold; color: #333; font-family: monospace;">#${escapeHtml(order.id.slice(0, 8))}</p>
+                    </div>
+                    
+                    <div style="background: #fff; padding: 20px; border-radius: 5px; margin-bottom: 20px; border: 2px solid ${statusColor};">
+                      <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Новый статус:</p>
+                      <p style="margin: 0; font-size: 20px; font-weight: bold; color: ${statusColor};">
+                        ${escapeHtml(statusMessage)}
+                      </p>
+                    </div>
+                    
+                    <p style="margin: 20px 0; line-height: 1.6; color: #333;">
+                      Вы можете просмотреть детали заказа в своем профиле на сайте.
+                    </p>
+                    
+                    <div style="text-align: center; margin-top: 30px;">
+                      <a href="${process.env.FRONTEND_URL || 'http://localhost:5000'}/profile" 
+                         style="display: inline-block; background: ${statusColor}; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                        Перейти в профиль →
+                      </a>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center; color: #999; font-size: 12px;">
+                      <p style="margin: 0;">Это автоматическое уведомление</p>
+                    </div>
+                  </div>
+                </div>
+              </body>
+              </html>
             `;
             sendEmail(orderUser.email, `Статус заказа #${order.id.slice(0, 8)} изменен`, emailHtml).catch(err => {
               console.error("Failed to send order status email:", err);
@@ -1400,15 +1819,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const orders = await storage.getAllOrders();
       const contacts = await storage.getContactSubmissions();
-      const users = Array.from((storage as any).users.values());
+      const allUsers = await storage.getAllUsers();
+      
+      // Ensure allUsers is an array
+      const usersArray = Array.isArray(allUsers) ? allUsers : [];
+      
+      // Calculate user activity by day (last 30 days)
+      const days = 30;
+      const userActivityByDay: { date: string; registrations: number; logins: number }[] = [];
+      const today = new Date();
+      
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+        
+        // Count registrations for this day
+        const registrations = usersArray.filter((u: any) => {
+          if (!u || !u.createdAt) return false;
+          try {
+            const userDate = new Date(u.createdAt).toISOString().split('T')[0];
+            return userDate === dateStr;
+          } catch {
+            return false;
+          }
+        }).length;
+        
+        // Count logins for this day (users who logged in on this day)
+        const logins = usersArray.filter((u: any) => {
+          if (!u || !u.lastLoginAt) return false;
+          try {
+            const loginDate = new Date(u.lastLoginAt).toISOString().split('T')[0];
+            return loginDate === dateStr;
+          } catch {
+            return false;
+          }
+        }).length;
+        
+        userActivityByDay.push({ date: dateStr, registrations, logins });
+      }
+      
+      // Ensure orders and contacts are arrays
+      const ordersArray = Array.isArray(orders) ? orders : [];
+      const contactsArray = Array.isArray(contacts) ? contacts : [];
+      
+      // Calculate totals
+      const totalRevenue = ordersArray
+        .filter((o: any) => o && (o.paymentStatus === 'completed' || o.paymentStatus === 'paid'))
+        .reduce((sum: number, o: any) => {
+          const amount = o?.finalAmount || 0;
+          const parsed = typeof amount === 'string' 
+            ? parseFloat(amount.replace(/[^\d.-]/g, '')) || 0
+            : parseFloat(String(amount)) || 0;
+          return sum + parsed;
+        }, 0);
       
       res.json({
         success: true,
         stats: {
-          totalUsers: users.length,
-          totalOrders: orders.length,
-          totalContacts: contacts.length,
-          pendingOrders: orders.filter((o: any) => o.paymentStatus === 'pending').length,
+          totalUsers: usersArray.length,
+          totalOrders: ordersArray.length,
+          totalContacts: contactsArray.length,
+          pendingOrders: ordersArray.filter((o: any) => o && o.paymentStatus === 'pending').length,
+          completedOrders: ordersArray.filter((o: any) => o && (o.paymentStatus === 'completed' || o.paymentStatus === 'paid')).length,
+          totalRevenue: totalRevenue,
+          activePromoCodes: (await storage.getPromoCodes()).filter((p: any) => p && p.isActive && (!p.expiresAt || new Date(p.expiresAt) > new Date())).length,
+          userActivityByDay: userActivityByDay,
         }
       });
     } catch (error) {
@@ -1591,6 +2067,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Block user error:", error);
       res.status(500).json({ success: false, message: "Failed to block user" });
+    }
+  });
+
+  // USER: Delete Own Account
+  app.delete("/api/auth/account", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+
+      // Prevent deletion of admin accounts
+      if (user.role === "admin" || user.role === "superadmin") {
+        res.status(403).json({ success: false, message: "Admin accounts cannot be deleted" });
+        return;
+      }
+
+      const deleted = await storage.deleteUser(payload.userId);
+      if (!deleted) {
+        res.status(500).json({ success: false, message: "Failed to delete account" });
+        return;
+      }
+
+      res.json({ success: true, message: "Account deleted successfully" });
+    } catch (error) {
+      console.error("Delete account error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete account" });
     }
   });
 
@@ -1851,6 +2362,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // PUBLIC: Get Site Settings (for displaying contact info)
+  app.get("/api/settings", rateLimiters.general, async (req, res) => {
+    try {
+      const settings = await storage.getSiteSettings();
+      // Return only public settings (contact info, site title, and file upload setting)
+      const publicSettings = settings.filter((s: any) => 
+        ['contact_email', 'contact_phone', 'contact_address', 'contact_telegram', 'site_title', 'enable_file_upload'].includes(s.key)
+      );
+      res.json({ success: true, settings: publicSettings });
+    } catch (error) {
+      console.error("Get settings error:", error);
+      res.status(500).json({ success: false, message: "Failed to get settings" });
+    }
+  });
+
   // ADMIN: Get Site Settings
   app.get("/api/admin/settings", async (req, res) => {
     try {
@@ -1897,6 +2423,363 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Update setting error:", error);
       res.status(500).json({ success: false, message: "Failed to update setting" });
+    }
+  });
+
+  // PUBLIC: Get Site Content (for displaying dynamic content)
+  app.get("/api/content", rateLimiters.general, async (req, res) => {
+    try {
+      const content = await storage.getAllSiteContent();
+      // Return only active content
+      const activeContent = content.filter((c: any) => c.isActive !== false);
+      res.json({ success: true, content: activeContent });
+    } catch (error) {
+      console.error("Get content error:", error);
+      res.status(500).json({ success: false, message: "Failed to get content" });
+    }
+  });
+
+  // ADMIN: Get Site Content
+  app.get("/api/admin/content", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const content = await storage.getAllSiteContent();
+      res.json({ success: true, content });
+    } catch (error) {
+      console.error("Get content error:", error);
+      res.status(500).json({ success: false, message: "Failed to get content" });
+    }
+  });
+
+  // ADMIN: Get Site Content by Key
+  app.get("/api/admin/content/:key", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const content = await storage.getSiteContent(req.params.key);
+      if (!content) {
+        res.status(404).json({ success: false, message: "Content not found" });
+        return;
+      }
+
+      res.json({ success: true, content });
+    } catch (error) {
+      console.error("Get content error:", error);
+      res.status(500).json({ success: false, message: "Failed to get content" });
+    }
+  });
+
+  // ADMIN: Update Site Content
+  app.put("/api/admin/content/:key", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { value, page, section } = req.body;
+      const existing = await storage.getSiteContent(req.params.key);
+      if (!existing) {
+        await storage.createSiteContent({ key: req.params.key, value, page, section });
+        res.json({ success: true, message: "Content created" });
+        return;
+      }
+
+      const content = await storage.updateSiteContent(req.params.key, { value, page, section });
+      res.json({ success: true, content });
+    } catch (error) {
+      console.error("Update content error:", error);
+      res.status(500).json({ success: false, message: "Failed to update content" });
+    }
+  });
+
+  // ADMIN: Delete Site Content
+  app.delete("/api/admin/content/:key", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      await storage.deleteSiteContent(req.params.key);
+      res.json({ success: true, message: "Content deleted" });
+    } catch (error) {
+      console.error("Delete content error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete content" });
+    }
+  });
+
+  // ADMIN: Get Site Contacts
+  app.get("/api/admin/site-contacts", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const contacts = await storage.getAllSiteContacts();
+      res.json({ success: true, contacts });
+    } catch (error) {
+      console.error("Get site contacts error:", error);
+      res.status(500).json({ success: false, message: "Failed to get site contacts" });
+    }
+  });
+
+  // ADMIN: Create Site Contact
+  app.post("/api/admin/site-contacts", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { type, value, label, order } = req.body;
+      const contact = await storage.createSiteContact({ type, value, label, order });
+      res.json({ success: true, contact });
+    } catch (error) {
+      console.error("Create site contact error:", error);
+      res.status(500).json({ success: false, message: "Failed to create site contact" });
+    }
+  });
+
+  // ADMIN: Update Site Contact
+  app.put("/api/admin/site-contacts/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const contact = await storage.updateSiteContact(req.params.id, req.body);
+      res.json({ success: true, contact });
+    } catch (error) {
+      console.error("Update site contact error:", error);
+      res.status(500).json({ success: false, message: "Failed to update site contact" });
+    }
+  });
+
+  // ADMIN: Delete Site Contact
+  app.delete("/api/admin/site-contacts/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      await storage.deleteSiteContact(req.params.id);
+      res.json({ success: true, message: "Site contact deleted" });
+    } catch (error) {
+      console.error("Delete site contact error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete site contact" });
+    }
+  });
+
+  // ADMIN: Get Cookie Settings
+  app.get("/api/admin/cookie-settings", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const settings = await storage.getCookieSettings();
+      res.json({ success: true, settings });
+    } catch (error) {
+      console.error("Get cookie settings error:", error);
+      res.status(500).json({ success: false, message: "Failed to get cookie settings" });
+    }
+  });
+
+  // ADMIN: Update Cookie Settings
+  app.put("/api/admin/cookie-settings", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const settings = await storage.setCookieSettings(req.body);
+      res.json({ success: true, settings });
+    } catch (error) {
+      console.error("Update cookie settings error:", error);
+      res.status(500).json({ success: false, message: "Failed to update cookie settings" });
+    }
+  });
+
+  // PUBLIC: Get Cookie Settings (for banner)
+  app.get("/api/cookie-settings", async (req, res) => {
+    try {
+      const settings = await storage.getCookieSettings();
+      res.json({ success: true, settings });
+    } catch (error) {
+      console.error("Get cookie settings error:", error);
+      res.status(500).json({ success: false, message: "Failed to get cookie settings" });
+    }
+  });
+
+  // ADMIN: Export Database
+  app.get("/api/admin/database/export", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      // Get all tables
+      const client = await pool.connect();
+      try {
+        // Get list of all tables
+        const tablesResult = await client.query(`
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_type = 'BASE TABLE'
+          ORDER BY table_name;
+        `);
+
+        const tables = tablesResult.rows.map((row: any) => row.table_name);
+        let sqlDump = `-- Database Export\n-- Generated: ${new Date().toISOString()}\n-- Database: ${process.env.DATABASE_URL?.split('/').pop() || 'loaddevice_db'}\n\n`;
+
+        // Export each table
+        for (const tableName of tables) {
+          sqlDump += `\n-- Table: ${tableName}\n`;
+          
+          // Get table structure
+          const structureResult = await client.query(`
+            SELECT column_name, data_type, character_maximum_length, is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_name = $1
+            ORDER BY ordinal_position;
+          `, [tableName]);
+
+          // Get data
+          const dataResult = await client.query(`SELECT * FROM "${tableName}"`);
+          
+          if (dataResult.rows.length > 0) {
+            const columns = structureResult.rows.map((col: any) => col.column_name);
+            sqlDump += `INSERT INTO "${tableName}" (${columns.map((c: string) => `"${c}"`).join(', ')}) VALUES\n`;
+            
+            const values = dataResult.rows.map((row: any, idx: number) => {
+              const vals = columns.map((col: string) => {
+                const val = row[col];
+                if (val === null) return 'NULL';
+                if (typeof val === 'string') return `'${val.replace(/'/g, "''")}'`;
+                if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
+                if (val instanceof Date) return `'${val.toISOString()}'`;
+                if (typeof val === 'object') return `'${JSON.stringify(val).replace(/'/g, "''")}'`;
+                return val;
+              });
+              return `  (${vals.join(', ')})${idx < dataResult.rows.length - 1 ? ',' : ';'}`;
+            });
+            
+            sqlDump += values.join('\n') + '\n\n';
+          }
+        }
+
+        res.setHeader('Content-Type', 'application/sql');
+        res.setHeader('Content-Disposition', `attachment; filename="database-backup-${new Date().toISOString().split('T')[0]}.sql"`);
+        res.send(sqlDump);
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error("Database export error:", error);
+      res.status(500).json({ success: false, message: "Failed to export database" });
     }
   });
 
@@ -2038,8 +2921,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cache.delete('products-active');
       console.log(`✅ [POST /api/admin/products/:id/images] Caches cleared`);
 
-      console.log(`✨ [POST /api/admin/products/:id/images] SUCCESS - returning product with ${product.images ? product.images.length : 0} images`);
-      res.json({ success: true, product });
+      // Ensure images are returned as array
+      const productWithImages = {
+        ...product,
+        images: Array.isArray(product.images) ? product.images : (product.images ? JSON.parse(product.images) : [])
+      };
+      
+      console.log(`✨ [POST /api/admin/products/:id/images] SUCCESS - returning product with ${productWithImages.images.length} images`);
+      res.json({ success: true, product: productWithImages });
     } catch (error) {
       console.error("❌ Add product image error:", error);
       res.status(500).json({ success: false, message: "Failed to add image" });
@@ -2080,7 +2969,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cache.delete('products');
       cache.delete('products-active');
 
-      res.json({ success: true, product });
+      // Ensure images are returned as array
+      const productWithImages = {
+        ...product,
+        images: Array.isArray(product.images) ? product.images : (product.images ? JSON.parse(product.images) : [])
+      };
+
+      res.json({ success: true, product: productWithImages });
     } catch (error) {
       console.error("Remove product image error:", error);
       res.status(500).json({ success: false, message: "Failed to remove image" });
@@ -2128,11 +3023,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Send email notification
         if (targetUser.email) {
           const emailHtml = `
-            <div style="font-family: Arial, sans-serif; color: #333;">
-              <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">${escapeHtml(title)}</h2>
-              <p style="margin: 15px 0; line-height: 1.6;">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
-              ${link ? `<p style="margin-top: 20px;"><a href="${escapeHtml(link)}" style="color: #4CAF50; text-decoration: none;">Перейти →</a></p>` : ''}
-            </div>
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+              <div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                  <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;">🔔 ${escapeHtml(title)}</h1>
+                </div>
+                
+                <!-- Content -->
+                <div style="padding: 30px;">
+                  <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px; line-height: 1.6; color: #333;">
+                    ${escapeHtml(message).replace(/\n/g, '<br>')}
+                  </div>
+                  
+                  ${link ? `
+                  <div style="text-align: center; margin-top: 30px;">
+                    <a href="${escapeHtml(link)}" 
+                       style="display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                      Перейти →
+                    </a>
+                  </div>
+                  ` : ''}
+                  
+                  <!-- Footer -->
+                  <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center; color: #999; font-size: 12px;">
+                    <p style="margin: 0;">Это автоматическое уведомление</p>
+                  </div>
+                </div>
+              </div>
+            </body>
+            </html>
           `;
           sendEmail(targetUser.email, title, emailHtml).catch(err => {
             console.error("Failed to send notification email:", err);
@@ -2154,11 +3080,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const targetUser of allUsers) {
           if (targetUser.email) {
             const emailHtml = `
-              <div style="font-family: Arial, sans-serif; color: #333;">
-                <h2 style="color: #1a1a1a; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">${escapeHtml(title)}</h2>
-                <p style="margin: 15px 0; line-height: 1.6;">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
-                ${link ? `<p style="margin-top: 20px;"><a href="${escapeHtml(link)}" style="color: #4CAF50; text-decoration: none;">Перейти →</a></p>` : ''}
-              </div>
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              </head>
+              <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+                <div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <!-- Header -->
+                  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;">🔔 ${escapeHtml(title)}</h1>
+                  </div>
+                  
+                  <!-- Content -->
+                  <div style="padding: 30px;">
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px; line-height: 1.6; color: #333;">
+                      ${escapeHtml(message).replace(/\n/g, '<br>')}
+                    </div>
+                    
+                    ${link ? `
+                    <div style="text-align: center; margin-top: 30px;">
+                      <a href="${escapeHtml(link)}" 
+                         style="display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                        Перейти →
+                      </a>
+                    </div>
+                    ` : ''}
+                    
+                    <!-- Footer -->
+                    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center; color: #999; font-size: 12px;">
+                      <p style="margin: 0;">Это автоматическое уведомление</p>
+                    </div>
+                  </div>
+                </div>
+              </body>
+              </html>
             `;
             sendEmail(targetUser.email, title, emailHtml).catch(err => {
               console.error("Failed to send notification email:", err);

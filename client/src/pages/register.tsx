@@ -93,16 +93,17 @@ export default function Register() {
         localStorage.setItem("refreshToken", result.tokens.refreshToken);
       }
 
-      // Invalidate and refetch user data
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      // Invalidate and refetch user data (don't await - do it in background)
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
 
+      // Redirect immediately
+      setLocation("/profile");
+      
+      // Show toast after redirect
       toast({
         title: "Успешно",
         description: "Регистрация успешна. Добро пожаловать!",
       });
-
-      // Redirect to profile without reload
-      setLocation("/profile");
     } catch (err) {
       setError("Произошла ошибка при регистрации");
       console.error("Register error:", err);
@@ -219,6 +220,38 @@ export default function Register() {
                   {errors.confirmPassword.message}
                 </p>
               )}
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  id="consent-personal-data-register"
+                  required
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <Label htmlFor="consent-personal-data-register" className="text-sm leading-relaxed cursor-pointer">
+                  Я даю согласие на обработку персональных данных *
+                </Label>
+              </div>
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  id="consent-data-processing-register"
+                  required
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <Label htmlFor="consent-data-processing-register" className="text-sm leading-relaxed cursor-pointer">
+                  Я принимаю условия{" "}
+                  <a href="/data-processing-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                    Политики обработки персональных данных
+                  </a>{" "}
+                  и{" "}
+                  <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                    Политики конфиденциальности
+                  </a> *
+                </Label>
+              </div>
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>

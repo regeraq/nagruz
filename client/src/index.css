@@ -657,6 +657,50 @@
     background: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
   }
+
+  /* ====== MOBILE OPTIMIZATIONS ====== */
+  
+  /* Touch-friendly tap targets - minimum 44x44px */
+  @media (max-width: 767px) {
+    button, 
+    [role="button"],
+    a[href] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    /* Better text readability on mobile */
+    body {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Prevent text size adjustment on iOS */
+    input,
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+
+    /* Better spacing for mobile */
+    .space-y-6 > * + * {
+      margin-top: 1.25rem;
+    }
+
+    /* Optimize images for mobile */
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+  }
+
+  /* Tablet optimizations */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    /* Medium spacing adjustments */
+    .space-y-6 > * + * {
+      margin-top: 1.5rem;
+    }
+  }
 }
 
 /* MODERN 2025 BACKGROUNDS */
@@ -801,15 +845,34 @@ html.dark body::before {
 
 /* Arrow animation keyframes */
 @keyframes arrowBounce {
-  0%, 100% {
+  0% {
     transform: translateX(0px);
   }
   50% {
     transform: translateX(8px);
   }
+  100% {
+    transform: translateX(0px);
+  }
 }
 
 /* Arrow animation container - hover on wrapper */
+/* Анимация запускается каждый раз при наведении */
+.arrow-button .animated-arrow {
+  animation: none;
+  transition: transform 0.3s ease;
+}
+
 .arrow-button:hover .animated-arrow {
-  animation: arrowBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+  animation: arrowBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+/* Анимация стрелки для компонентов с классом group (например, power-gauge) */
+.group .animated-arrow {
+  animation: none;
+  transition: transform 0.3s ease;
+}
+
+.group:hover .animated-arrow {
+  animation: arrowBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
 }

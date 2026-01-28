@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -120,6 +121,8 @@ export default function Home() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [consentPersonalData, setConsentPersonalData] = useState(false);
+  const [consentDataProcessing, setConsentDataProcessing] = useState(false);
   const device = devices[selectedDevice] || devices["nu-100"];
   const { toast } = useToast();
 
@@ -141,16 +144,146 @@ export default function Home() {
     }
   }, [selectedDevice]);
 
-  const { data: products = [] } = useQuery<Product[]>({
+  const { data: products = [], isLoading: isLoadingProducts, error: productsError } = useQuery<Product[]>({
     queryKey: ['/api/products'],
+    queryFn: async () => {
+      console.log(`📥 [Home] Fetching products from /api/products`);
+      try {
+        const res = await fetch("/api/products");
+        if (!res.ok) {
+          console.error(`❌ [Home] Failed to fetch products: ${res.status} ${res.statusText}`);
+          return [];
+        }
+        const data = await res.json();
+        console.log(`✅ [Home] Received ${data.length} products from API`);
+        // Log each product's images
+        data.forEach((p: any) => {
+          const imgCount = Array.isArray(p.images) ? p.images.length : (p.images ? 1 : 0);
+          console.log(`📦 [Home] Product ${p.id} (${p.name}): ${imgCount} images`, {
+            images: p.images,
+            imagesType: typeof p.images,
+            isArray: Array.isArray(p.images)
+          });
+        });
+        return data;
+      } catch (error) {
+        console.error(`❌ [Home] Error fetching products:`, error);
+        return [];
+      }
+    },
+    staleTime: 10 * 60 * 1000, // 10 minutes - keep products fresh longer
+    gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache for 30 minutes (formerly cacheTime)
+    refetchOnMount: false, // Don't refetch on mount if data is fresh
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchOnReconnect: false, // Don't refetch on reconnect
+    // Keep previous data while fetching new data
+    placeholderData: (previousData) => previousData,
   });
 
   // Get product images for current device
-  const currentProduct = products.find((p: Product) => p.id === selectedDevice);
-  const imagesData = (currentProduct as any)?.images;
-  const productImages = typeof imagesData === 'string' 
-    ? ((() => { try { return JSON.parse(imagesData); } catch { return []; } })()) 
-    : (Array.isArray(imagesData) ? imagesData : []);
+  const currentProduct = useMemo(() => {
+    const product = products.find((p: Product) => p.id === selectedDevice);
+    console.log(`🔍 [Home] Looking for product ${selectedDevice}:`, {
+      found: !!product,
+      totalProducts: products.length,
+      productIds: products.map((p: any) => p.id),
+      productData: product ? { id: product.id, name: product.name, hasImages: !!(product as any).images } : null
+    });
+    return product;
+  }, [products, selectedDevice]);
+  
+  // Parse product images - handle both string and array formats
+  const productImages = useMemo(() => {
+    // If no current product, return empty array
+    if (!currentProduct) {
+      console.log(`⚠️ [Home] No currentProduct for ${selectedDevice}`);
+      return [];
+    }
+    
+    const rawImages = (currentProduct as any)?.images;
+    
+    console.log(`🖼️ [Home] Parsing images for ${selectedDevice}:`, {
+      hasCurrentProduct: !!currentProduct,
+      productId: currentProduct.id,
+      hasRawImages: !!rawImages,
+      rawImagesType: typeof rawImages,
+      rawImagesValue: rawImages,
+      isArray: Array.isArray(rawImages)
+    });
+    
+    if (!rawImages) {
+      console.log(`⚠️ [Home] No images for product ${selectedDevice} (${currentProduct.id})`);
+      return [];
+    }
+    
+    // If already an array, return it directly (server should send arrays)
+    if (Array.isArray(rawImages)) {
+      const filtered = rawImages.filter((img: any) => img && typeof img === 'string' && img.length > 0);
+      console.log(`✅ [Home] Images already array: ${filtered.length} valid images out of ${rawImages.length}`);
+      return filtered;
+    }
+    
+    // If string, try to parse
+    if (typeof rawImages === 'string') {
+      // If empty string, return empty array
+      if (!rawImages.trim()) {
+        console.log(`⚠️ [Home] Empty images string for ${selectedDevice}`);
+        return [];
+      }
+      
+      try {
+        // Try to parse as JSON
+        if (rawImages.trim().startsWith('[') || rawImages.trim().startsWith('"')) {
+          const parsed = JSON.parse(rawImages);
+          const result = Array.isArray(parsed) ? parsed : [parsed];
+          const filtered = result.filter((img: any) => img && typeof img === 'string' && img.length > 0);
+          console.log(`✅ [Home] Parsed JSON string to array: ${filtered.length} valid images`);
+          return filtered;
+        } else {
+          // Single image URL, not JSON
+          console.log(`✅ [Home] Single image URL (not JSON): ${rawImages}`);
+          return [rawImages];
+        }
+      } catch (e) {
+        // If JSON parse fails, treat as single image URL
+        console.log(`⚠️ [Home] JSON parse failed, treating as single URL:`, e);
+        return [rawImages];
+      }
+    }
+    
+    console.warn(`⚠️ [Home] Unknown images type:`, typeof rawImages, rawImages);
+    return [];
+  }, [currentProduct, selectedDevice]);
+  
+  // Debug logging
+  useEffect(() => {
+    const rawImages = (currentProduct as any)?.images;
+    console.log(`🖼️ [Home] Gallery state for ${selectedDevice}:`, {
+      isLoadingProducts,
+      productsCount: products.length,
+      currentProductFound: !!currentProduct,
+      currentProductId: currentProduct?.id,
+      currentProductName: currentProduct?.name,
+      rawImagesExists: !!rawImages,
+      rawImagesType: typeof rawImages,
+      rawImagesValue: rawImages,
+      productImagesCount: productImages.length,
+      productImages: productImages,
+      willShowGallery: productImages.length > 0
+    });
+    
+    // Log if gallery should be visible but isn't
+    if (productImages.length > 0) {
+      console.log(`✅ [Home] Gallery SHOULD be visible for ${selectedDevice} with ${productImages.length} images`);
+    } else if (currentProduct) {
+      console.warn(`⚠️ [Home] Gallery should NOT be visible - product found but no images`, {
+        productId: currentProduct.id,
+        rawImages: (currentProduct as any).images
+      });
+    } else {
+      console.warn(`⚠️ [Home] Gallery should NOT be visible - product ${selectedDevice} not found in ${products.length} products`);
+    }
+  }, [currentProduct, productImages, selectedDevice, products.length, isLoadingProducts]);
 
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ['/api/admin/settings'],
@@ -222,6 +355,9 @@ export default function Home() {
 
   const contactMutation = useMutation({
     mutationFn: async (data: InsertContactSubmission) => {
+      if (!consentPersonalData || !consentDataProcessing) {
+        throw new Error("Необходимо дать согласие на обработку персональных данных");
+      }
       return await apiRequest("POST", "/api/contact", data);
     },
     onSuccess: (response: any) => {
@@ -234,6 +370,8 @@ export default function Home() {
       queueMicrotask(() => {
         form.reset();
         setSelectedFile(null);
+        setConsentPersonalData(false);
+        setConsentDataProcessing(false);
       });
     },
     onError: (error: any) => {
@@ -334,11 +472,11 @@ export default function Home() {
       {showScrollTop && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full shadow-lg shadow-primary/40 hover:shadow-primary/60 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 hover:-translate-y-1"
+          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 w-11 h-11 sm:w-12 sm:h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full shadow-lg shadow-primary/40 hover:shadow-primary/60 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 hover:-translate-y-1"
           data-testid="button-scroll-top-floating"
           aria-label="Вернуться в начало"
         >
-          <ArrowUp className="w-5 h-5" />
+          <ArrowUp className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
       )}
       <section
@@ -347,73 +485,73 @@ export default function Home() {
       >
         <div className="absolute inset-0 bg-grid-pattern opacity-30 animate-fade-up" />
         
-        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-8 py-32 md:py-40 text-center">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-20 sm:py-24 md:py-32 lg:py-40 text-center">
           <Badge 
             variant="secondary" 
-            className="mb-6 text-sm font-medium px-4 py-2 animate-fade-scale"
+            className="mb-4 sm:mb-6 text-xs sm:text-sm font-medium px-3 sm:px-4 py-1.5 sm:py-2 animate-fade-scale"
             data-testid="badge-new-equipment"
           >
             Новое оборудование 2025 года
           </Badge>
           
-          <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 animate-fade-up" style={{ animationDelay: "0.1s" }} data-testid="heading-hero">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold mb-4 sm:mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 animate-fade-up px-2" style={{ animationDelay: "0.1s" }} data-testid="heading-hero">
             {device.name}
           </h1>
           
-          <p className="text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-4xl mx-auto mb-8 leading-relaxed animate-fade-up" style={{ animationDelay: "0.2s" }} data-testid="text-hero-description">
+          <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-4xl mx-auto mb-6 sm:mb-8 leading-relaxed animate-fade-up px-2" style={{ animationDelay: "0.2s" }} data-testid="text-hero-description">
             {device.description}
           </p>
           
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-12 animate-fade-up" style={{ animationDelay: "0.3s" }}>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-power">
-              <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 md:gap-4 mb-8 sm:mb-12 animate-fade-up px-2" style={{ animationDelay: "0.3s" }}>
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-card px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-power">
+              <Gauge className="h-3.5 sm:h-4 md:h-5 w-3.5 sm:w-4 md:w-5 text-primary" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power" key={selectedDevice}>{device?.power ? parseInt(device.power) : "—"}</span>
               <span className="font-mono text-xs sm:text-sm font-semibold">кВт</span>
             </div>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-steps">
-              <Zap className="h-4 sm:h-5 w-4 sm:w-5 text-tech-cyan" />
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-card px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-steps">
+              <Zap className="h-3.5 sm:h-4 md:h-5 w-3.5 sm:w-4 md:w-5 text-tech-cyan" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-steps">{device.steps}</span>
             </div>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-chart-3/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-voltage">
-              <Cable className="h-4 sm:h-5 w-4 sm:w-5 text-chart-3" />
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-card px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-lg border border-card-border hover:border-chart-3/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-voltage">
+              <Cable className="h-3.5 sm:h-4 md:h-5 w-3.5 sm:w-4 md:w-5 text-chart-3" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-voltage">{device.voltage}</span>
             </div>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
-            <div className="arrow-button">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center animate-fade-up px-2" style={{ animationDelay: "0.4s" }}>
+            <div className="arrow-button w-full sm:w-auto">
               <Button 
                 size="lg" 
                 onClick={scrollToContact}
                 data-testid="button-hero-cta-primary"
-                className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold"
+                className="text-sm sm:text-base px-6 sm:px-8 h-11 sm:h-12 w-full sm:w-auto magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold"
               >
                 Получить спецификацию
-                <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
+                <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5 animated-arrow" />
               </Button>
             </div>
-            <div className="arrow-button">
+            <div className="arrow-button w-full sm:w-auto">
               <Button 
                 size="lg" 
                 variant="outline"
                 onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
                 data-testid="button-hero-cta-secondary"
-                className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80"
+                className="text-sm sm:text-base px-6 sm:px-8 h-11 sm:h-12 w-full sm:w-auto magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80"
               >
                 Технические характеристики
-                <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
+                <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5 animated-arrow" />
               </Button>
             </div>
           </div>
 
-          <div className="mt-12 flex justify-center animate-fade-up" style={{ animationDelay: "0.5s" }}>
+          <div className="mt-8 sm:mt-12 flex justify-center animate-fade-up px-2" style={{ animationDelay: "0.5s" }}>
             <Button 
               size="lg" 
               onClick={handleBuyClick}
               data-testid="button-hero-buy"
-              className="text-base px-12 h-12 magnetic-btn shadow-lg shadow-green-600/40 hover:shadow-green-600/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
+              className="text-sm sm:text-base px-8 sm:px-12 h-11 sm:h-12 w-full sm:w-auto magnetic-btn shadow-lg shadow-green-600/40 hover:shadow-green-600/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
             >
-              <ShoppingCart className="mr-2 h-5 w-5 transition-all duration-300 group-hover:rotate-12" />
+              <ShoppingCart className="mr-2 h-4 w-4 sm:h-5 sm:w-5 transition-all duration-300 group-hover:rotate-12" />
               Купить
             </Button>
           </div>
@@ -424,21 +562,21 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="purpose" className="py-24 md:py-32 scroll-animate">
-        <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+      <section id="purpose" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="grid md:grid-cols-2 gap-8 sm:gap-10 md:gap-12 items-center">
             <div>
-              <Badge variant="secondary" className="mb-4" data-testid="badge-purpose-section">
+              <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-purpose-section">
                 Назначение
               </Badge>
-              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6" data-testid="heading-purpose">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6" data-testid="heading-purpose">
                 Точная имитация нагрузки
               </h2>
-              <p className="text-lg text-muted-foreground mb-6 leading-relaxed" data-testid="text-purpose-1">
+              <p className="text-base sm:text-lg text-muted-foreground mb-4 sm:mb-6 leading-relaxed" data-testid="text-purpose-1">
                 Устройство предназначено для точной имитации реальной нагрузки, полностью контролируемой 
                 и стабильной, в отличие от непредсказуемой реальной нагрузки.
               </p>
-              <p className="text-lg text-muted-foreground mb-8 leading-relaxed" data-testid="text-purpose-2">
+              <p className="text-base sm:text-lg text-muted-foreground mb-6 sm:mb-8 leading-relaxed" data-testid="text-purpose-2">
                 Оборудование позволяет тестировать качество вырабатываемой электроэнергии и оценивать 
                 работоспособность источников питания под различными нагрузками.
               </p>
@@ -477,21 +615,21 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="benefits" className="py-24 md:py-32 bg-muted/30 scroll-animate">
-        <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
-            <Badge variant="secondary" className="mb-4" data-testid="badge-benefits-section">
+      <section id="benefits" className="py-16 sm:py-20 md:py-24 lg:py-32 bg-muted/30 scroll-animate">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
+            <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-benefits-section">
               Преимущества
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-benefits">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2" data-testid="heading-benefits">
               Ключевые преимущества устройства
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-benefits-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-benefits-desc">
               Профессиональное решение для комплексного тестирования электрооборудования
             </p>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {[
               {
                 icon: Gauge,
@@ -546,25 +684,25 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="specifications" className="py-24 md:py-32 scroll-animate">
-        <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
-            <Badge variant="secondary" className="mb-4" data-testid="badge-specs-section">
+      <section id="specifications" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
+            <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-specs-section">
               Характеристики
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-specifications">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2" data-testid="heading-specifications">
               Технические характеристики
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-specifications-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-specifications-desc">
               Полная спецификация нагрузочного устройства {device.name}
             </p>
           </div>
 
           <Tabs defaultValue="general" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-8" data-testid="tabs-specifications">
-              <TabsTrigger value="general" data-testid="tab-general">Общие</TabsTrigger>
-              <TabsTrigger value="ac" data-testid="tab-ac">Блок AC</TabsTrigger>
-              <TabsTrigger value="dc" data-testid="tab-dc">Блок DC</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-3 mb-6 sm:mb-8 h-auto" data-testid="tabs-specifications">
+              <TabsTrigger value="general" data-testid="tab-general" className="text-xs sm:text-sm py-2 sm:py-2.5">Общие</TabsTrigger>
+              <TabsTrigger value="ac" data-testid="tab-ac" className="text-xs sm:text-sm py-2 sm:py-2.5">Блок AC</TabsTrigger>
+              <TabsTrigger value="dc" data-testid="tab-dc" className="text-xs sm:text-sm py-2 sm:py-2.5">Блок DC</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="space-y-4">
@@ -735,21 +873,21 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="delivery" className="py-24 md:py-32 bg-muted/30">
-        <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 scroll-animate">
-            <Badge variant="secondary" className="mb-4" data-testid="badge-delivery-section">
+      <section id="delivery" className="py-16 sm:py-20 md:py-24 lg:py-32 bg-muted/30">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 scroll-animate">
+            <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-delivery-section">
               Комплектация
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-delivery">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2" data-testid="heading-delivery">
               Комплект поставки
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-delivery-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-delivery-desc">
               Полная комплектация оборудования и документации
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 scroll-animate">
+          <div className="grid sm:grid-cols-2 gap-6 sm:gap-8 scroll-animate">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -813,21 +951,21 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="documentation" className="py-24 md:py-32">
-        <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 scroll-animate">
-            <Badge variant="secondary" className="mb-4" data-testid="badge-docs-section">
+      <section id="documentation" className="py-16 sm:py-20 md:py-24 lg:py-32">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 scroll-animate">
+            <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-docs-section">
               Соответствие
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-documentation">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2" data-testid="heading-documentation">
               Документы и сертификация
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-documentation-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-documentation-desc">
               Полное соответствие стандартам и требованиям безопасности
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 scroll-animate">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-12 scroll-animate">
             {[
               { title: "ГОСТ РФ", desc: "Соответствие ГОСТам" },
               { title: "Безопасность", desc: "Требования РФ" },
@@ -877,34 +1015,34 @@ export default function Home() {
 
       {/* Product Images Gallery - only show if images exist */}
       {productImages.length > 0 && (
-        <section id="gallery" className="py-24 md:py-32 scroll-animate">
-          <div className="max-w-7xl mx-auto px-6 md:px-8">
-            <div className="text-center mb-16 animate-fade-up">
-              <Badge variant="secondary" className="mb-4" data-testid="badge-gallery-section">
+        <section id="gallery" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+            <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
+              <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-gallery-section">
                 Фотогалерея
               </Badge>
-              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-gallery">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2" data-testid="heading-gallery">
                 Фотографии устройства {device.name}
               </h2>
-              <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-gallery-desc">
+              <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-gallery-desc">
                 Ознакомьтесь с фотографиями нагрузочного устройства
               </p>
             </div>
 
-            <div className={`grid gap-6 scroll-animate ${
+            <div className={`grid gap-4 sm:gap-6 scroll-animate ${
               productImages.length === 1 
                 ? "grid-cols-1 max-w-3xl mx-auto" 
                 : productImages.length === 2
                 ? "grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto justify-items-center"
-                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
             }`}>
               {productImages.map((imageData: string, idx: number) => (
                 <div
                   key={idx}
-                  className="group relative overflow-hidden rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
+                  className="group relative overflow-hidden rounded-lg sm:rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
                   data-testid={`gallery-image-${idx}`}
                 >
-                  <div className="bg-muted relative" style={{ minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div className="bg-muted relative" style={{ minHeight: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img
                       src={imageData}
                       alt={`${device.name} - Фото ${idx + 1}`}
@@ -922,21 +1060,21 @@ export default function Home() {
         </section>
       )}
 
-      <section id="applications" className="py-24 md:py-32 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 scroll-animate">
-            <Badge variant="secondary" className="mb-4" data-testid="badge-apps-section">
+      <section id="applications" className="py-16 sm:py-20 md:py-24 lg:py-32 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 scroll-animate">
+            <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-apps-section">
               Применение
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-applications">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2" data-testid="heading-applications">
               Сферы применения
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-applications-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-applications-desc">
               Профессиональное тестирование широкого спектра энергетического оборудования
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 scroll-animate">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 scroll-animate">
             {[
               {
                 icon: Factory,
@@ -987,21 +1125,21 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="about" className="py-24 md:py-32 scroll-animate">
-        <div className="max-w-4xl mx-auto px-6 md:px-8 text-center animate-fade-up">
-          <Badge variant="secondary" className="mb-4" data-testid="badge-about-section">
+      <section id="about" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 text-center animate-fade-up">
+          <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-about-section">
             О компании
           </Badge>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6" data-testid="heading-about">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6 px-2" data-testid="heading-about">
             Надёжный партнёр в энергетике
           </h2>
-          <p className="text-lg text-muted-foreground mb-12 leading-relaxed" data-testid="text-about-desc">
+          <p className="text-base sm:text-lg text-muted-foreground mb-8 sm:mb-12 leading-relaxed px-2" data-testid="text-about-desc">
             Мы специализируемся на поставке профессионального испытательного оборудования 
             для крупных промышленных заказчиков, включая предприятия атомной энергетики, 
             нефтегазовой отрасли и критической инфраструктуры.
           </p>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid sm:grid-cols-3 gap-6 sm:gap-8">
             {[
               { value: "15+", label: "Лет опыта" },
               { value: "500+", label: "Проектов" },
@@ -1020,25 +1158,25 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="contact" className="py-24 md:py-32 bg-muted/30 scroll-animate">
-        <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
-            <Badge variant="secondary" className="mb-4" data-testid="badge-contact-section">
+      <section id="contact" className="py-16 sm:py-20 md:py-24 lg:py-32 bg-muted/30 scroll-animate">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
+            <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-contact-section">
               Контакты
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-contact">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2" data-testid="heading-contact">
               Получить коммерческое предложение
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-contact-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-contact-desc">
               Заполните форму, и мы свяжемся с вами в ближайшее время
             </p>
           </div>
 
-          <div className="grid lg:grid-cols-5 gap-12">
+          <div className="grid lg:grid-cols-5 gap-6 sm:gap-8 md:gap-12">
             <div className="lg:col-span-3">
               <Card>
-                <CardContent className="pt-6">
-                  <form onSubmit={(e) => { e.preventDefault(); contactMutation.mutate(form.getValues()); }} className="space-y-6">
+                <CardContent className="pt-4 sm:pt-6">
+                  <form onSubmit={(e) => { e.preventDefault(); contactMutation.mutate(form.getValues()); }} className="space-y-4 sm:space-y-6">
                     <div>
                       <label className="text-sm font-medium">Имя и фамилия *</label>
                       <Input 
@@ -1046,11 +1184,11 @@ export default function Home() {
                         value={form.watch("name")}
                         onChange={(e) => form.setValue("name", e.target.value)}
                         data-testid="input-name"
-                        className="mt-2"
+                        className="mt-2 h-11 sm:h-12"
                       />
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-6">
+                    <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
                       <div>
                         <label className="text-sm font-medium">Телефон *</label>
                         <Input 
@@ -1058,7 +1196,7 @@ export default function Home() {
                           value={form.watch("phone")}
                           onChange={(e) => form.setValue("phone", e.target.value)}
                           data-testid="input-phone"
-                          className="mt-2"
+                          className="mt-2 h-11 sm:h-12"
                         />
                       </div>
                       <div>
@@ -1069,7 +1207,7 @@ export default function Home() {
                           value={form.watch("email")}
                           onChange={(e) => form.setValue("email", e.target.value)}
                           data-testid="input-email"
-                          className="mt-2"
+                          className="mt-2 h-11 sm:h-12"
                         />
                       </div>
                     </div>
@@ -1081,7 +1219,7 @@ export default function Home() {
                         value={form.watch("company")}
                         onChange={(e) => form.setValue("company", e.target.value)}
                         data-testid="input-company"
-                        className="mt-2"
+                        className="mt-2 h-11 sm:h-12"
                       />
                     </div>
 
@@ -1089,7 +1227,7 @@ export default function Home() {
                       <label className="text-sm font-medium">Сообщение *</label>
                       <Textarea 
                         placeholder="Опишите ваши требования и вопросы..."
-                        className="min-h-32 resize-none mt-2"
+                        className="min-h-24 sm:min-h-32 resize-none mt-2"
                         value={form.watch("message")}
                         onChange={(e) => form.setValue("message", e.target.value)}
                         data-testid="input-message"
@@ -1139,11 +1277,45 @@ export default function Home() {
                       )}
                     </div>
 
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          id="consent-personal-data-home"
+                          checked={consentPersonalData}
+                          onCheckedChange={(checked) => setConsentPersonalData(checked === true)}
+                          className="mt-1"
+                          required
+                        />
+                        <Label htmlFor="consent-personal-data-home" className="text-sm leading-relaxed cursor-pointer">
+                          Я даю согласие на обработку персональных данных *
+                        </Label>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          id="consent-data-processing-home"
+                          checked={consentDataProcessing}
+                          onCheckedChange={(checked) => setConsentDataProcessing(checked === true)}
+                          className="mt-1"
+                          required
+                        />
+                        <Label htmlFor="consent-data-processing-home" className="text-sm leading-relaxed cursor-pointer">
+                          Я принимаю условия{" "}
+                          <a href="/data-processing-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                            Политики обработки персональных данных
+                          </a>{" "}
+                          и{" "}
+                          <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                            Политики конфиденциальности
+                          </a> *
+                        </Label>
+                      </div>
+                    </div>
+
                     <Button 
                       type="submit" 
-                      className="w-full h-12 text-base"
+                      className="w-full h-11 sm:h-12 text-sm sm:text-base"
                       data-testid="button-submit-contact"
-                      disabled={contactMutation.isPending}
+                      disabled={contactMutation.isPending || !consentPersonalData || !consentDataProcessing}
                     >
                       {contactMutation.isPending ? (
                         <>
@@ -1159,12 +1331,12 @@ export default function Home() {
               </Card>
             </div>
 
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Контактная информация</CardTitle>
+                  <CardTitle className="text-base sm:text-lg">Контактная информация</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3 sm:space-y-4">
                   <div className="flex items-start gap-3" data-testid="contact-phone">
                     <Phone className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
@@ -1224,9 +1396,9 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="bg-card border-t border-border py-12">
-        <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="grid md:grid-cols-3 gap-12 mb-8">
+      <footer className="bg-card border-t border-border py-8 sm:py-10 md:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-8 sm:gap-10 md:gap-12 mb-6 sm:mb-8">
             <div>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
@@ -1271,15 +1443,18 @@ export default function Home() {
 
           <Separator className="mb-8" />
 
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
-            <div>© 2025 {device.name}. Все права защищены.</div>
-            <div className="flex gap-6">
-              <button className="hover:text-foreground transition-colors">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
+            <div className="text-center sm:text-left">© 2025 {device.name}. Все права защищены.</div>
+            <div className="flex flex-wrap justify-center gap-3 sm:gap-6">
+              <a href="/privacy-policy" className="hover:text-foreground transition-colors">
                 Политика конфиденциальности
-              </button>
-              <button className="hover:text-foreground transition-colors">
-                Условия использования
-              </button>
+              </a>
+              <a href="/data-processing-policy" className="hover:text-foreground transition-colors">
+                Политика обработки персональных данных
+              </a>
+              <a href="/public-offer" className="hover:text-foreground transition-colors">
+                Публичная оферта
+              </a>
             </div>
           </div>
         </div>

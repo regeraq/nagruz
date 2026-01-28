@@ -1,0 +1,50 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main  # Автоматический деплой при пуше в main ветку
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            cd /var/www/loaddevice
+            
+            # Сохранение текущего коммита для отката (опционально)
+            CURRENT_COMMIT=$(git rev-parse HEAD)
+            echo "Deploying commit: $CURRENT_COMMIT"
+            
+            # Получение последних изменений
+            git fetch origin
+            git reset --hard origin/main
+            
+            # Установка зависимостей (если изменился package.json)
+            npm install --production=false
+            
+            # Сборка проекта
+            npm run build
+            
+            # Применение миграций БД (если есть)
+            npm run db:push || true
+            
+            # Перезапуск приложения через PM2
+            pm2 restart loaddevice || pm2 start dist/index.js --name loaddevice --max-memory-restart 300M
+            
+            # Проверка статуса
+            pm2 status
+            
+            echo "✅ Deployment completed successfully!"
+

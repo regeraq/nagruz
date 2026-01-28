@@ -1,9 +1,10 @@
 import { db } from "./db";
 import { 
   users, products, orders, notifications, favorites, sessions,
-  contactSubmissions, loginAttempts, promoCodes, siteSettings
+  contactSubmissions, loginAttempts, promoCodes, siteSettings,
+  siteContent, siteContacts, cookieSettings, personalDataConsents
 } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 
 export interface IStorage {
   getUserByEmail(email: string): Promise<any>;
@@ -320,13 +321,34 @@ export class DrizzleStorage implements IStorage {
   }
 
   async validatePromoCode(code: string) {
-    const result = await db.select().from(promoCodes).where(eq(promoCodes.code, code));
+    // Normalize code to uppercase for case-insensitive comparison
+    const normalizedCode = code.trim().toUpperCase();
+    
+    const result = await db.select().from(promoCodes).where(eq(promoCodes.code, normalizedCode));
     const promo = result[0];
     
-    if (!promo) return null;
-    if (!promo.isActive) return null;
-    if (promo.expiresAt && new Date(promo.expiresAt) < new Date()) return null;
+    if (!promo) {
+      console.log(`❌ [validatePromoCode] Promo code "${normalizedCode}" not found`);
+      return null;
+    }
     
+    // isActive is integer (1 or 0), not boolean
+    const isActive = promo.isActive === 1 || promo.isActive === true;
+    if (!isActive) {
+      console.log(`❌ [validatePromoCode] Promo code "${normalizedCode}" is not active (isActive: ${promo.isActive})`);
+      return null;
+    }
+    
+    if (promo.expiresAt) {
+      const expiresAt = new Date(promo.expiresAt);
+      const now = new Date();
+      if (expiresAt < now) {
+        console.log(`❌ [validatePromoCode] Promo code "${normalizedCode}" expired (expiresAt: ${expiresAt}, now: ${now})`);
+        return null;
+      }
+    }
+    
+    console.log(`✅ [validatePromoCode] Promo code "${normalizedCode}" is valid (discount: ${promo.discountPercent}%)`);
     return {
       valid: true,
       code: promo.code,
@@ -364,12 +386,15 @@ export class DrizzleStorage implements IStorage {
   }
 
   async createPromoCode(promo: any) {
+    // Normalize code to uppercase for consistent comparison
+    const normalizedCode = typeof promo.code === 'string' ? promo.code.trim().toUpperCase() : promo.code;
+    
     const result = await db.insert(promoCodes).values({
       id: promo.id || undefined,
-      code: promo.code,
+      code: normalizedCode,
       discountPercent: promo.discountPercent,
       expiresAt: promo.expiresAt ? new Date(promo.expiresAt) : null,
-      isActive: promo.isActive || 1,
+      isActive: promo.isActive !== undefined ? (promo.isActive === true || promo.isActive === 1 ? 1 : 0) : 1,
     }).returning();
     return result[0];
   }
@@ -447,13 +472,22 @@ export class DrizzleStorage implements IStorage {
       console.log(`📝 [addProductImage] Saving to DB:`, JSON.stringify(images));
       const updated = await this.updateProduct(productId, { images: JSON.stringify(images) });
       console.log(`✅ [addProductImage] Saved to DB. Updated product:`, { id: updated.id, images: updated.images });
+      
+      // Return updated product with parsed images
+      const result = { 
+        ...updated, 
+        images: images // Return as array, not JSON string
+      };
+      console.log(`✨ [addProductImage] Returning result with ${images.length} images`);
+      return result;
     } else {
       console.log(`⏭️ [addProductImage] Image already exists, skipping`);
+      // Return current product with parsed images
+      return { 
+        ...product, 
+        images: images // Return as array, not JSON string
+      };
     }
-    
-    const result = { ...product, images };
-    console.log(`✨ [addProductImage] Returning result with ${images.length} images`);
-    return result;
   }
 
   async removeProductImage(productId: string, imageUrl: string): Promise<any> {
@@ -495,6 +529,190 @@ export class DrizzleStorage implements IStorage {
     }
     
     return results;
+  }
+
+  // Site Content methods
+  async createSiteContent(data: { key: string; value: string; page?: string; section?: string }) {
+    const result = await db.insert(siteContent).values({
+      key: data.key,
+      value: data.value,
+      page: data.page || null,
+      section: data.section || null,
+    }).returning();
+    return result[0];
+  }
+
+  async getSiteContent(key: string) {
+    const result = await db.select().from(siteContent).where(eq(siteContent.key, key));
+    return result[0] || null;
+  }
+
+  async getAllSiteContent() {
+    try {
+      return await db.select().from(siteContent).orderBy(siteContent.key);
+    } catch (error: any) {
+      // Check if error is about missing table
+      if (error?.code === '42P01' || error?.message?.includes('не существует') || error?.message?.includes('does not exist')) {
+        console.warn("⚠️ [Storage] Table 'site_content' does not exist. Returning empty array.");
+        console.warn("   To create the table, run the database migration or create it manually.");
+        return [];
+      }
+      console.error("❌ [Storage] Error getting site content:", error);
+      // Return empty array if table doesn't exist or other error
+      return [];
+    }
+  }
+
+  async updateSiteContent(key: string, data: { value: string; page?: string; section?: string }) {
+    const result = await db.update(siteContent)
+      .set({
+        value: data.value,
+        page: data.page || null,
+        section: data.section || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteContent.key, key))
+      .returning();
+    return result[0];
+  }
+
+  async deleteSiteContent(key: string) {
+    await db.delete(siteContent).where(eq(siteContent.key, key));
+    return true;
+  }
+
+  // Site Contacts methods
+  async createSiteContact(data: { type: string; value: string; label?: string; order?: number }) {
+    const result = await db.insert(siteContacts).values({
+      type: data.type,
+      value: data.value,
+      label: data.label || null,
+      order: data.order || 0,
+    }).returning();
+    return result[0];
+  }
+
+  async getSiteContact(id: string) {
+    const result = await db.select().from(siteContacts).where(eq(siteContacts.id, id));
+    return result[0] || null;
+  }
+
+  async getAllSiteContacts() {
+    try {
+      return await db.select().from(siteContacts).orderBy(siteContacts.order);
+    } catch (error) {
+      console.error("Error getting site contacts:", error);
+      // Return empty array if table doesn't exist
+      return [];
+    }
+  }
+
+  async updateSiteContact(id: string, data: { type?: string; value?: string; label?: string; order?: number; isActive?: boolean }) {
+    const result = await db.update(siteContacts)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteContacts.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteSiteContact(id: string) {
+    await db.delete(siteContacts).where(eq(siteContacts.id, id));
+    return true;
+  }
+
+  // Cookie Settings methods
+  async getCookieSettings() {
+    try {
+      const result = await db.select().from(cookieSettings).limit(1);
+      return result[0] || {
+        enabled: true,
+        message: "Мы используем cookies для улучшения работы сайта",
+        acceptButtonText: "Принять",
+        declineButtonText: "Отклонить",
+      };
+    } catch (error) {
+      // Если таблица не существует, возвращаем дефолтные значения
+      return {
+        enabled: true,
+        message: "Мы используем cookies для улучшения работы сайта",
+        acceptButtonText: "Принять",
+        declineButtonText: "Отклонить",
+      };
+    }
+  }
+
+  async setCookieSettings(data: { enabled?: boolean; message?: string; acceptButtonText?: string; declineButtonText?: string }) {
+    try {
+      const existing = await db.select().from(cookieSettings).limit(1);
+      if (existing.length > 0) {
+        const result = await db.update(cookieSettings)
+          .set({
+            ...data,
+            updatedAt: new Date(),
+          })
+          .returning();
+        return result[0];
+      } else {
+        const result = await db.insert(cookieSettings).values({
+          enabled: data.enabled !== undefined ? data.enabled : true,
+          message: data.message || "Мы используем cookies для улучшения работы сайта",
+          acceptButtonText: data.acceptButtonText || "Принять",
+          declineButtonText: data.declineButtonText || "Отклонить",
+        }).returning();
+        return result[0];
+      }
+    } catch (error) {
+      console.error("Error setting cookie settings:", error);
+      throw error;
+    }
+  }
+
+  // Personal Data Consents methods (152-ФЗ compliance)
+  async createPersonalDataConsent(consent: {
+    userId: string;
+    consentType: string;
+    isConsented: boolean;
+    consentText: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<any> {
+    const result = await db.insert(personalDataConsents).values({
+      userId: consent.userId,
+      consentType: consent.consentType,
+      isConsented: consent.isConsented,
+      consentText: consent.consentText,
+      ipAddress: consent.ipAddress || null,
+      userAgent: consent.userAgent || null,
+      consentedAt: consent.isConsented ? new Date() : null,
+    }).returning();
+    return result[0];
+  }
+
+  async getUserConsents(userId: string): Promise<any[]> {
+    return await db.select()
+      .from(personalDataConsents)
+      .where(eq(personalDataConsents.userId, userId))
+      .orderBy(desc(personalDataConsents.createdAt));
+  }
+
+  async revokeConsent(userId: string, consentType: string): Promise<any> {
+    const result = await db.update(personalDataConsents)
+      .set({
+        isConsented: false,
+        revokedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(personalDataConsents.userId, userId),
+          eq(personalDataConsents.consentType, consentType)
+        )
+      )
+      .returning();
+    return result[0];
   }
 }
 

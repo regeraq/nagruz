@@ -286,6 +286,62 @@ export const insertSiteSettingSchema = createInsertSchema(siteSettings).omit({
 export type InsertSiteSetting = z.infer<typeof insertSiteSettingSchema>;
 export type SiteSetting = typeof siteSettings.$inferSelect;
 
+// Site content table (for dynamic content management)
+export const siteContent = pgTable("site_content", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key", { length: 255 }).notNull().unique(),
+  value: text("value"),
+  page: varchar("page", { length: 255 }),
+  section: varchar("section", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SiteContent = typeof siteContent.$inferSelect;
+
+// Site contacts table (for managing site contacts)
+export const siteContacts = pgTable("site_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: varchar("type", { length: 50 }).notNull(), // phone, email, telegram, address, etc.
+  value: text("value").notNull(),
+  label: text("label"),
+  order: integer("order").default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SiteContact = typeof siteContacts.$inferSelect;
+
+// Cookie settings table
+export const cookieSettings = pgTable("cookie_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enabled: boolean("enabled").notNull().default(true),
+  message: text("message"),
+  acceptButtonText: text("accept_button_text"),
+  declineButtonText: text("decline_button_text"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type CookieSetting = typeof cookieSettings.$inferSelect;
+
+// Personal data consents table (152-ФЗ compliance)
+export const personalDataConsents = pgTable("personal_data_consents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+  consentType: varchar("consent_type", { length: 50 }).notNull(), // 'registration', 'marketing', 'analytics', 'third_party'
+  isConsented: boolean("is_consented").notNull().default(false),
+  consentText: text("consent_text").notNull(),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
+  consentedAt: timestamp("consented_at"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type PersonalDataConsent = typeof personalDataConsents.$inferSelect;
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   oauthProviders: many(oauthProviders),

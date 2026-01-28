@@ -16,6 +16,11 @@ import Specifications from "@/pages/specifications";
 import Applications from "@/pages/applications";
 import Documentation from "@/pages/documentation";
 import NotFound from "@/pages/not-found";
+import PrivacyPolicy from "@/pages/privacy-policy";
+import DataProcessingPolicy from "@/pages/data-processing-policy";
+import PublicOffer from "@/pages/public-offer";
+import { CookieBanner } from "@/components/cookie-banner";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 function Router() {
   return (
@@ -31,16 +36,23 @@ function Router() {
       <Route path="/specifications" component={Specifications} />
       <Route path="/applications" component={Applications} />
       <Route path="/documentation" component={Documentation} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/data-processing-policy" component={DataProcessingPolicy} />
+      <Route path="/public-offer" component={PublicOffer} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
 function AppContent() {
+  // Обновляем title страницы из настроек
+  usePageTitle();
+  
   return (
     <>
       <Navigation />
       <Router />
+      <CookieBanner />
     </>
   );
 }
