@@ -140,10 +140,12 @@ export default function Home() {
 
   // FIXED: Products API is public and doesn't require authentication
   // Use direct fetch instead of getQueryFn to avoid token issues
+  console.log(`🔧 [Home] Initializing products query at ${new Date().toISOString()}`);
   const { data: products = [], isLoading: isLoadingProducts, error: productsError } = useQuery<Product[]>({
     queryKey: ['/api/products'],
+    enabled: true, // FIXED: Explicitly enable the query
     queryFn: async () => {
-      console.log(`📥 [Home] Fetching products from /api/products`);
+      console.log(`📥 [Home] queryFn called - Fetching products from /api/products`);
       try {
         // FIXED: Don't send Authorization header - products are public
         const res = await fetch("/api/products", {
@@ -195,6 +197,7 @@ export default function Home() {
             description: "В базе данных нет активных товаров. Обратитесь к администратору.",
             variant: "destructive",
           });
+          return [];
         }
         
         // Log each product's images (but don't log full image data - can be huge base64)
@@ -204,11 +207,15 @@ export default function Home() {
             imagesCount: imgCount,
             imagesType: typeof p.images,
             isArray: Array.isArray(p.images),
+            images: p.images, // FIXED: Log full images array to debug
             firstImagePreview: Array.isArray(p.images) && p.images.length > 0 
-              ? p.images[0].substring(0, 50) + '...' 
-              : (typeof p.images === 'string' && p.images.length > 0 ? p.images.substring(0, 50) + '...' : null)
+              ? (p.images[0].length > 50 ? p.images[0].substring(0, 50) + '...' : p.images[0])
+              : (typeof p.images === 'string' && p.images.length > 0 ? (p.images.length > 50 ? p.images.substring(0, 50) + '...' : p.images) : null)
           });
         });
+        
+        // FIXED: Ensure we return the array even if empty
+        console.log(`✅ [Home] Returning ${productsArray.length} products to React Query`);
         return productsArray;
       } catch (error) {
         console.error(`❌ [Home] Error fetching products:`, error);
@@ -225,13 +232,13 @@ export default function Home() {
         return [];
       }
     },
-    staleTime: 10 * 60 * 1000, // 10 minutes - keep products fresh longer
+    staleTime: 0, // FIXED: Always consider data stale to force refetch
     gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache for 30 minutes (formerly cacheTime)
     refetchOnMount: true, // FIXED: Always refetch on mount to ensure fresh data
-    refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchOnWindowFocus: true, // FIXED: Refetch on window focus to ensure fresh data
     refetchOnReconnect: true, // FIXED: Refetch on reconnect to ensure data is available
-    // Keep previous data while fetching new data
-    placeholderData: (previousData) => previousData,
+    // Don't use placeholderData - we want to see loading state
+    // placeholderData: (previousData) => previousData,
     // FIXED: Retry on error with exponential backoff
     retry: 3, // FIXED: Increase retry count
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
@@ -248,6 +255,21 @@ export default function Home() {
       });
     },
   });
+
+  // DEBUG: Log query state changes
+  useEffect(() => {
+    console.log(`🔍 [Home] Products query state changed:`, {
+      isLoadingProducts,
+      productsLength: Array.isArray(products) ? products.length : 'N/A',
+      productsType: typeof products,
+      productsIsArray: Array.isArray(products),
+      productsError: productsError ? {
+        message: (productsError as any)?.message,
+        name: (productsError as any)?.name
+      } : null,
+      products: products
+    });
+  }, [isLoadingProducts, products, productsError]);
 
   // Get product images for current device
   const currentProduct = useMemo(() => {
@@ -1171,12 +1193,21 @@ export default function Home() {
       {/* FIXED: Gallery should always show if we have images, regardless of authentication status */}
       {/* DEBUG: Log gallery visibility state */}
       {(() => {
+        const willShow = !isLoadingProducts && productImages.length > 0;
         console.log(`🖼️ [Home] Gallery render check:`, {
           isLoadingProducts,
           productImagesLength: productImages.length,
-          willShow: !isLoadingProducts && productImages.length > 0,
-          currentProduct: currentProduct ? { id: currentProduct.id, hasImages: !!(currentProduct as any).images } : null,
-          productsCount: products.length
+          productImages: productImages,
+          willShow,
+          currentProduct: currentProduct ? { 
+            id: currentProduct.id, 
+            name: currentProduct.name,
+            hasImages: !!(currentProduct as any).images,
+            imagesType: typeof (currentProduct as any).images,
+            imagesValue: (currentProduct as any).images
+          } : null,
+          productsCount: products.length,
+          products: products.map((p: any) => ({ id: p.id, name: p.name, imagesCount: Array.isArray(p.images) ? p.images.length : (p.images ? 1 : 0) }))
         });
         return null;
       })()}
