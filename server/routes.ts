@@ -269,7 +269,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (token) {
         try {
           const payload = verifyAccessToken(token);
-          userId = payload.userId;
+          if (payload) {
+            userId = payload.userId;
+          }
         } catch (e) {
           // Token invalid, userId stays null
         }
@@ -774,7 +776,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (token) {
         try {
           const payload = verifyAccessToken(token);
-          userId = payload.userId;
+          if (payload) {
+            userId = payload.userId;
+          }
         } catch (e) {
           // Token invalid, userId stays null
         }
