@@ -140,11 +140,8 @@ export default function Home() {
 
   const queryClient = useQueryClient();
   
-  // FIXED: Clear cache on mount to ensure fresh data
-  useEffect(() => {
-    console.log(`🧹 [Home] Clearing products cache on mount`);
-    queryClient.removeQueries({ queryKey: ['/api/products'] });
-  }, [queryClient]);
+  // REMOVED: Don't clear cache on mount - it prevents data from loading
+  // Cache will be invalidated naturally when data becomes stale
 
   // FIXED: Products API is public and doesn't require authentication
   // Use direct fetch instead of getQueryFn to avoid token issues
@@ -240,13 +237,13 @@ export default function Home() {
         return [];
       }
     },
-    staleTime: 0, // FIXED: Always consider data stale to force refetch
+    staleTime: 5 * 60 * 1000, // 5 minutes - keep data fresh for 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache for 30 minutes (formerly cacheTime)
-    refetchOnMount: true, // FIXED: Always refetch on mount to ensure fresh data
-    refetchOnWindowFocus: true, // FIXED: Refetch on window focus to ensure fresh data
-    refetchOnReconnect: true, // FIXED: Refetch on reconnect to ensure data is available
-    // Don't use placeholderData - we want to see loading state
-    // placeholderData: (previousData) => previousData,
+    refetchOnMount: 'always', // Always refetch on mount to ensure fresh data
+    refetchOnWindowFocus: false, // Don't refetch on window focus (too aggressive)
+    refetchOnReconnect: true, // Refetch on reconnect to ensure data is available
+    // Use placeholderData to prevent flickering
+    placeholderData: (previousData) => previousData,
     // FIXED: Retry on error with exponential backoff
     retry: 3, // FIXED: Increase retry count
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
