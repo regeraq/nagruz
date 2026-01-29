@@ -249,8 +249,14 @@ export default function Home() {
 
   // Combine images from product data and direct API call
   const productImages = useMemo(() => {
+    // Debug logging
+    console.log('[Gallery Debug] selectedDevice:', selectedDevice);
+    console.log('[Gallery Debug] fetchedProductImages:', fetchedProductImages);
+    console.log('[Gallery Debug] currentProduct:', currentProduct?.id, currentProduct?.name);
+    
     // First try to get images from fetched data (more reliable)
     if (fetchedProductImages && fetchedProductImages.length > 0) {
+      console.log('[Gallery Debug] Using fetchedProductImages:', fetchedProductImages.length);
       return fetchedProductImages;
     }
     
