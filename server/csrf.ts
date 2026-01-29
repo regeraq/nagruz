@@ -36,8 +36,14 @@ function generateToken(): string {
  * Generates and sets CSRF token cookie for all requests
  */
 export function csrfToken(req: Request, res: Response, next: NextFunction) {
-  // Generate fresh token for every request (stateless approach)
-  const token = generateToken();
+  // Use existing token from cookie if available, otherwise generate new one
+  // This ensures token consistency across requests
+  let token = req.cookies?.[CSRF_TOKEN_COOKIE];
+  
+  if (!token) {
+    // Generate new token only if cookie doesn't exist
+    token = generateToken();
+  }
   
   // Determine if we should use secure cookies
   // Check if request is actually HTTPS (even behind proxy)
@@ -48,10 +54,11 @@ export function csrfToken(req: Request, res: Response, next: NextFunction) {
   
   // Log cookie settings for debugging (only in development or if explicitly enabled)
   if (process.env.DEBUG_CSRF === 'true' || !isProduction) {
-    console.log(`[CSRF] Setting cookie - secure: ${useSecureCookie}, HTTPS: ${actuallyHttps}, protocol: ${req.protocol}, x-forwarded-proto: ${req.headers['x-forwarded-proto']}`);
+    console.log(`[CSRF] Setting cookie - secure: ${useSecureCookie}, HTTPS: ${actuallyHttps}, protocol: ${req.protocol}, x-forwarded-proto: ${req.headers['x-forwarded-proto']}, token exists: ${!!req.cookies?.[CSRF_TOKEN_COOKIE]}`);
   }
   
   // Set non-httpOnly cookie so client can read it for API calls
+  // Always set cookie to ensure it's refreshed (extends expiration)
   res.cookie(CSRF_TOKEN_COOKIE, token, {
     httpOnly: false,
     // SECURITY: secure: true only if actually using HTTPS
@@ -85,6 +92,11 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
   const tokenFromHeader = req.headers[CSRF_TOKEN_HEADER] as string;
   const tokenFromCookie = req.cookies?.[CSRF_TOKEN_COOKIE];
 
+  // Debug logging
+  if (process.env.DEBUG_CSRF === 'true' || !isProduction) {
+    console.log(`[CSRF] Validation - Header: ${tokenFromHeader ? 'present' : 'missing'}, Cookie: ${tokenFromCookie ? 'present' : 'missing'}, Path: ${req.path}`);
+  }
+
   if (!tokenFromHeader || !tokenFromCookie) {
     console.warn(`[CSRF] Token missing - Header: ${!!tokenFromHeader}, Cookie: ${!!tokenFromCookie}, Path: ${req.path}`);
     return res.status(403).json({
@@ -94,9 +106,16 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
     });
   }
 
+  // Trim whitespace from tokens before comparison
+  const headerToken = tokenFromHeader.trim();
+  const cookieToken = tokenFromCookie.trim();
+
   // Simple comparison (stateless validation)
-  if (tokenFromHeader !== tokenFromCookie) {
-    console.warn(`[CSRF] Token mismatch - Path: ${req.path}`);
+  if (headerToken !== cookieToken) {
+    console.warn(`[CSRF] Token mismatch - Path: ${req.path}, Header length: ${headerToken.length}, Cookie length: ${cookieToken.length}`);
+    if (process.env.DEBUG_CSRF === 'true') {
+      console.warn(`[CSRF] Header token: ${headerToken.substring(0, 10)}..., Cookie token: ${cookieToken.substring(0, 10)}...`);
+    }
     return res.status(403).json({
       success: false,
       message: 'CSRF token mismatch. Please refresh the page and try again.',

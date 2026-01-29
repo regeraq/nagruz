@@ -70,14 +70,18 @@ async function throwIfResNotOk(res: Response) {
 function getCsrfToken(): string | null {
   // Try to get token from meta tag (set by server)
   const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-  if (metaToken) return metaToken;
+  if (metaToken && metaToken.trim()) return metaToken.trim();
   
-  // Fallback: try to read from cookie (for development)
+  // Fallback: try to read from cookie
   const cookies = document.cookie.split(';');
   for (const cookie of cookies) {
-    const [name, value] = cookie.trim().split('=');
-    if (name === 'csrf-token') {
-      return value;
+    const trimmed = cookie.trim();
+    const [name, ...valueParts] = trimmed.split('=');
+    if (name === 'csrf-token' && valueParts.length > 0) {
+      const value = valueParts.join('='); // Handle values with = in them
+      if (value && value.trim()) {
+        return value.trim();
+      }
     }
   }
   return null;
@@ -88,10 +92,25 @@ function getCsrfToken(): string | null {
  */
 export async function fetchCsrfToken(): Promise<string | null> {
   try {
-    const res = await fetch("/api/csrf-token", { credentials: "include" });
-    if (!res.ok) return null;
+    const res = await fetch("/api/csrf-token", { 
+      credentials: "include",
+      method: "GET",
+      headers: {
+        "Accept": "application/json"
+      }
+    });
+    if (!res.ok) {
+      console.warn("Failed to fetch CSRF token, status:", res.status);
+      return null;
+    }
     const data = await res.json();
-    return data.token || null;
+    const token = data.token || null;
+    if (token) {
+      // Also try to read from cookie after fetch (cookie should be set by server)
+      const cookieToken = getCsrfToken();
+      return cookieToken || token;
+    }
+    return null;
   } catch (error) {
     console.error("Error fetching CSRF token:", error);
     return null;
@@ -115,16 +134,22 @@ export async function apiRequest(
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
     let csrfToken = getCsrfToken();
     
-    // If no token found, try to fetch it from server
+    // If no token found, try to fetch it from server first
     if (!csrfToken) {
       csrfToken = await fetchCsrfToken();
     }
     
-    // If still no token, make a GET request to get cookie set
+    // If still no token, make a GET request to get cookie set and try again
     if (!csrfToken) {
       try {
-        await fetch("/api/csrf-token", { credentials: "include" });
-        csrfToken = getCsrfToken();
+        const tokenRes = await fetch("/api/csrf-token", { 
+          credentials: "include",
+          method: "GET"
+        });
+        if (tokenRes.ok) {
+          const tokenData = await tokenRes.json();
+          csrfToken = tokenData.token || getCsrfToken();
+        }
       } catch (e) {
         console.warn("Failed to fetch CSRF token:", e);
       }
@@ -133,7 +158,8 @@ export async function apiRequest(
     if (csrfToken) {
       headers['x-csrf-token'] = csrfToken;
     } else {
-      console.warn("CSRF token not available, request may fail");
+      console.warn("CSRF token not available, request may fail. Attempting request anyway...");
+      // Don't fail immediately - let server handle it with proper error message
     }
   }
 
