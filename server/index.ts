@@ -30,6 +30,13 @@ import { cache } from "./cache";
 const app = express();
 const isDevelopment = process.env.NODE_ENV === "development";
 
+// Trust proxy for correct protocol detection (if behind reverse proxy)
+// For direct HTTP access (like http://45.9.72.103), this is not needed
+// but setting it won't hurt and helps if you add nginx later
+if (process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', true);
+}
+
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown

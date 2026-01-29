@@ -16,6 +16,13 @@ const CSRF_TOKEN_LENGTH = 32;
 const isProduction = process.env.NODE_ENV === 'production';
 // Allow override for HTTPS behind reverse proxy
 const forceSecureCookie = process.env.FORCE_SECURE_COOKIES === 'true';
+// Detect if we're behind a proxy with HTTPS (check X-Forwarded-Proto header)
+const isHttps = (req: Request): boolean => {
+  // Check if request is HTTPS (direct or via proxy)
+  return req.secure || 
+         req.headers['x-forwarded-proto'] === 'https' ||
+         req.headers['x-forwarded-ssl'] === 'on';
+};
 
 /**
  * Generates a secure random CSRF token
@@ -33,17 +40,26 @@ export function csrfToken(req: Request, res: Response, next: NextFunction) {
   const token = generateToken();
   
   // Determine if we should use secure cookies
-  // In production, always use secure cookies (HTTPS required)
-  // Can be overridden with FORCE_SECURE_COOKIES=true for staging
-  const useSecureCookie = isProduction || forceSecureCookie;
+  // Check if request is actually HTTPS (even behind proxy)
+  const actuallyHttps = isHttps(req);
+  // In production, use secure cookies only if actually using HTTPS
+  // Can be overridden with FORCE_SECURE_COOKIES=true
+  const useSecureCookie = (isProduction && actuallyHttps) || forceSecureCookie;
+  
+  // Log cookie settings for debugging (only in development or if explicitly enabled)
+  if (process.env.DEBUG_CSRF === 'true' || !isProduction) {
+    console.log(`[CSRF] Setting cookie - secure: ${useSecureCookie}, HTTPS: ${actuallyHttps}, protocol: ${req.protocol}, x-forwarded-proto: ${req.headers['x-forwarded-proto']}`);
+  }
   
   // Set non-httpOnly cookie so client can read it for API calls
   res.cookie(CSRF_TOKEN_COOKIE, token, {
     httpOnly: false,
-    // SECURITY: secure: true in production (requires HTTPS)
+    // SECURITY: secure: true only if actually using HTTPS
+    // For HTTP sites (like http://45.9.72.103), this will be false
     secure: useSecureCookie,
-    // SECURITY: strict in production for better protection
-    sameSite: isProduction ? 'strict' : 'lax',
+    // SECURITY: strict in production for better protection (if HTTPS)
+    // For HTTP sites, use 'lax' to allow cookies to work
+    sameSite: (isProduction && actuallyHttps) ? 'strict' : 'lax',
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     // Path should be root to work across all routes
     path: '/',
@@ -70,17 +86,21 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
   const tokenFromCookie = req.cookies?.[CSRF_TOKEN_COOKIE];
 
   if (!tokenFromHeader || !tokenFromCookie) {
+    console.warn(`[CSRF] Token missing - Header: ${!!tokenFromHeader}, Cookie: ${!!tokenFromCookie}, Path: ${req.path}`);
     return res.status(403).json({
       success: false,
-      message: 'CSRF token missing or invalid',
+      message: 'CSRF token missing or invalid. Please refresh the page and try again.',
+      code: 'CSRF_TOKEN_MISSING',
     });
   }
 
   // Simple comparison (stateless validation)
   if (tokenFromHeader !== tokenFromCookie) {
+    console.warn(`[CSRF] Token mismatch - Path: ${req.path}`);
     return res.status(403).json({
       success: false,
-      message: 'CSRF token mismatch',
+      message: 'CSRF token mismatch. Please refresh the page and try again.',
+      code: 'CSRF_TOKEN_MISMATCH',
     });
   }
 

@@ -1483,13 +1483,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if user is blocked
-      if (user.isBlocked) {
+      // SECURITY: Explicitly check for true (handle null/undefined as false)
+      if (user.isBlocked === true) {
+        console.log(`[Login] Blocked user attempted login: ${email} (ID: ${user.id})`);
         res.status(403).json({ 
           success: false, 
           message: "Ваш аккаунт заблокирован. Обратитесь в поддержку." 
         });
         return;
       }
+      
+      // Log successful user lookup (for debugging)
+      console.log(`[Login] User found: ${email}, isBlocked: ${user.isBlocked}, role: ${user.role}`);
 
       const passwordHash = user.passwordHash || user.password;
       const isPasswordValid = await verifyPassword(password, passwordHash);
@@ -1534,6 +1539,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DIAGNOSTIC: Check user status by email (temporary, remove after fixing)
+  app.get("/api/debug/user-status/:email", async (req, res) => {
+    try {
+      const email = req.params.email;
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user) {
+        return res.json({
+          success: false,
+          message: "User not found",
+          email,
+        });
+      }
+      
+      res.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          isBlocked: user.isBlocked,
+          isEmailVerified: user.isEmailVerified,
+          createdAt: user.createdAt,
+        },
+      });
+    } catch (error) {
+      console.error("Debug user status error:", error);
+      res.status(500).json({ success: false, message: "Error checking user status" });
+    }
+  });
+
   app.get("/api/auth/me", async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
@@ -1553,6 +1589,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(404).json({ success: false, message: "User not found" });
         return;
       }
+      
+      // Log user status for debugging
+      console.log(`[Auth/Me] User: ${user.email}, isBlocked: ${user.isBlocked}, role: ${user.role}`);
 
       res.json({
         success: true,
