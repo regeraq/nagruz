@@ -694,7 +694,6 @@ export default function Admin() {
         imageUrl: data.imageUrl,
         isActive: data.isActive,
         images: JSON.stringify(data.images),
-        updatedAt: new Date().toISOString(),
       });
       return res.json();
     },

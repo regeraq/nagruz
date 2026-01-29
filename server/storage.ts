@@ -216,6 +216,22 @@ export class DrizzleStorage implements IStorage {
   async updateProductInfo(id: string, data: any) {
     // Ensure images are stored as JSON string
     const updateData: any = { ...data };
+    
+    // Remove fields that shouldn't be updated directly
+    delete updateData.id;
+    delete updateData.createdAt;
+    
+    // Handle updatedAt - convert ISO string to Date if provided, or let database handle it
+    if (updateData.updatedAt !== undefined) {
+      if (typeof updateData.updatedAt === 'string') {
+        updateData.updatedAt = new Date(updateData.updatedAt);
+      }
+      // If it's already a Date object, keep it as is
+    } else {
+      // If not provided, let database update it automatically
+      updateData.updatedAt = new Date();
+    }
+    
     if (updateData.images !== undefined) {
       if (Array.isArray(updateData.images)) {
         updateData.images = JSON.stringify(updateData.images);
@@ -231,7 +247,20 @@ export class DrizzleStorage implements IStorage {
       }
     }
     
-    const result = await db.update(products).set(updateData).where(eq(products.id, id)).returning();
+    // Ensure price is a string (decimal format)
+    if (updateData.price !== undefined && typeof updateData.price === 'number') {
+      updateData.price = updateData.price.toString();
+    }
+    
+    // Filter out undefined values to avoid overwriting with null
+    const filteredData: any = {};
+    for (const [key, value] of Object.entries(updateData)) {
+      if (value !== undefined) {
+        filteredData[key] = value;
+      }
+    }
+    
+    const result = await db.update(products).set(filteredData).where(eq(products.id, id)).returning();
     return result[0];
   }
 
