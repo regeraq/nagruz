@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -472,6 +473,29 @@ export default function Admin() {
     },
     onError: (error: any) => {
       toast({ title: "Ошибка", description: error.message || "Не удалось обновить статус заказа", variant: "destructive" });
+    },
+  });
+
+  // Delete all orders
+  const deleteAllOrders = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/admin/orders/all");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      toast({ 
+        title: "Успешно", 
+        description: data.message || `Удалено заказов: ${data.deletedCount || 0}` 
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Ошибка", 
+        description: error.message || "Не удалось удалить заказы", 
+        variant: "destructive" 
+      });
     },
   });
 
@@ -2363,14 +2387,52 @@ export default function Admin() {
                           </CardDescription>
                         </div>
                       </div>
-                      <div className="relative flex-1 sm:flex-none">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Поиск по ID, клиенту..."
-                          className="pl-10 w-full sm:w-64 bg-muted/50 border-0"
-                          value={orderSearchTerm}
-                          onChange={(e) => setOrderSearchTerm(e.target.value)}
-                        />
+                      <div className="flex flex-col sm:flex-row gap-3 flex-1 sm:flex-none">
+                        <div className="relative flex-1 sm:flex-none">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="Поиск по ID, клиенту..."
+                            className="pl-10 w-full sm:w-64 bg-muted/50 border-0"
+                            value={orderSearchTerm}
+                            onChange={(e) => setOrderSearchTerm(e.target.value)}
+                          />
+                        </div>
+                        {allOrders.length > 0 && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
+                                variant="destructive" 
+                                className="whitespace-nowrap"
+                                disabled={deleteAllOrders.isPending}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                {deleteAllOrders.isPending ? "Удаление..." : "Удалить все заказы"}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Подтвердите удаление</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Вы уверены, что хотите удалить все заказы? Это действие нельзя отменить.
+                                  <br />
+                                  <span className="font-semibold text-destructive mt-2 block">
+                                    Будет удалено заказов: {allOrders.length}
+                                  </span>
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Отмена</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteAllOrders.mutate()}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  disabled={deleteAllOrders.isPending}
+                                >
+                                  {deleteAllOrders.isPending ? "Удаление..." : "Удалить все"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
                       </div>
                     </div>
                   </CardHeader>

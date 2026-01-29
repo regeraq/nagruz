@@ -1280,6 +1280,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete all orders - only for admins
+  app.delete("/api/admin/orders/all", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      // Get count before deletion for logging
+      const ordersBefore = await storage.getAllOrders();
+      const count = ordersBefore.length;
+
+      if (count === 0) {
+        res.json({ 
+          success: true, 
+          message: "Нет заказов для удаления",
+          deletedCount: 0 
+        });
+        return;
+      }
+
+      // Delete all orders
+      const deletedCount = await storage.deleteAllOrders();
+
+      console.log(`🗑️ [DELETE /api/admin/orders/all] Deleted ${deletedCount} orders by admin ${user.email}`);
+
+      res.json({ 
+        success: true, 
+        message: `Удалено заказов: ${deletedCount}`,
+        deletedCount 
+      });
+    } catch (error: any) {
+      console.error("Delete all orders error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: error.message || "Failed to delete orders" 
+      });
+    }
+  });
+
   // SECURITY FIX: Added authentication and ownership check
   app.get("/api/orders/:id", rateLimiters.general, async (req, res) => {
     try {

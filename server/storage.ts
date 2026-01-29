@@ -39,6 +39,7 @@ export interface IStorage {
   createOrder(order: any): Promise<any>;
   getUserOrders(userId: string): Promise<any[]>;
   getAllOrders(): Promise<any[]>;
+  deleteAllOrders(): Promise<number>;
   addToFavorites(userId: string, productId: string): Promise<any>;
   removeFavorite(userId: string, productId: string): Promise<boolean>;
   getUserFavorites(userId: string): Promise<any[]>;
@@ -358,6 +359,19 @@ export class DrizzleStorage implements IStorage {
 
   async getAllOrders() {
     return await db.select().from(orders);
+  }
+
+  async deleteAllOrders(): Promise<number> {
+    // Get count before deletion for return value
+    const allOrders = await db.select().from(orders);
+    const count = allOrders.length;
+    
+    // Delete all orders
+    if (count > 0) {
+      await db.delete(orders);
+    }
+    
+    return count;
   }
 
   async addToFavorites(userId: string, productId: string) {
