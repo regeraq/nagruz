@@ -9,7 +9,25 @@ BRANCH="main"
 
 echo "🚀 Starting deployment..."
 
-cd "$PROJECT_DIR"
+# Переходим в базовую директорию
+cd "$PROJECT_DIR" || exit 1
+
+# Автоматическое определение корня проекта
+echo "🔍 Определение корня проекта..."
+if [ -f "package.json" ]; then
+    echo "✅ package.json найден в корне: $PROJECT_DIR"
+    PROJECT_ROOT="$PROJECT_DIR"
+elif [ -f "HelloWhoAreYou-1/package.json" ]; then
+    echo "✅ package.json найден в подпапке: $PROJECT_DIR/HelloWhoAreYou-1"
+    PROJECT_ROOT="$PROJECT_DIR/HelloWhoAreYou-1"
+    cd "$PROJECT_ROOT" || exit 1
+else
+    echo "❌ ОШИБКА: package.json не найден ни в $PROJECT_DIR, ни в $PROJECT_DIR/HelloWhoAreYou-1"
+    exit 1
+fi
+
+echo "📁 Рабочая директория: $PROJECT_ROOT"
+cd "$PROJECT_ROOT"
 
 # Сохранение текущего коммита
 CURRENT_COMMIT=$(git rev-parse HEAD)
@@ -48,7 +66,7 @@ echo "🔄 Restarting application..."
 if pm2 list | grep -q "loaddevice"; then
     pm2 restart loaddevice
 else
-    pm2 start dist/index.js --name loaddevice --max-memory-restart 300M
+    pm2 start dist/index.js --name loaddevice --max-memory-restart 300M --cwd "$PROJECT_ROOT"
 fi
 
 # Сохранение конфигурации PM2

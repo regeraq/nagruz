@@ -508,11 +508,30 @@ systemctl status postgresql
 
 ### Обновление кода (после изменений на GitHub):
 ```bash
+# Автоматическое определение пути к проекту
 cd /var/www/loaddevice
+
+# Проверяем, где находится package.json
+if [ -f "package.json" ]; then
+    PROJECT_ROOT="/var/www/loaddevice"
+elif [ -f "HelloWhoAreYou-1/package.json" ]; then
+    PROJECT_ROOT="/var/www/loaddevice/HelloWhoAreYou-1"
+    cd "$PROJECT_ROOT"
+else
+    echo "❌ ОШИБКА: package.json не найден!"
+    exit 1
+fi
+
+# Обновление кода
 git pull origin main
 npm install
 npm run build
 pm2 restart loaddevice
+```
+
+**Или используйте готовый скрипт:**
+```bash
+bash /var/www/loaddevice/update-server.sh
 ```
 
 ---
@@ -545,11 +564,20 @@ sudo -u postgres psql -d loaddevice_db -U loaddevice_user
 
 ### Ошибки при сборке:
 ```bash
-# Очистка и пересборка
+# Автоматическое определение пути к проекту
 cd /var/www/loaddevice
+if [ -f "package.json" ]; then
+    PROJECT_ROOT="/var/www/loaddevice"
+elif [ -f "HelloWhoAreYou-1/package.json" ]; then
+    PROJECT_ROOT="/var/www/loaddevice/HelloWhoAreYou-1"
+    cd "$PROJECT_ROOT"
+fi
+
+# Очистка и пересборка
 rm -rf node_modules dist
 npm install
 npm run build
+pm2 restart loaddevice
 ```
 
 ---
