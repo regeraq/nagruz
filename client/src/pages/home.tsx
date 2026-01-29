@@ -1069,7 +1069,7 @@ export default function Home() {
 
           {/* Images loaded successfully */}
           {!isLoadingImages && Array.isArray(productImages) && productImages.length > 0 && (
-            <div className={`grid gap-6 scroll-animate ${
+            <div className={`grid gap-6 ${
               productImages.length === 1 
                 ? "grid-cols-1 max-w-3xl mx-auto" 
                 : productImages.length === 2
