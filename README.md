@@ -83,37 +83,28 @@ HelloWhoAreYou-1/
 
 Подробнее: [docs/README_SECURITY.md](docs/README_SECURITY.md)
 
-## 🚀 Развертывание на сервере
+## 🚀 Обновление проекта
 
-### Быстрое обновление проекта на сервере:
+**📖 Полная инструкция:** [QUICK_UPDATE.md](QUICK_UPDATE.md)
 
-```bash
-# На сервере выполните:
-bash /var/www/loaddevice/update-project.sh
+### Кратко:
+
+1. **Загрузить на GitHub:**
+```powershell
+cd "C:\Users\k62\Documents\Атом\сайт\HelloWhoAreYou-1 (5)\HelloWhoAreYou-1"
+.\update-github.ps1
 ```
 
 Или вручную:
-```bash
-cd /var/www/loaddevice
-# Скрипт автоматически определит правильный путь к проекту
-bash update-project.sh
+```powershell
+git add .
+git commit -m "Обновление кода проекта"
+git push origin main
 ```
 
-### Обновление через Git:
-
+2. **Обновить на сервере:**
 ```bash
-cd /var/www/loaddevice
-# Автоматическое определение пути
-if [ -f "package.json" ]; then
-    cd /var/www/loaddevice
-elif [ -f "HelloWhoAreYou-1/package.json" ]; then
-    cd /var/www/loaddevice/HelloWhoAreYou-1
-fi
-
-git pull origin main
-npm install
-npm run build
-pm2 restart loaddevice
+ssh root@45.9.72.103 "cd /var/www/loaddevice && bash update-project.sh"
 ```
 
 ## 📚 Документация
@@ -129,6 +120,7 @@ pm2 restart loaddevice
 
 ### Документация по развертыванию:
 
+- [⚡ Быстрое обновление проекта](QUICK_UPDATE.md) - **основная инструкция**
 - [🚀 Полное руководство по развертыванию](DEPLOYMENT_GUIDE.md)
 - [💻 Развертывание через PowerShell](POWERSHELL_DEPLOY.md)
 - [🔄 Автоматическое развертывание](AUTO_DEPLOY_SETUP.md)

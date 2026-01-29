@@ -62,7 +62,12 @@ if pm2 list | grep -q "loaddevice"; then
     pm2 restart loaddevice
 else
     echo "⚠️  PM2 процесс не найден, запускаем заново..."
-    pm2 start dist/index.js --name loaddevice --max-memory-restart 500M --cwd "$PROJECT_ROOT"
+    # Используем ecosystem.config.cjs для загрузки переменных окружения
+    if [ -f "ecosystem.config.cjs" ]; then
+        pm2 start ecosystem.config.cjs
+    else
+        pm2 start dist/index.js --name loaddevice --max-memory-restart 500M --cwd "$PROJECT_ROOT"
+    fi
     pm2 save
 fi
 echo ""

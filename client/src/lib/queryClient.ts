@@ -151,8 +151,14 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      // Clear invalid tokens
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
     }
 
     await throwIfResNotOk(res);

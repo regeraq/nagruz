@@ -64,7 +64,7 @@ export default function Admin() {
   const [newImageUrl, setNewImageUrl] = useState("");
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   const [notificationForm, setNotificationForm] = useState({
-    userId: "",
+    userId: "all",
     title: "",
     message: "",
     type: "info",
@@ -611,7 +611,7 @@ export default function Admin() {
     },
     onSuccess: (data) => {
       setShowNotificationDialog(false);
-      setNotificationForm({ userId: "", title: "", message: "", type: "info", link: "" });
+      setNotificationForm({ userId: "all", title: "", message: "", type: "info", link: "" });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({ 
         title: "Уведомление отправлено", 
@@ -2332,7 +2332,7 @@ export default function Admin() {
                   <SelectValue placeholder="Выберите получателя" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Всем пользователям</SelectItem>
+                  <SelectItem value="all">Всем пользователям</SelectItem>
                   {allUsers.map((user: any) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.email} {user.firstName ? `(${user.firstName} ${user.lastName || ""})` : ""}
@@ -2400,7 +2400,7 @@ export default function Admin() {
                   return;
                 }
                 sendNotification.mutate({
-                  userId: notificationForm.userId || undefined,
+                  userId: notificationForm.userId && notificationForm.userId !== "all" ? notificationForm.userId : undefined,
                   title: notificationForm.title,
                   message: notificationForm.message,
                   type: notificationForm.type,
