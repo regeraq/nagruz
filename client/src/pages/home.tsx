@@ -237,13 +237,13 @@ export default function Home() {
         return [];
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes - keep data fresh for 5 minutes
+    staleTime: 0, // Always consider data stale to force refetch
     gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache for 30 minutes (formerly cacheTime)
-    refetchOnMount: 'always', // Always refetch on mount to ensure fresh data
+    refetchOnMount: true, // Always refetch on mount to ensure fresh data
     refetchOnWindowFocus: false, // Don't refetch on window focus (too aggressive)
     refetchOnReconnect: true, // Refetch on reconnect to ensure data is available
-    // Use placeholderData to prevent flickering
-    placeholderData: (previousData) => previousData,
+    // Don't use placeholderData - it can return empty array from cache
+    // placeholderData: (previousData) => previousData,
     // FIXED: Retry on error with exponential backoff
     retry: 3, // FIXED: Increase retry count
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
