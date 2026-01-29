@@ -871,91 +871,195 @@ export default function Admin() {
 
             {/* Analytics Section */}
             {activeTab === "analytics" && (
-              <div className="space-y-4 sm:space-y-6">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <Card>
-                <CardHeader className="pb-2 p-3 sm:p-6">
-                  <CardDescription className="text-xs sm:text-sm">Всего товаров</CardDescription>
-                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{allProducts.length}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2 p-3 sm:p-6">
-                  <CardDescription className="text-xs sm:text-sm">Пользователи</CardDescription>
-                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{allUsers.length}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2 p-3 sm:p-6">
-                  <CardDescription className="text-xs sm:text-sm">Заказы</CardDescription>
-                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{allOrders.length}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2 p-3 sm:p-6">
-                  <CardDescription className="text-xs sm:text-sm">Выручка</CardDescription>
-                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{totalRevenue.toFixed(0)} ₽</CardTitle>
-                </CardHeader>
-              </Card>
+              <div className="space-y-6">
+            
+            {/* Modern Stats Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Products Card */}
+              <div className="group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-violet-500/10 via-violet-500/5 to-transparent border border-violet-500/20 backdrop-blur-xl hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-500">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-violet-500/20 to-transparent rounded-bl-[100px] transition-all duration-500 group-hover:w-24 group-hover:h-24"></div>
+                <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-violet-500/10 rounded-full blur-2xl"></div>
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="p-2.5 rounded-xl bg-violet-500/20 backdrop-blur-sm">
+                      <Package className="w-5 h-5 text-violet-500" />
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-violet-500/80">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
+                      Live
+                    </div>
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider mb-1">Товары</p>
+                  <p className="text-3xl font-bold bg-gradient-to-r from-violet-600 to-violet-400 bg-clip-text text-transparent">{allProducts.length}</p>
+                  <div className="mt-3 h-1 rounded-full bg-violet-500/10 overflow-hidden">
+                    <div className="h-full w-3/4 rounded-full bg-gradient-to-r from-violet-600 to-violet-400 animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Users Card */}
+              <div className="group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-cyan-500/10 via-cyan-500/5 to-transparent border border-cyan-500/20 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/10 transition-all duration-500">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-transparent rounded-bl-[100px] transition-all duration-500 group-hover:w-24 group-hover:h-24"></div>
+                <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-cyan-500/10 rounded-full blur-2xl"></div>
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="p-2.5 rounded-xl bg-cyan-500/20 backdrop-blur-sm">
+                      <Users className="w-5 h-5 text-cyan-500" />
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-cyan-500/80">
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+                      Active
+                    </div>
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider mb-1">Пользователи</p>
+                  <p className="text-3xl font-bold bg-gradient-to-r from-cyan-600 to-cyan-400 bg-clip-text text-transparent">{allUsers.length}</p>
+                  <div className="mt-3 h-1 rounded-full bg-cyan-500/10 overflow-hidden">
+                    <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-cyan-600 to-cyan-400"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Orders Card */}
+              <div className="group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 backdrop-blur-xl hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-500">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-amber-500/20 to-transparent rounded-bl-[100px] transition-all duration-500 group-hover:w-24 group-hover:h-24"></div>
+                <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-amber-500/10 rounded-full blur-2xl"></div>
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="p-2.5 rounded-xl bg-amber-500/20 backdrop-blur-sm">
+                      <FileText className="w-5 h-5 text-amber-500" />
+                    </div>
+                    <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600">
+                      +{allOrders.filter((o: any) => {
+                        const orderDate = new Date(o.createdAt);
+                        const weekAgo = new Date();
+                        weekAgo.setDate(weekAgo.getDate() - 7);
+                        return orderDate > weekAgo;
+                      }).length} за неделю
+                    </Badge>
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider mb-1">Заказы</p>
+                  <p className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-amber-400 bg-clip-text text-transparent">{allOrders.length}</p>
+                  <div className="mt-3 h-1 rounded-full bg-amber-500/10 overflow-hidden">
+                    <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-amber-600 to-amber-400"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Revenue Card */}
+              <div className="group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/20 backdrop-blur-xl hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-500">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-emerald-500/20 to-transparent rounded-bl-[100px] transition-all duration-500 group-hover:w-24 group-hover:h-24"></div>
+                <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-2xl"></div>
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="p-2.5 rounded-xl bg-emerald-500/20 backdrop-blur-sm">
+                      <BarChart3 className="w-5 h-5 text-emerald-500" />
+                    </div>
+                    <div className="text-xs text-emerald-500/80 font-medium">RUB</div>
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider mb-1">Выручка</p>
+                  <p className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-emerald-400 bg-clip-text text-transparent">
+                    {Number(totalRevenue).toLocaleString('ru-RU')} ₽
+                  </p>
+                  <div className="mt-3 h-1 rounded-full bg-emerald-500/10 overflow-hidden">
+                    <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* User Activity Chart */}
+            {/* User Activity Chart - Modern Design */}
             {userActivityByDay && userActivityByDay.length > 0 && (
-              <Card className="border border-border/50 shadow-xl backdrop-blur-sm bg-gradient-to-br from-card/50 via-card to-card/30 overflow-hidden">
-                <CardHeader className="relative pb-6 pt-6 px-6 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent border-b border-border/50">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent opacity-50"></div>
-                  <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/80 bg-clip-text text-transparent">
-                        Активность пользователей
-                      </CardTitle>
-                      <CardDescription className="text-sm sm:text-base text-muted-foreground/80">
-                        Динамика регистраций и входов за последние 30 дней
-                      </CardDescription>
-                    </div>
-                    <div className="flex flex-wrap gap-3 sm:gap-4">
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
-                        <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 shadow-sm"></div>
-                        <span className="text-xs sm:text-sm font-medium text-blue-600 dark:text-blue-400">Регистрации</span>
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-slate-800/95 border border-white/10 shadow-2xl">
+                {/* Decorative Elements */}
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500"></div>
+                <div className="absolute top-20 right-10 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div className="absolute bottom-20 left-10 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none"></div>
+                
+                {/* Header */}
+                <div className="relative px-6 sm:px-8 pt-8 pb-6">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 backdrop-blur-sm border border-white/10">
+                          <BarChart3 className="w-6 h-6 text-blue-400" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                            Активность пользователей
+                          </h2>
+                          <p className="text-sm text-slate-400 mt-0.5">
+                            Динамика за последние 30 дней
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-sm">
-                        <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-sm"></div>
-                        <span className="text-xs sm:text-sm font-medium text-emerald-600 dark:text-emerald-400">Входы</span>
+                    </div>
+                    
+                    {/* Legend */}
+                    <div className="flex flex-wrap gap-4">
+                      <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10">
+                        <div className="relative">
+                          <div className="w-3 h-3 rounded-full bg-gradient-to-br from-blue-400 to-blue-600"></div>
+                          <div className="absolute inset-0 w-3 h-3 rounded-full bg-blue-500 animate-ping opacity-20"></div>
+                        </div>
+                        <span className="text-sm font-medium text-slate-300">Регистрации</span>
+                        <span className="text-lg font-bold text-blue-400">
+                          {userActivityByDay.reduce((sum: number, day: any) => sum + (day.registrations || 0), 0)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10">
+                        <div className="relative">
+                          <div className="w-3 h-3 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600"></div>
+                          <div className="absolute inset-0 w-3 h-3 rounded-full bg-emerald-500 animate-ping opacity-20"></div>
+                        </div>
+                        <span className="text-sm font-medium text-slate-300">Входы</span>
+                        <span className="text-lg font-bold text-emerald-400">
+                          {userActivityByDay.reduce((sum: number, day: any) => sum + (day.logins || 0), 0)}
+                        </span>
                       </div>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="p-6 sm:p-8 bg-gradient-to-b from-transparent via-background/50 to-background">
+                </div>
+
+                {/* Chart */}
+                <div className="relative px-4 sm:px-6 pb-8">
                   <ChartContainer
                     config={{
                       registrations: { 
                         label: "Регистрации", 
-                        color: "hsl(199, 89%, 48%)" // Softer blue
+                        color: "#3B82F6"
                       },
                       logins: { 
                         label: "Входы", 
-                        color: "hsl(160, 84%, 39%)" // Softer green
+                        color: "#10B981"
                       },
                     }}
-                    className="min-h-[380px] sm:min-h-[420px] w-full"
+                    className="min-h-[350px] sm:min-h-[400px] w-full"
                   >
                     <AreaChart 
                       data={userActivityByDay}
-                      margin={{ top: 10, right: 10, left: 0, bottom: 10 }}
+                      margin={{ top: 20, right: 20, left: 0, bottom: 20 }}
                     >
                       <defs>
-                        <linearGradient id="colorRegistrations" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(199, 89%, 48%)" stopOpacity={0.4}/>
-                          <stop offset="50%" stopColor="hsl(199, 89%, 48%)" stopOpacity={0.2}/>
-                          <stop offset="100%" stopColor="hsl(199, 89%, 48%)" stopOpacity={0.05}/>
+                        <linearGradient id="gradientRegistrations" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.5}/>
+                          <stop offset="50%" stopColor="#3B82F6" stopOpacity={0.2}/>
+                          <stop offset="100%" stopColor="#3B82F6" stopOpacity={0}/>
                         </linearGradient>
-                        <linearGradient id="colorLogins" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.4}/>
-                          <stop offset="50%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.2}/>
-                          <stop offset="100%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.05}/>
+                        <linearGradient id="gradientLogins" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" stopOpacity={0.5}/>
+                          <stop offset="50%" stopColor="#10B981" stopOpacity={0.2}/>
+                          <stop offset="100%" stopColor="#10B981" stopOpacity={0}/>
                         </linearGradient>
-                        <filter id="glow">
-                          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                        <filter id="glowBlue" x="-20%" y="-20%" width="140%" height="140%">
+                          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                          <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                          </feMerge>
+                        </filter>
+                        <filter id="glowGreen" x="-20%" y="-20%" width="140%" height="140%">
+                          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
                           <feMerge>
                             <feMergeNode in="coloredBlur"/>
                             <feMergeNode in="SourceGraphic"/>
@@ -963,128 +1067,204 @@ export default function Admin() {
                         </filter>
                       </defs>
                       <CartesianGrid 
-                        strokeDasharray="2 2" 
+                        strokeDasharray="3 3" 
                         vertical={false}
-                        stroke="hsl(var(--border))"
-                        opacity={0.2}
+                        stroke="rgba(255,255,255,0.05)"
                         strokeWidth={1}
                       />
                       <XAxis
                         dataKey="date"
                         tickLine={false}
                         axisLine={false}
-                        tickMargin={10}
+                        tickMargin={16}
                         tickFormatter={(value) => format(new Date(value), "dd.MM", { locale: ru })}
-                        style={{ fontSize: '11px', fontWeight: 400, fill: 'hsl(var(--muted-foreground))' }}
+                        style={{ fontSize: '12px', fontWeight: 500, fill: 'rgba(148, 163, 184, 0.8)' }}
                         interval="preserveStartEnd"
                       />
                       <YAxis 
                         tickLine={false} 
                         axisLine={false} 
-                        tickMargin={8}
-                        style={{ fontSize: '11px', fontWeight: 400, fill: 'hsl(var(--muted-foreground))' }}
-                        width={40}
+                        tickMargin={12}
+                        style={{ fontSize: '12px', fontWeight: 500, fill: 'rgba(148, 163, 184, 0.8)' }}
+                        width={45}
                       />
                       <ChartTooltip 
-                        cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1.5, strokeDasharray: "5 5" }}
+                        cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 2 }}
                         content={<ChartTooltipContent 
-                          className="bg-background/95 backdrop-blur-md border border-border/50 shadow-2xl rounded-xl p-3"
+                          className="bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl px-4 py-3"
                           labelFormatter={(value) => format(new Date(value), "dd MMMM yyyy", { locale: ru })}
                         />} 
                       />
                       <Area
                         dataKey="registrations"
-                        type="natural"
-                        fill="url(#colorRegistrations)"
+                        type="monotone"
+                        fill="url(#gradientRegistrations)"
                         fillOpacity={1}
-                        stroke="hsl(199, 89%, 48%)"
-                        strokeWidth={2.5}
+                        stroke="#3B82F6"
+                        strokeWidth={3}
                         dot={false}
-                        activeDot={{ r: 5, strokeWidth: 2, fill: "hsl(199, 89%, 48%)", stroke: "white" }}
-                        animationDuration={800}
+                        activeDot={{ 
+                          r: 6, 
+                          strokeWidth: 3, 
+                          fill: "#3B82F6", 
+                          stroke: "#1E3A5F",
+                          filter: "url(#glowBlue)"
+                        }}
+                        animationDuration={1200}
                         animationBegin={0}
                       />
                       <Area
                         dataKey="logins"
-                        type="natural"
-                        fill="url(#colorLogins)"
+                        type="monotone"
+                        fill="url(#gradientLogins)"
                         fillOpacity={1}
-                        stroke="hsl(160, 84%, 39%)"
-                        strokeWidth={2.5}
+                        stroke="#10B981"
+                        strokeWidth={3}
                         dot={false}
-                        activeDot={{ r: 5, strokeWidth: 2, fill: "hsl(160, 84%, 39%)", stroke: "white" }}
-                        animationDuration={800}
-                        animationBegin={100}
+                        activeDot={{ 
+                          r: 6, 
+                          strokeWidth: 3, 
+                          fill: "#10B981", 
+                          stroke: "#064E3B",
+                          filter: "url(#glowGreen)"
+                        }}
+                        animationDuration={1200}
+                        animationBegin={200}
                       />
                     </AreaChart>
                   </ChartContainer>
-                  <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6 border-t border-border/50">
-                    <div className="group relative overflow-hidden rounded-xl p-5 bg-gradient-to-br from-blue-50/50 via-blue-50/30 to-transparent dark:from-blue-950/20 dark:via-blue-950/10 dark:to-transparent border border-blue-200/30 dark:border-blue-800/30 backdrop-blur-sm hover:border-blue-300/50 dark:hover:border-blue-700/50 transition-all duration-300">
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                      <div className="relative">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-gradient-to-br from-blue-400 to-blue-600"></div>
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Регистрации</span>
-                        </div>
-                        <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
-                          {userActivityByDay.reduce((sum: number, day: any) => sum + (day.registrations || 0), 0)}
-                        </div>
-                        <div className="text-xs sm:text-sm text-muted-foreground/70 mt-1">за весь период</div>
-                      </div>
-                    </div>
-                    <div className="group relative overflow-hidden rounded-xl p-5 bg-gradient-to-br from-emerald-50/50 via-emerald-50/30 to-transparent dark:from-emerald-950/20 dark:via-emerald-950/10 dark:to-transparent border border-emerald-200/30 dark:border-emerald-800/30 backdrop-blur-sm hover:border-emerald-300/50 dark:hover:border-emerald-700/50 transition-all duration-300">
-                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                      <div className="relative">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600"></div>
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Входы</span>
-                        </div>
-                        <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-emerald-600 to-emerald-500 bg-clip-text text-transparent">
-                          {userActivityByDay.reduce((sum: number, day: any) => sum + (day.logins || 0), 0)}
-                        </div>
-                        <div className="text-xs sm:text-sm text-muted-foreground/70 mt-1">за весь период</div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                </div>
 
-            <Card>
-              <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-base sm:text-lg md:text-xl">Последние заказы</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6">
-                <div className="overflow-x-auto -mx-4 sm:mx-0">
-                  <div className="inline-block min-w-full align-middle px-4 sm:px-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs sm:text-sm">ID</TableHead>
-                          <TableHead className="text-xs sm:text-sm">Пользователь</TableHead>
-                          <TableHead className="text-xs sm:text-sm">Сумма</TableHead>
-                          <TableHead className="text-xs sm:text-sm">Статус</TableHead>
-                          <TableHead className="text-xs sm:text-sm">Дата</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {allOrders.slice(0, 5).map((order: any) => (
-                          <TableRow key={order.id}>
-                            <TableCell className="font-mono text-xs sm:text-sm">{order.id.slice(0, 8)}</TableCell>
-                            <TableCell className="text-xs sm:text-sm">{order.customerName || order.customerEmail}</TableCell>
-                            <TableCell className="text-xs sm:text-sm">{order.finalAmount} ₽</TableCell>
-                            <TableCell className="text-xs sm:text-sm">
-                              <Badge className="text-xs">{order.paymentStatus}</Badge>
-                            </TableCell>
-                            <TableCell className="text-xs sm:text-sm">{format(new Date(order.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                {/* Bottom Stats */}
+                <div className="relative px-6 sm:px-8 pb-8">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10">
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Сегодня</p>
+                      <p className="text-2xl font-bold text-white">
+                        {userActivityByDay[userActivityByDay.length - 1]?.registrations || 0}
+                      </p>
+                      <p className="text-xs text-blue-400 mt-1">регистраций</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10">
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Сегодня</p>
+                      <p className="text-2xl font-bold text-white">
+                        {userActivityByDay[userActivityByDay.length - 1]?.logins || 0}
+                      </p>
+                      <p className="text-xs text-emerald-400 mt-1">входов</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10">
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Среднее/день</p>
+                      <p className="text-2xl font-bold text-white">
+                        {Math.round(userActivityByDay.reduce((sum: number, day: any) => sum + (day.registrations || 0), 0) / userActivityByDay.length)}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">регистраций</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10">
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Среднее/день</p>
+                      <p className="text-2xl font-bold text-white">
+                        {Math.round(userActivityByDay.reduce((sum: number, day: any) => sum + (day.logins || 0), 0) / userActivityByDay.length)}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">входов</p>
+                    </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            )}
+
+            {/* Recent Orders - Modern Design */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-card via-card to-card/80 border border-border/50 shadow-xl">
+              <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+              
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10">
+                      <FileText className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">Последние заказы</h3>
+                      <p className="text-xs text-muted-foreground">Показаны 5 последних</p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setActiveTab("orders")}
+                    className="text-xs"
+                  >
+                    Все заказы
+                  </Button>
+                </div>
+
+                {allOrders.length > 0 ? (
+                  <div className="space-y-3">
+                    {allOrders.slice(0, 5).map((order: any, index: number) => (
+                      <div 
+                        key={order.id}
+                        className="group relative flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-muted/30 to-transparent border border-border/50 hover:border-primary/30 hover:bg-muted/50 transition-all duration-300"
+                        style={{ animationDelay: `${index * 100}ms` }}
+                      >
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-sm font-bold text-primary border border-primary/20">
+                          #{index + 1}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Клиент</p>
+                            <p className="text-sm font-medium truncate">{order.customerName || order.customerEmail || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Сумма</p>
+                            <p className="text-sm font-bold text-emerald-500">{Number(order.finalAmount).toLocaleString('ru-RU')} ₽</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Статус</p>
+                            <Badge 
+                              variant={
+                                order.paymentStatus === 'paid' || order.paymentStatus === 'delivered' 
+                                  ? 'default' 
+                                  : order.paymentStatus === 'pending' 
+                                    ? 'secondary' 
+                                    : order.paymentStatus === 'cancelled'
+                                      ? 'destructive'
+                                      : 'outline'
+                              }
+                              className="text-[10px] mt-0.5"
+                            >
+                              {order.paymentStatus === 'pending' && 'Ожидание'}
+                              {order.paymentStatus === 'paid' && 'Оплачен'}
+                              {order.paymentStatus === 'processing' && 'В обработке'}
+                              {order.paymentStatus === 'shipped' && 'Отправлен'}
+                              {order.paymentStatus === 'delivered' && 'Доставлен'}
+                              {order.paymentStatus === 'cancelled' && 'Отменён'}
+                              {!['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled'].includes(order.paymentStatus) && order.paymentStatus}
+                            </Badge>
+                          </div>
+                          <div className="hidden sm:block">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Дата</p>
+                            <p className="text-sm text-muted-foreground">{format(new Date(order.createdAt), "dd.MM.yyyy", { locale: ru })}</p>
+                          </div>
+                        </div>
+
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => setSelectedOrderForDetails(order)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <FileText className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                    <p>Заказов пока нет</p>
+                  </div>
+                )}
+              </div>
+            </div>
               </div>
             )}
 

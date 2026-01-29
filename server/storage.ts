@@ -206,7 +206,24 @@ export class DrizzleStorage implements IStorage {
   }
 
   async updateProductInfo(id: string, data: any) {
-    const result = await db.update(products).set(data).where(eq(products.id, id)).returning();
+    // Ensure images are stored as JSON string
+    const updateData: any = { ...data };
+    if (updateData.images !== undefined) {
+      if (Array.isArray(updateData.images)) {
+        updateData.images = JSON.stringify(updateData.images);
+      } else if (typeof updateData.images === 'string') {
+        // Already a string, validate it's valid JSON
+        try {
+          JSON.parse(updateData.images);
+          // Valid JSON, keep as is
+        } catch {
+          // Not valid JSON, wrap in array and stringify
+          updateData.images = JSON.stringify([updateData.images]);
+        }
+      }
+    }
+    
+    const result = await db.update(products).set(updateData).where(eq(products.id, id)).returning();
     return result[0];
   }
 
@@ -446,12 +463,38 @@ export class DrizzleStorage implements IStorage {
   async getProductImages(productId: string): Promise<string[]> {
     const product = await this.getProduct(productId);
     if (!product) return [];
-    if (!product.images) return [];
-    try {
-      return JSON.parse(product.images);
-    } catch {
-      return [];
+    
+    let images: string[] = [];
+    
+    // Parse images from JSON string
+    if (product.images) {
+      try {
+        const parsed = JSON.parse(product.images);
+        if (Array.isArray(parsed)) {
+          images = parsed;
+        }
+      } catch {
+        // If not valid JSON, treat as single image URL
+        if (typeof product.images === 'string' && product.images.trim()) {
+          images = [product.images.trim()];
+        }
+      }
     }
+    
+    // Also include imageUrl if set and not already in array
+    if (product.imageUrl && typeof product.imageUrl === 'string') {
+      const trimmedUrl = product.imageUrl.trim();
+      if (trimmedUrl.length > 0 && !images.includes(trimmedUrl)) {
+        images.unshift(trimmedUrl); // Add at the beginning as main image
+      }
+    }
+    
+    // Filter valid images
+    return images.filter(img => {
+      if (!img || typeof img !== 'string') return false;
+      const str = img.trim();
+      return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
+    });
   }
 
   async addProductImage(productId: string, imageUrl: string): Promise<any> {

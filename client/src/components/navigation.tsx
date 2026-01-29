@@ -45,15 +45,18 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   
-  // Get products to build dynamic device list - use same queryFn as home page for consistency
+  // Get products to build dynamic device list - synchronized with home page
   const { data: products = [] } = useQuery({
     queryKey: ['/api/products'],
     queryFn: async () => {
       try {
-        const res = await fetch("/api/products", {
+        // Add cache-busting parameter to ensure fresh data
+        const timestamp = Date.now();
+        const res = await fetch(`/api/products?_t=${timestamp}`, {
           credentials: "include",
           headers: {
             'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
           },
         });
         
@@ -66,24 +69,44 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
         
         const data = await res.json();
         
+        let productsArray: any[] = [];
+        
         if (!Array.isArray(data)) {
           if (data && typeof data === 'object') {
-            if (Array.isArray(data.products)) return data.products;
-            if (Array.isArray(data.data)) return data.data;
+            if (Array.isArray(data.products)) productsArray = data.products;
+            else if (Array.isArray(data.data)) productsArray = data.data;
           }
-          return [];
+        } else {
+          productsArray = data;
         }
         
-        return data.filter((p: any) => p && typeof p === 'object' && p.id && p.name);
+        // Filter and ensure images are properly formatted
+        return productsArray
+          .filter((p: any) => p && typeof p === 'object' && p.id && p.name)
+          .map((p: any) => {
+            // Ensure images is always an array
+            let images = p.images;
+            if (typeof images === 'string') {
+              try {
+                images = JSON.parse(images);
+              } catch {
+                images = images.trim() ? [images] : [];
+              }
+            }
+            if (!Array.isArray(images)) {
+              images = [];
+            }
+            return { ...p, images };
+          });
       } catch (error) {
         console.error('Error fetching products:', error);
         return [];
       }
     },
-    staleTime: 2 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnMount: true,
-    refetchOnWindowFocus: false,
+    staleTime: 30 * 1000, // 30 seconds - more frequent updates
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   // Build devices list from products (dynamic, not hardcoded)

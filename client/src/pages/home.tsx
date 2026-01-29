@@ -122,10 +122,13 @@ export default function Home() {
     queryKey: ['/api/products'],
     queryFn: async () => {
       try {
-        const res = await fetch("/api/products", { 
+        // Add cache-busting parameter to ensure fresh data
+        const timestamp = Date.now();
+        const res = await fetch(`/api/products?_t=${timestamp}`, { 
           credentials: "include",
           headers: {
             'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
           },
         });
         
@@ -138,26 +141,44 @@ export default function Home() {
         
         const data = await res.json();
         
+        let productsArray: any[] = [];
+        
         if (!Array.isArray(data)) {
           if (data && typeof data === 'object') {
-            if (Array.isArray(data.products)) return data.products;
-            if (Array.isArray(data.data)) return data.data;
+            if (Array.isArray(data.products)) productsArray = data.products;
+            else if (Array.isArray(data.data)) productsArray = data.data;
           }
-          return [];
+        } else {
+          productsArray = data;
         }
         
-        return data.filter((p: any) => {
-          return p && typeof p === 'object' && p.id && p.name;
-        });
+        // Filter and ensure images are properly formatted
+        return productsArray
+          .filter((p: any) => p && typeof p === 'object' && p.id && p.name)
+          .map((p: any) => {
+            // Ensure images is always an array
+            let images = p.images;
+            if (typeof images === 'string') {
+              try {
+                images = JSON.parse(images);
+              } catch {
+                images = images.trim() ? [images] : [];
+              }
+            }
+            if (!Array.isArray(images)) {
+              images = [];
+            }
+            return { ...p, images };
+          });
       } catch (error) {
         console.error('Error fetching products:', error);
         return [];
       }
     },
-    staleTime: 2 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnMount: true,
-    refetchOnWindowFocus: false,
+    staleTime: 30 * 1000, // 30 seconds - more frequent updates for images
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
@@ -185,7 +206,55 @@ export default function Home() {
     return null;
   }, [products, selectedDevice]);
 
+  // Fetch product images directly from public API endpoint (no auth required)
+  const { data: fetchedProductImages = [] } = useQuery<string[]>({
+    queryKey: ['/api/products', selectedDevice, 'images'],
+    queryFn: async () => {
+      try {
+        const timestamp = Date.now();
+        const res = await fetch(`/api/products/${selectedDevice}/images?_t=${timestamp}`, {
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+        });
+        
+        if (!res.ok) {
+          console.warn(`Failed to fetch images for product ${selectedDevice}: ${res.status}`);
+          return [];
+        }
+        
+        const data = await res.json();
+        
+        if (data.success && Array.isArray(data.images)) {
+          return data.images.filter((img: any) => {
+            if (!img || typeof img !== 'string') return false;
+            const str = img.trim();
+            return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
+          });
+        }
+        
+        return [];
+      } catch (error) {
+        console.error('Error fetching product images:', error);
+        return [];
+      }
+    },
+    enabled: !!selectedDevice,
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  });
+
+  // Combine images from product data and direct API call
   const productImages = useMemo(() => {
+    // First try to get images from fetched data (more reliable)
+    if (fetchedProductImages && fetchedProductImages.length > 0) {
+      return fetchedProductImages;
+    }
+    
+    // Fallback to images from product object
     if (!currentProduct) {
       return [];
     }
@@ -193,46 +262,36 @@ export default function Home() {
     let parsedImages: string[] = [];
     
     try {
-      const rawImages = (currentProduct as any)?.images;
+      // Images should already be an array from API, but handle string fallback
+      let rawImages = (currentProduct as any)?.images;
       
-      if (rawImages !== null && rawImages !== undefined) {
-        if (Array.isArray(rawImages)) {
-          parsedImages = rawImages
-            .filter((img: any) => {
-              if (img === null || img === undefined) return false;
-              const str = String(img).trim();
-              return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
-            })
-            .map((img: any) => String(img).trim());
-        } else if (typeof rawImages === 'string') {
+      // If images came as string (JSON), parse it
+      if (typeof rawImages === 'string') {
+        try {
           const trimmed = rawImages.trim();
-          if (trimmed) {
-            try {
-              if (trimmed.startsWith('[') || trimmed.startsWith('"')) {
-                const parsed = JSON.parse(trimmed);
-                const result = Array.isArray(parsed) ? parsed : [parsed];
-                parsedImages = result
-                  .filter((img: any) => {
-                    if (img === null || img === undefined) return false;
-                    const str = String(img).trim();
-                    return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
-                  })
-                  .map((img: any) => String(img).trim());
-              } else {
-                if (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {
-                  parsedImages = [trimmed];
-                }
-              }
-            } catch (parseError) {
-              if (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {
-                parsedImages = [trimmed];
-              }
-            }
+          if (trimmed.startsWith('[')) {
+            rawImages = JSON.parse(trimmed);
+          } else if (trimmed.length > 0) {
+            rawImages = [trimmed];
+          } else {
+            rawImages = [];
           }
+        } catch {
+          rawImages = rawImages.trim() ? [rawImages.trim()] : [];
         }
       }
       
-      // FIXED: Also include imageUrl if it's set and not already in the array
+      if (Array.isArray(rawImages)) {
+        parsedImages = rawImages
+          .filter((img: any) => {
+            if (img === null || img === undefined) return false;
+            const str = String(img).trim();
+            return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
+          })
+          .map((img: any) => String(img).trim());
+      }
+      
+      // Also include imageUrl if it's set and not already in the array
       const imageUrl = (currentProduct as any)?.imageUrl;
       if (imageUrl && typeof imageUrl === 'string') {
         const trimmedImageUrl = imageUrl.trim();
@@ -249,7 +308,7 @@ export default function Home() {
       console.error('Error parsing product images:', error);
       return [];
     }
-  }, [currentProduct]);
+  }, [currentProduct, fetchedProductImages]);
 
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ['/api/admin/settings'],
@@ -1015,7 +1074,7 @@ export default function Home() {
       </section>
 
       {/* Product Images Gallery - show for all users (registered or not) */}
-      {!isLoadingProducts && Array.isArray(productImages) && productImages.length > 0 && (
+      {!isLoadingProducts && currentProduct && (
         <section id="gallery" className="py-24 md:py-32 scroll-animate">
           <div className="max-w-7xl mx-auto px-6 md:px-8">
             <div className="text-center mb-16 animate-fade-up">
@@ -1030,52 +1089,65 @@ export default function Home() {
               </p>
             </div>
 
-            <div className={`grid gap-6 scroll-animate ${
-              productImages.length === 1 
-                ? "grid-cols-1 max-w-3xl mx-auto" 
-                : productImages.length === 2
-                ? "grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto justify-items-center"
-                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-            }`}>
-              {productImages.map((imageData: string, idx: number) => {
-                if (!imageData || typeof imageData !== 'string') {
-                  return null;
-                }
-                
-                const trimmedUrl = imageData.trim();
-                if (trimmedUrl.length === 0) {
-                  return null;
-                }
-                
-                if (!trimmedUrl.startsWith('http') && !trimmedUrl.startsWith('data:') && !trimmedUrl.startsWith('/')) {
-                  return null;
-                }
-                
-                return (
-                  <div
-                    key={`${currentProduct?.id || 'product'}-image-${idx}`}
-                    className="group relative overflow-hidden rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
-                    data-testid={`gallery-image-${idx}`}
-                  >
-                    <div className="bg-muted relative" style={{ minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <img
-                        src={trimmedUrl}
-                        alt={`${device.name} - Фото ${idx + 1}`}
-                        className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105 p-4"
-                        loading="lazy"
-                        decoding="async"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
-                          target.onerror = null;
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {Array.isArray(productImages) && productImages.length > 0 ? (
+              <div className={`grid gap-6 scroll-animate ${
+                productImages.length === 1 
+                  ? "grid-cols-1 max-w-3xl mx-auto" 
+                  : productImages.length === 2
+                  ? "grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto justify-items-center"
+                  : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+              }`}>
+                {productImages.map((imageData: string, idx: number) => {
+                  if (!imageData || typeof imageData !== 'string') {
+                    return null;
+                  }
+                  
+                  const trimmedUrl = imageData.trim();
+                  if (trimmedUrl.length === 0) {
+                    return null;
+                  }
+                  
+                  if (!trimmedUrl.startsWith('http') && !trimmedUrl.startsWith('data:') && !trimmedUrl.startsWith('/')) {
+                    return null;
+                  }
+                  
+                  return (
+                    <div
+                      key={`${currentProduct?.id || 'product'}-image-${idx}`}
+                      className="group relative overflow-hidden rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
+                      data-testid={`gallery-image-${idx}`}
+                    >
+                      <div className="bg-muted relative" style={{ minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <img
+                          src={trimmedUrl}
+                          alt={`${device.name} - Фото ${idx + 1}`}
+                          className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105 p-4"
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
+                            target.onerror = null;
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <p className="text-muted-foreground">
+                  Фотографии устройства скоро появятся
+                </p>
+              </div>
+            )}
           </div>
         </section>
       )}

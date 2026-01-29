@@ -722,9 +722,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Ensure products is always an array before sending
       const safeProducts = Array.isArray(products) ? products : [];
       
-      // Set proper headers for security
+      // Log images for debugging
+      safeProducts.forEach((p: any) => {
+        if (p.images && p.images.length > 0) {
+          console.log(`🖼️ [GET /api/products] Product ${p.id} has ${p.images.length} images`);
+        }
+      });
+      
+      // Set proper headers - no-cache to ensure fresh data with images
       res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Cache-Control', 'public, max-age=120'); // 2 minutes cache
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       
       res.json(safeProducts);
     } catch (error) {
@@ -769,6 +778,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // PUBLIC: Get product images (no auth required) - for gallery display
+  // IMPORTANT: This route MUST be defined BEFORE /api/products/:id to avoid route conflicts
+  app.get("/api/products/:id/images", rateLimiters.general, async (req, res) => {
+    try {
+      const product = await storage.getProduct(req.params.id);
+      
+      if (!product) {
+        console.warn(`⚠️ [GET /api/products/${req.params.id}/images] Product not found`);
+        res.status(404).json({
+          success: false,
+          message: "Товар не найден",
+          images: []
+        });
+        return;
+      }
+      
+      // Parse images correctly
+      let parsedImages: string[] = [];
+      try {
+        if (product.images) {
+          if (typeof product.images === 'string') {
+            const trimmed = product.images.trim();
+            if (trimmed.startsWith('[')) {
+              parsedImages = JSON.parse(trimmed);
+            } else if (trimmed.length > 0) {
+              parsedImages = [trimmed];
+            }
+          } else if (Array.isArray(product.images)) {
+            parsedImages = product.images;
+          }
+        }
+        
+        // Also include imageUrl if set
+        if (product.imageUrl && typeof product.imageUrl === 'string' && product.imageUrl.trim()) {
+          const trimmedUrl = product.imageUrl.trim();
+          if (!parsedImages.includes(trimmedUrl)) {
+            parsedImages.unshift(trimmedUrl);
+          }
+        }
+        
+        // Filter valid images
+        parsedImages = parsedImages.filter(img => {
+          if (!img || typeof img !== 'string') return false;
+          const str = img.trim();
+          return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
+        });
+      } catch (e) {
+        console.error(`❌ [GET /api/products/${req.params.id}/images] Error parsing images:`, e);
+        parsedImages = [];
+      }
+      
+      // Set no-cache headers to always get fresh data
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      
+      res.json({ 
+        success: true, 
+        images: parsedImages 
+      });
+    } catch (error) {
+      console.error("❌ Error fetching product images:", error);
+      res.status(500).json({
+        success: false,
+        message: "Ошибка при получении изображений",
+        images: []
+      });
+    }
+  });
+
+  // PUBLIC: Get single product by ID
   app.get("/api/products/:id", rateLimiters.general, async (req, res) => {
     try {
       const product = await storage.getProduct(req.params.id);
@@ -781,9 +861,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
+      // Parse images correctly
+      let parsedImages: string[] = [];
+      try {
+        if (product.images) {
+          if (typeof product.images === 'string') {
+            const trimmed = product.images.trim();
+            if (trimmed.startsWith('[')) {
+              parsedImages = JSON.parse(trimmed);
+            } else if (trimmed.length > 0) {
+              parsedImages = [trimmed];
+            }
+          } else if (Array.isArray(product.images)) {
+            parsedImages = product.images;
+          }
+        }
+        
+        // Also include imageUrl if set
+        if (product.imageUrl && typeof product.imageUrl === 'string' && product.imageUrl.trim()) {
+          const trimmedUrl = product.imageUrl.trim();
+          if (!parsedImages.includes(trimmedUrl)) {
+            parsedImages.unshift(trimmedUrl);
+          }
+        }
+      } catch (e) {
+        console.error(`Error parsing images for product ${req.params.id}:`, e);
+        parsedImages = [];
+      }
+      
       const parsedProduct = {
         ...product,
-        images: product.images ? (typeof product.images === 'string' ? JSON.parse(product.images) : product.images) : []
+        images: parsedImages
       };
       
       res.json(parsedProduct);
@@ -1844,17 +1952,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      console.log(`📝 [PATCH /api/admin/products/${req.params.id}] Updating product with:`, JSON.stringify(req.body, null, 2));
+
       const product = await storage.updateProductInfo(req.params.id, req.body);
       if (!product) {
         res.status(404).json({ success: false, message: "Product not found" });
         return;
       }
 
-      // Clear product caches
+      // Clear product caches to ensure fresh data for all users
       cache.delete('products');
       cache.delete('products-active');
 
-      res.json({ success: true, product });
+      // Parse images to return as array
+      let parsedImages: string[] = [];
+      try {
+        if (product.images) {
+          if (typeof product.images === 'string') {
+            parsedImages = JSON.parse(product.images);
+          } else if (Array.isArray(product.images)) {
+            parsedImages = product.images;
+          }
+        }
+      } catch (e) {
+        console.error(`Error parsing images for updated product:`, e);
+        parsedImages = [];
+      }
+
+      const productWithParsedImages = {
+        ...product,
+        images: parsedImages
+      };
+
+      console.log(`✅ [PATCH /api/admin/products/${req.params.id}] Product updated, returning ${parsedImages.length} images`);
+
+      res.json({ success: true, product: productWithParsedImages });
     } catch (error) {
       console.error("Update product error:", error);
       res.status(500).json({ success: false, message: "Failed to update product" });
