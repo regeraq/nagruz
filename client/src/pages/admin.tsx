@@ -51,6 +51,7 @@ export default function Admin() {
   const [operatorInn, setOperatorInn] = useState("");
   const [operatorOgrn, setOperatorOgrn] = useState("");
   const [responsiblePerson, setResponsiblePerson] = useState("");
+  const [enableFileUpload, setEnableFileUpload] = useState(true);
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [orderSearchTerm, setOrderSearchTerm] = useState("");
   const [productSearchTerm, setProductSearchTerm] = useState("");
@@ -349,6 +350,7 @@ export default function Admin() {
       const operatorInnSetting = settings.find((s: any) => s.key === "operator_inn");
       const operatorOgrnSetting = settings.find((s: any) => s.key === "operator_ogrn");
       const responsiblePersonSetting = settings.find((s: any) => s.key === "responsible_person");
+      const enableFileUploadSetting = settings.find((s: any) => s.key === "enable_file_upload");
 
       if (seoTitle) setSeoTitle(seoTitle.value || "");
       if (seoDesc) setSeoDescription(seoDesc.value || "");
@@ -360,6 +362,12 @@ export default function Admin() {
       if (operatorInnSetting) setOperatorInn(operatorInnSetting.value || "");
       if (operatorOgrnSetting) setOperatorOgrn(operatorOgrnSetting.value || "");
       if (responsiblePersonSetting) setResponsiblePerson(responsiblePersonSetting.value || "");
+      if (enableFileUploadSetting) {
+        setEnableFileUpload(enableFileUploadSetting.value === "true" || enableFileUploadSetting.value === true);
+      } else {
+        // По умолчанию включено, если настройка не установлена
+        setEnableFileUpload(true);
+      }
     }
   }, [settingsData]);
 
@@ -623,6 +631,24 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
       toast({ title: "Контактные данные сохранены" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Save file upload setting
+  const saveFileUploadSetting = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      await apiRequest("PUT", "/api/admin/settings/enable_file_upload", { 
+        value: enabled ? "true" : "false", 
+        type: "boolean",
+        description: "Разрешить загрузку файлов в форме коммерческого предложения"
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      toast({ title: "Настройка сохранена" });
     },
     onError: (error: any) => {
       toast({ title: "Ошибка", description: error.message, variant: "destructive" });
@@ -3415,6 +3441,44 @@ export default function Admin() {
                   >
                     {saveContactSettings.isPending ? "Сохранение..." : "Сохранить контакты"}
                   </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Настройки формы</CardTitle>
+                  <CardDescription>Управление возможностями формы коммерческого предложения</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label className="text-base">Загрузка файлов</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Разрешить пользователям прикреплять файлы при отправке коммерческого предложения
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        {enableFileUpload ? "Включено" : "Выключено"}
+                      </span>
+                      <Button
+                        variant={enableFileUpload ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          const newValue = !enableFileUpload;
+                          setEnableFileUpload(newValue);
+                          saveFileUploadSetting.mutate(newValue);
+                        }}
+                        disabled={saveFileUploadSetting.isPending}
+                      >
+                        {saveFileUploadSetting.isPending 
+                          ? "Сохранение..." 
+                          : enableFileUpload 
+                            ? "Выключить" 
+                            : "Включить"}
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>

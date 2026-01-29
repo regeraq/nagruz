@@ -311,7 +311,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if file upload is enabled
       const fileUploadEnabled = await storage.getSiteSetting("enable_file_upload");
-      const isFileUploadEnabled = fileUploadEnabled?.value === "true" || fileUploadEnabled?.value === true;
+      // По умолчанию разрешено, если настройка не установлена
+      const isFileUploadEnabled = fileUploadEnabled === null || fileUploadEnabled?.value === "true" || fileUploadEnabled?.value === true;
       
       // If file upload is disabled, reject file data
       if (!isFileUploadEnabled && (validatedData.fileData || validatedData.fileName)) {
