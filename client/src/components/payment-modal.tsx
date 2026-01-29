@@ -181,16 +181,12 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   // Validate promo code mutation
   const validatePromoCodeMutation = useMutation({
     mutationFn: async (code: string) => {
-      const res = await fetch("/api/promo/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Промокод недействителен");
+      const res = await apiRequest("POST", "/api/promo/validate", { code });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || "Промокод недействителен");
       }
-      return res.json();
+      return data;
     },
     onSuccess: (data) => {
       if (data.success && data.promoCode) {
