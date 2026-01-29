@@ -11,11 +11,13 @@ import {
   sanitizeInput, 
   calculateBase64Size, 
   isValidFileExtension, 
-  isValidMimeType 
+  isValidMimeType,
+  getClientIp 
 } from "./security";
 import { rateLimiters } from "./rateLimiter";
 import { cache, CACHE_TTL } from "./cache";
 import { csrfProtection } from "./csrf";
+import { bruteForceProtection, recordLoginAttempt, checkBruteForce } from "./middleware/bruteForce";
 
 // SECURITY: API keys must be in environment variables, no hardcoded fallbacks
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -1460,7 +1462,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/login", csrfProtection, rateLimiters.general, async (req, res) => {
+  // SECURITY: Login endpoint with brute force protection
+  app.post("/api/auth/login", csrfProtection, bruteForceProtection, rateLimiters.auth, async (req, res) => {
+    const ipAddress = getClientIp(req);
+    
     try {
       const { email, password } = req.body;
 
@@ -1471,6 +1476,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const user = await storage.getUserByEmail(email);
       if (!user) {
+        // SECURITY: Record failed attempt even for non-existent users
+        await recordLoginAttempt(email, ipAddress, false);
         res.status(401).json({ success: false, message: "Invalid credentials" });
         return;
       }
@@ -1487,9 +1494,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const passwordHash = user.passwordHash || user.password;
       const isPasswordValid = await verifyPassword(password, passwordHash);
       if (!isPasswordValid) {
-        res.status(401).json({ success: false, message: "Invalid credentials" });
+        // SECURITY: Record failed login attempt
+        await recordLoginAttempt(email, ipAddress, false);
+        
+        // Get remaining attempts for user feedback
+        const { remainingAttempts } = checkBruteForce(email, ipAddress);
+        
+        res.status(401).json({ 
+          success: false, 
+          message: "Invalid credentials",
+          ...(remainingAttempts <= 2 && { warning: `Осталось попыток: ${remainingAttempts}` })
+        });
         return;
       }
+
+      // SECURITY: Record successful login attempt (resets counter)
+      await recordLoginAttempt(email, ipAddress, true);
 
       const accessToken = generateAccessToken({
         userId: user.id,
@@ -1498,6 +1518,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const refreshToken = generateRefreshToken(user.id);
+
+      // Update last login timestamp
+      await storage.updateUser(user.id, { lastLoginAt: new Date() });
 
       res.json({
         success: true,
@@ -3206,8 +3229,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const tables = tablesResult.rows.map((row: any) => row.table_name);
         let sqlDump = `-- Database Export\n-- Generated: ${new Date().toISOString()}\n-- Database: ${process.env.DATABASE_URL?.split('/').pop() || 'loaddevice_db'}\n\n`;
 
+        // SECURITY: Whitelist of allowed tables (prevents SQL injection)
+        const allowedTables = [
+          'users', 'products', 'orders', 'sessions', 'favorites', 'notifications',
+          'contact_submissions', 'login_attempts', 'promo_codes', 'site_settings',
+          'site_content', 'site_contacts', 'cookie_settings', 'personal_data_consents',
+          'oauth_providers', 'content_pages'
+        ];
+        
+        // Helper function to validate table name (only alphanumeric and underscores)
+        const isValidTableName = (name: string): boolean => {
+          return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name);
+        };
+
         // Export each table
         for (const tableName of tables) {
+          // SECURITY: Skip tables not in whitelist or with invalid names
+          if (!isValidTableName(tableName)) {
+            console.warn(`[DB Export] Skipping table with invalid name: ${tableName}`);
+            continue;
+          }
+          
+          // Only export tables that are in our whitelist (known application tables)
+          if (!allowedTables.includes(tableName)) {
+            console.log(`[DB Export] Skipping non-application table: ${tableName}`);
+            continue;
+          }
+          
           sqlDump += `\n-- Table: ${tableName}\n`;
           
           // Get table structure
@@ -3218,8 +3266,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ORDER BY ordinal_position;
           `, [tableName]);
 
-          // Get data
-          const dataResult = await client.query(`SELECT * FROM "${tableName}"`);
+          // Get data using pg-format style escaping for table name
+          // Since table name is validated above, this is safe
+          const dataResult = await client.query(`SELECT * FROM "${tableName.replace(/"/g, '""')}"`);
           
           if (dataResult.rows.length > 0) {
             const columns = structureResult.rows.map((col: any) => col.column_name);

@@ -12,6 +12,11 @@ const CSRF_TOKEN_COOKIE = 'csrf-token';
 const CSRF_TOKEN_HEADER = 'x-csrf-token';
 const CSRF_TOKEN_LENGTH = 32;
 
+// Environment detection
+const isProduction = process.env.NODE_ENV === 'production';
+// Allow override for HTTPS behind reverse proxy
+const forceSecureCookie = process.env.FORCE_SECURE_COOKIES === 'true';
+
 /**
  * Generates a secure random CSRF token
  */
@@ -27,13 +32,21 @@ export function csrfToken(req: Request, res: Response, next: NextFunction) {
   // Generate fresh token for every request (stateless approach)
   const token = generateToken();
   
+  // Determine if we should use secure cookies
+  // In production, always use secure cookies (HTTPS required)
+  // Can be overridden with FORCE_SECURE_COOKIES=true for staging
+  const useSecureCookie = isProduction || forceSecureCookie;
+  
   // Set non-httpOnly cookie so client can read it for API calls
-  // FIXED: secure: false for HTTP connections (site may not have HTTPS yet)
   res.cookie(CSRF_TOKEN_COOKIE, token, {
     httpOnly: false,
-    secure: false, // Changed from process.env.NODE_ENV === 'production' to allow HTTP
-    sameSite: 'lax',
+    // SECURITY: secure: true in production (requires HTTPS)
+    secure: useSecureCookie,
+    // SECURITY: strict in production for better protection
+    sameSite: isProduction ? 'strict' : 'lax',
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    // Path should be root to work across all routes
+    path: '/',
   });
   
   // Store token in response locals for endpoint access
