@@ -781,6 +781,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PUBLIC: Get product images (no auth required) - for gallery display
   // IMPORTANT: This route MUST be defined BEFORE /api/products/:id to avoid route conflicts
   app.get("/api/products/:id/images", rateLimiters.general, async (req, res) => {
+    console.log(`🖼️ [GET /api/products/${req.params.id}/images] Request received`);
     try {
       const product = await storage.getProduct(req.params.id);
       
