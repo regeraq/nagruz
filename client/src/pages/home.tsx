@@ -250,8 +250,16 @@ export default function Home() {
 
   // Current product (for other uses)
   const currentProduct = useMemo(() => {
-    return products.find(p => p.id === selectedDevice) || null;
+    const found = products.find(p => p.id === selectedDevice) || null;
+    // Debug log
+    console.log('[DEBUG] products:', products.length, 'selectedDevice:', selectedDevice, 'found:', found?.id);
+    return found;
   }, [products, selectedDevice]);
+
+  // Debug: log productImages changes
+  useEffect(() => {
+    console.log('[DEBUG] productImages updated:', productImages.length, productImages.map(img => img.substring(0, 30) + '...'));
+  }, [productImages]);
 
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ['/api/settings'],
