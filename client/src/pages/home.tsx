@@ -124,6 +124,7 @@ export default function Home() {
       try {
         // Add cache-busting parameter to ensure fresh data
         const timestamp = Date.now();
+        console.log('[Products API] Fetching products...');
         const res = await fetch(`/api/products?_t=${timestamp}`, { 
           credentials: "include",
           headers: {
@@ -132,14 +133,18 @@ export default function Home() {
           },
         });
         
+        console.log('[Products API] Response status:', res.status, res.ok);
+        
         if (!res.ok) {
           if (res.status === 404) {
+            console.log('[Products API] 404 - returning empty array');
             return [];
           }
           throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         }
         
         const data = await res.json();
+        console.log('[Products API] Raw data:', data);
         
         let productsArray: any[] = [];
         
@@ -152,8 +157,10 @@ export default function Home() {
           productsArray = data;
         }
         
+        console.log('[Products API] productsArray length:', productsArray.length);
+        
         // Filter and ensure images are properly formatted
-        return productsArray
+        const result = productsArray
           .filter((p: any) => p && typeof p === 'object' && p.id && p.name)
           .map((p: any) => {
             // Ensure images is always an array
@@ -170,8 +177,11 @@ export default function Home() {
             }
             return { ...p, images };
           });
+        
+        console.log('[Products API] Final result:', result.map((p: any) => ({ id: p.id, imagesCount: p.images?.length })));
+        return result;
       } catch (error) {
-        console.error('Error fetching products:', error);
+        console.error('[Products API] Error fetching products:', error);
         return [];
       }
     },
@@ -212,6 +222,7 @@ export default function Home() {
     queryFn: async () => {
       try {
         const timestamp = Date.now();
+        console.log('[Images API] Fetching images for:', selectedDevice);
         const res = await fetch(`/api/products/${selectedDevice}/images?_t=${timestamp}`, {
           headers: {
             'Accept': 'application/json',
@@ -219,24 +230,30 @@ export default function Home() {
           },
         });
         
+        console.log('[Images API] Response status:', res.status, res.ok);
+        
         if (!res.ok) {
-          console.warn(`Failed to fetch images for product ${selectedDevice}: ${res.status}`);
+          console.warn(`[Images API] Failed to fetch images for product ${selectedDevice}: ${res.status}`);
           return [];
         }
         
         const data = await res.json();
+        console.log('[Images API] Raw data:', data);
         
         if (data.success && Array.isArray(data.images)) {
-          return data.images.filter((img: any) => {
+          const filtered = data.images.filter((img: any) => {
             if (!img || typeof img !== 'string') return false;
             const str = img.trim();
             return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
           });
+          console.log('[Images API] Filtered images count:', filtered.length);
+          return filtered;
         }
         
+        console.log('[Images API] No valid images in response');
         return [];
       } catch (error) {
-        console.error('Error fetching product images:', error);
+        console.error('[Images API] Error fetching product images:', error);
         return [];
       }
     },
