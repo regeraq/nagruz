@@ -780,49 +780,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // PUBLIC: Get product images (no auth required) - for gallery display
   // IMPORTANT: This route MUST be defined BEFORE /api/products/:id to avoid route conflicts
+  // This endpoint is specifically designed for anonymous/public access to product images
   app.get("/api/products/:id/images", rateLimiters.general, async (req, res) => {
+    const productId = req.params.id;
+    const requestId = Math.random().toString(36).substring(7);
+    const cacheKey = `product-images-${productId}`;
+    const cacheBust = req.query._t || req.query.timestamp;
+    
+    console.log(`🖼️ [${requestId}] GET /api/products/${productId}/images - PUBLIC request`);
+    
     try {
-      const product = await storage.getProduct(req.params.id);
+      // Check cache first (unless cache bust requested)
+      if (!cacheBust) {
+        const cachedImages = cache.get(cacheKey);
+        if (cachedImages) {
+          console.log(`⚡ [${requestId}] Using cached images for ${productId}`);
+          res.setHeader('Cache-Control', 'public, max-age=300');
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('X-Cache', 'HIT');
+          res.json({ success: true, images: cachedImages });
+          return;
+        }
+      }
+      
+      const product = await storage.getProduct(productId);
       
       if (!product) {
+        console.log(`❌ [${requestId}] Product not found: ${productId}`);
         res.status(404).json({ success: false, message: "Товар не найден", images: [] });
         return;
       }
       
-      // Parse images
+      console.log(`📦 [${requestId}] Product found: ${product.name}, isActive: ${product.isActive}`);
+      
+      // Parse images - robust handling of different formats
       let parsedImages: string[] = [];
       
       if (product.images) {
+        console.log(`📷 [${requestId}] Raw images field type: ${typeof product.images}`);
+        
         if (typeof product.images === 'string') {
           const trimmed = product.images.trim();
-          if (trimmed.startsWith('[')) {
-            try { parsedImages = JSON.parse(trimmed); } catch { parsedImages = [trimmed]; }
-          } else if (trimmed) {
-            parsedImages = [trimmed];
+          if (trimmed.length > 0) {
+            // Try to parse as JSON array
+            if (trimmed.startsWith('[')) {
+              try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) {
+                  parsedImages = parsed;
+                  console.log(`✅ [${requestId}] Parsed JSON array with ${parsed.length} images`);
+                }
+              } catch (e) {
+                // Not valid JSON, treat as single URL
+                parsedImages = [trimmed];
+                console.log(`⚠️ [${requestId}] JSON parse failed, treating as single URL`);
+              }
+            } else {
+              // Single image URL
+              parsedImages = [trimmed];
+              console.log(`📷 [${requestId}] Single image URL detected`);
+            }
           }
         } else if (Array.isArray(product.images)) {
           parsedImages = product.images;
+          console.log(`✅ [${requestId}] Images already array with ${parsedImages.length} items`);
         }
+      } else {
+        console.log(`📷 [${requestId}] No images field in product`);
       }
       
-      // Include imageUrl at the beginning
+      // Include imageUrl at the beginning if not already present
       if (product.imageUrl && typeof product.imageUrl === 'string') {
         const mainImg = product.imageUrl.trim();
-        if (mainImg && !parsedImages.includes(mainImg)) {
+        if (mainImg.length > 0 && !parsedImages.includes(mainImg)) {
           parsedImages.unshift(mainImg);
+          console.log(`➕ [${requestId}] Added imageUrl to beginning`);
         }
       }
       
-      // Filter valid image URLs only
-      parsedImages = parsedImages.filter(img => {
+      // Filter and validate image URLs
+      const validImages = parsedImages.filter(img => {
         if (!img || typeof img !== 'string') return false;
         const s = img.trim();
-        return s && (s.startsWith('http') || s.startsWith('data:') || s.startsWith('/'));
-      });
+        // Must be non-empty and start with valid prefix
+        const isValid = s.length > 0 && (s.startsWith('http') || s.startsWith('data:') || s.startsWith('/'));
+        if (!isValid && s.length > 0) {
+          console.log(`⚠️ [${requestId}] Skipping invalid image URL: ${s.substring(0, 50)}...`);
+        }
+        return isValid;
+      }).map(img => img.trim());
       
-      res.json({ success: true, images: parsedImages });
+      console.log(`✅ [${requestId}] Returning ${validImages.length} valid images for product ${productId}`);
+      
+      // Cache the result for 5 minutes (images don't change often)
+      if (!cacheBust && validImages.length > 0) {
+        cache.set(cacheKey, validImages, 5 * 60 * 1000); // 5 minutes
+      }
+      
+      // Set appropriate cache headers for public images
+      res.setHeader('Cache-Control', 'public, max-age=300'); // Cache for 5 minutes
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('X-Cache', 'MISS');
+      
+      res.json({ success: true, images: validImages });
     } catch (error) {
-      console.error("Error fetching product images:", error);
+      console.error(`❌ [${requestId}] Error fetching product images:`, error);
       res.status(500).json({ success: false, message: "Ошибка при получении изображений", images: [] });
     }
   });
@@ -1211,14 +1273,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SECURITY FIX: Added authentication and ownership check
   app.get("/api/orders/:id", rateLimiters.general, async (req, res) => {
     try {
+      // Require authentication
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Требуется авторизация" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Недействительный токен" });
+        return;
+      }
+
       const order = await storage.getOrder(req.params.id);
       
       if (!order) {
         res.status(404).json({
           success: false,
           message: "Заказ не найден",
+        });
+        return;
+      }
+      
+      // SECURITY: Check if user owns this order or is admin
+      const user = await storage.getUserById(payload.userId);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Пользователь не найден" });
+        return;
+      }
+
+      const isOwner = order.userId === payload.userId;
+      const isAdmin = user.role === "admin" || user.role === "superadmin";
+      
+      if (!isOwner && !isAdmin) {
+        res.status(403).json({
+          success: false,
+          message: "Нет доступа к этому заказу",
         });
         return;
       }
@@ -1233,8 +1327,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SECURITY FIX: Added admin-only authorization
   app.patch("/api/orders/:id/status", rateLimiters.general, async (req, res) => {
     try {
+      // Require authentication
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Требуется авторизация" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Недействительный токен" });
+        return;
+      }
+
+      // SECURITY: Only admins can change order status
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Недостаточно прав для изменения статуса" });
+        return;
+      }
+
       const { status, paymentDetails } = req.body;
       
       if (!status || typeof status !== 'string') {
@@ -1754,7 +1869,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Delete notification
+  // Delete notification - SECURITY FIX: Added ownership check
   app.delete("/api/notifications/:id", async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
@@ -1766,6 +1881,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const payload = verifyAccessToken(token);
       if (!payload) {
         res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      // SECURITY: Check if notification belongs to user
+      const notification = await storage.getNotificationById(req.params.id);
+      if (!notification) {
+        res.status(404).json({ success: false, message: "Notification not found" });
+        return;
+      }
+
+      if (notification.userId !== payload.userId) {
+        res.status(403).json({ success: false, message: "Access denied" });
         return;
       }
 
@@ -1942,6 +2069,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Clear product caches to ensure fresh data for all users
       cache.delete('products');
       cache.delete('products-active');
+      cache.delete(`product-images-${req.params.id}`);
 
       // Parse images to return as array
       let parsedImages: string[] = [];
@@ -3161,7 +3289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // USER: Mark Notification as Read
+  // USER: Mark Notification as Read - SECURITY FIX: Added ownership check
   app.patch("/api/notifications/:id/read", async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
@@ -3171,6 +3299,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      // SECURITY: Check if notification belongs to user
+      const notification = await storage.getNotificationById(req.params.id);
+      if (!notification) {
+        res.status(404).json({ success: false, message: "Notification not found" });
+        return;
+      }
+
+      if (notification.userId !== payload.userId) {
+        res.status(403).json({ success: false, message: "Access denied" });
+        return;
+      }
+
       await storage.markNotificationAsRead(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -3260,10 +3405,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`🗑️ [POST /api/admin/products/:id/images] Clearing caches`);
-      // Clear product caches
+      // Clear product caches including product-specific image cache
       cache.delete('products');
       cache.delete('products-active');
-      console.log(`✅ [POST /api/admin/products/:id/images] Caches cleared`);
+      cache.delete(`product-images-${req.params.id}`);
+      console.log(`✅ [POST /api/admin/products/:id/images] Caches cleared (including product-images-${req.params.id})`);
 
       // Ensure images are returned as array
       const productWithImages = {
@@ -3314,9 +3460,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Clear product caches
+      // Clear product caches including product-specific image cache
       cache.delete('products');
       cache.delete('products-active');
+      cache.delete(`product-images-${req.params.id}`);
+      console.log(`✅ [DELETE /api/admin/products/:id/images] Caches cleared (including product-images-${req.params.id})`);
 
       // Ensure images are returned as array
       const productWithImages = {

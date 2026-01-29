@@ -117,45 +117,149 @@ export default function Home() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  // === ULTRA SIMPLE: Direct API calls with useQuery ===
-  
-  // Fetch products
-  const { data: productsData } = useQuery({
-    queryKey: ['products'],
-    queryFn: async () => {
-      const res = await fetch('/api/products');
-      const json = await res.json();
-      return Array.isArray(json) ? json : (json.products || json.data || []);
-    },
-  });
-  
-  const products: Product[] = productsData || [];
-  const isLoadingProducts = !productsData;
-  
-  // Fetch images for selected device
-  const { data: imagesData } = useQuery({
-    queryKey: ['product-images', selectedDevice],
-    queryFn: async () => {
-      const res = await fetch(`/api/products/${selectedDevice}/images`);
-      const json = await res.json();
-      return json.images || [];
-    },
-    enabled: !!selectedDevice,
-  });
-  
-  // Product images - directly from API response
-  const productImages: string[] = useMemo(() => {
-    if (!imagesData) return [];
-    return (imagesData as string[]).filter((img: string) => 
-      img && typeof img === 'string' && 
-      (img.startsWith('http') || img.startsWith('data:') || img.startsWith('/'))
-    );
-  }, [imagesData]);
-  
-  // Current product
-  const currentProduct = useMemo(() => {
-    return products.find((p: Product) => p.id === selectedDevice) || null;
-  }, [products, selectedDevice]);
+  // === PRODUCTS AND IMAGES STATE ===
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productImages, setProductImages] = useState<string[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [isLoadingImages, setIsLoadingImages] = useState(true);
+
+  // Load products on mount
+  useEffect(() => {
+    setIsLoadingProducts(true);
+    fetch('/api/products')
+      .then(res => res.json())
+      .then(data => {
+        const arr = Array.isArray(data) ? data : (data.products || data.data || []);
+        setProducts(arr);
+      })
+      .catch(err => console.error('Products error:', err))
+      .finally(() => setIsLoadingProducts(false));
+  }, []);
+
+  // Load images when device changes - robust loading with multiple fallback sources
+  useEffect(() => {
+    if (!selectedDevice) {
+      setProductImages([]);
+      setIsLoadingImages(false);
+      return;
+    }
+    
+    setIsLoadingImages(true);
+    
+    // Helper function to validate and extract images from different response formats
+    const extractImages = (data: any): string[] => {
+      let images: string[] = [];
+      
+      // Try different response formats
+      if (data?.images && Array.isArray(data.images)) {
+        images = data.images;
+      } else if (Array.isArray(data)) {
+        // Direct array response
+        images = data;
+      } else if (data?.product?.images && Array.isArray(data.product.images)) {
+        images = data.product.images;
+      }
+      
+      // Filter and validate images
+      return images.filter((img: any) => {
+        if (!img || typeof img !== 'string') return false;
+        const trimmed = img.trim();
+        return trimmed.length > 0 && 
+               (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/'));
+      });
+    };
+    
+    // Primary fetch: dedicated images endpoint (public, no auth required)
+    const fetchImages = async (): Promise<string[]> => {
+      try {
+        // Add timestamp to prevent caching issues
+        const timestamp = Date.now();
+        const res = await fetch(`/api/products/${selectedDevice}/images?_t=${timestamp}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          // Don't include credentials for public endpoint to avoid CORS issues
+        });
+        
+        if (!res.ok) {
+          console.warn(`[Gallery] Images endpoint returned ${res.status}`);
+          throw new Error(`HTTP ${res.status}`);
+        }
+        
+        const data = await res.json();
+        const images = extractImages(data);
+        
+        if (images.length > 0) {
+          console.log(`[Gallery] Loaded ${images.length} images from dedicated endpoint`);
+          return images;
+        }
+        
+        throw new Error('No images in response');
+      } catch (err) {
+        console.warn('[Gallery] Primary images fetch failed, trying fallback...', err);
+        throw err;
+      }
+    };
+    
+    // Fallback: get images from main products list (which we already have)
+    const getImagesFromProducts = (): string[] => {
+      const product = products.find(p => p.id === selectedDevice);
+      if (product) {
+        let images: string[] = [];
+        
+        // Parse images from product
+        if (product.images) {
+          if (Array.isArray(product.images)) {
+            images = product.images;
+          } else if (typeof product.images === 'string') {
+            try {
+              const parsed = JSON.parse(product.images);
+              images = Array.isArray(parsed) ? parsed : [parsed];
+            } catch {
+              if (product.images.trim()) {
+                images = [product.images.trim()];
+              }
+            }
+          }
+        }
+        
+        // Add imageUrl if present
+        if (product.imageUrl && typeof product.imageUrl === 'string' && product.imageUrl.trim()) {
+          const mainImg = product.imageUrl.trim();
+          if (!images.includes(mainImg)) {
+            images.unshift(mainImg);
+          }
+        }
+        
+        // Filter valid URLs
+        return images.filter(img => {
+          if (!img || typeof img !== 'string') return false;
+          const trimmed = img.trim();
+          return trimmed.length > 0 && 
+                 (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/'));
+        });
+      }
+      return [];
+    };
+    
+    // Try primary fetch, fallback to products data if it fails
+    fetchImages()
+      .then(images => {
+        setProductImages(images);
+      })
+      .catch(() => {
+        // Fallback: try to get images from products state
+        const fallbackImages = getImagesFromProducts();
+        console.log(`[Gallery] Using fallback images: ${fallbackImages.length} found`);
+        setProductImages(fallbackImages);
+      })
+      .finally(() => setIsLoadingImages(false));
+  }, [selectedDevice, products]);
+
+  // Current product helper
+  const currentProduct = products.find(p => p.id === selectedDevice) || null;
 
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ['/api/settings'],
@@ -920,84 +1024,97 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Images Gallery - show if we have images */}
-      {productImages.length > 0 && (
-        <section id="gallery" className="py-24 md:py-32 scroll-animate">
-          <div className="max-w-7xl mx-auto px-6 md:px-8">
-            <div className="text-center mb-16 animate-fade-up">
-              <Badge variant="secondary" className="mb-4" data-testid="badge-gallery-section">
-                Фотогалерея
-              </Badge>
-              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-gallery">
-                Фотографии устройства {device.name}
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-gallery-desc">
-                Ознакомьтесь с фотографиями нагрузочного устройства
+      {/* Product Images Gallery - always show section, with loading state */}
+      <section id="gallery" className="py-24 md:py-32 scroll-animate">
+        <div className="max-w-7xl mx-auto px-6 md:px-8">
+          <div className="text-center mb-16 animate-fade-up">
+            <Badge variant="secondary" className="mb-4" data-testid="badge-gallery-section">
+              Фотогалерея
+            </Badge>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-gallery">
+              Фотографии устройства {device.name}
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-gallery-desc">
+              Ознакомьтесь с фотографиями нагрузочного устройства
+            </p>
+          </div>
+
+          {/* Loading state */}
+          {isLoadingImages && (
+            <div className="text-center py-16">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+              </div>
+              <p className="text-muted-foreground">
+                Загрузка фотографий...
               </p>
             </div>
+          )}
 
-            {Array.isArray(productImages) && productImages.length > 0 ? (
-              <div className={`grid gap-6 scroll-animate ${
-                productImages.length === 1 
-                  ? "grid-cols-1 max-w-3xl mx-auto" 
-                  : productImages.length === 2
-                  ? "grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto justify-items-center"
-                  : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-              }`}>
-                {productImages.map((imageData: string, idx: number) => {
-                  if (!imageData || typeof imageData !== 'string') {
-                    return null;
-                  }
-                  
-                  const trimmedUrl = imageData.trim();
-                  if (trimmedUrl.length === 0) {
-                    return null;
-                  }
-                  
-                  if (!trimmedUrl.startsWith('http') && !trimmedUrl.startsWith('data:') && !trimmedUrl.startsWith('/')) {
-                    return null;
-                  }
-                  
-                  return (
-                    <div
-                      key={`${currentProduct?.id || 'product'}-image-${idx}`}
-                      className="group relative overflow-hidden rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
-                      data-testid={`gallery-image-${idx}`}
-                    >
-                      <div className="bg-muted relative" style={{ minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <img
-                          src={trimmedUrl}
-                          alt={`${device.name} - Фото ${idx + 1}`}
-                          className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105 p-4"
-                          loading="lazy"
-                          decoding="async"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
-                            target.onerror = null;
-                          }}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                      </div>
+          {/* Images loaded successfully */}
+          {!isLoadingImages && Array.isArray(productImages) && productImages.length > 0 && (
+            <div className={`grid gap-6 scroll-animate ${
+              productImages.length === 1 
+                ? "grid-cols-1 max-w-3xl mx-auto" 
+                : productImages.length === 2
+                ? "grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto justify-items-center"
+                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+            }`}>
+              {productImages.map((imageData: string, idx: number) => {
+                if (!imageData || typeof imageData !== 'string') {
+                  return null;
+                }
+                
+                const trimmedUrl = imageData.trim();
+                if (trimmedUrl.length === 0) {
+                  return null;
+                }
+                
+                if (!trimmedUrl.startsWith('http') && !trimmedUrl.startsWith('data:') && !trimmedUrl.startsWith('/')) {
+                  return null;
+                }
+                
+                return (
+                  <div
+                    key={`${currentProduct?.id || 'product'}-image-${idx}`}
+                    className="group relative overflow-hidden rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
+                    data-testid={`gallery-image-${idx}`}
+                  >
+                    <div className="bg-muted relative" style={{ minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img
+                        src={trimmedUrl}
+                        alt={`${device.name} - Фото ${idx + 1}`}
+                        className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105 p-4"
+                        loading="lazy"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
+                          target.onerror = null;
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* No images available */}
+          {!isLoadingImages && (!Array.isArray(productImages) || productImages.length === 0) && (
+            <div className="text-center py-16">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
               </div>
-            ) : (
-              <div className="text-center py-16">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <p className="text-muted-foreground">
-                  Фотографии устройства скоро появятся
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+              <p className="text-muted-foreground">
+                Фотографии устройства скоро появятся
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
 
       <section id="applications" className="py-24 md:py-32 bg-muted/30">
         <div className="max-w-7xl mx-auto px-6 md:px-8">

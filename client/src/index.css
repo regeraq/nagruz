@@ -876,3 +876,192 @@ html.dark body::before {
 .group:hover .animated-arrow {
   animation: arrowBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
 }
+
+/* ====== PROFILE PAGE ANIMATIONS ====== */
+
+/* Profile hero gradient animation */
+@keyframes heroGradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.profile-hero-gradient {
+  background-size: 200% 200%;
+  animation: heroGradient 15s ease infinite;
+}
+
+/* Stat card hover effects */
+@keyframes statPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.stat-card-icon:hover {
+  animation: statPulse 0.5s ease-in-out;
+}
+
+/* Avatar ring animation */
+@keyframes avatarRing {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.avatar-ring {
+  background: conic-gradient(from 0deg, #ec4899, #8b5cf6, #3b82f6, #10b981, #f59e0b, #ec4899);
+  animation: avatarRing 4s linear infinite;
+}
+
+/* Tab indicator slide */
+@keyframes tabSlide {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+.tab-indicator {
+  animation: tabSlide 0.3s ease-out forwards;
+}
+
+/* Notification badge pulse */
+@keyframes notificationPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+}
+
+.notification-badge {
+  animation: notificationPulse 2s ease-in-out infinite;
+}
+
+/* Order card entrance */
+@keyframes orderCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.order-card-animate {
+  animation: orderCardIn 0.4s ease-out forwards;
+}
+
+.order-card-animate:nth-child(1) { animation-delay: 0.05s; }
+.order-card-animate:nth-child(2) { animation-delay: 0.1s; }
+.order-card-animate:nth-child(3) { animation-delay: 0.15s; }
+.order-card-animate:nth-child(4) { animation-delay: 0.2s; }
+.order-card-animate:nth-child(5) { animation-delay: 0.25s; }
+
+/* Progress bar animation */
+@keyframes progressFill {
+  from {
+    width: 0%;
+  }
+}
+
+.progress-animate {
+  animation: progressFill 1s ease-out forwards;
+}
+
+/* Success checkmark animation */
+@keyframes checkmarkDraw {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.checkmark-animate {
+  stroke-dasharray: 100;
+  animation: checkmarkDraw 0.6s ease-out forwards;
+}
+
+/* Glass morphism effect for profile cards */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Skeleton shimmer for loading states */
+@keyframes skeletonShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+}
+
+/* Quick action hover effect */
+.quick-action-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-action-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.quick-action-btn:hover::before {
+  left: 100%;
+}

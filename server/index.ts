@@ -52,19 +52,35 @@ app.use(express.urlencoded({ extended: false, limit: '15mb' }));
 // CSRF protection: Generate tokens for GET requests
 app.use(csrfToken);
 
-// CORS configuration (add specific origins in production)
-if (isDevelopment) {
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') {
-      res.sendStatus(200);
-    } else {
-      next();
-    }
-  });
-}
+// CORS configuration for both development and production
+// In production, requests come from the same origin, but we still need CORS headers
+// for proper browser handling of credentials and preflight requests
+app.use((req, res, next) => {
+  // Get origin from request or default to same-origin
+  const origin = req.headers.origin || req.headers.host || '*';
+  
+  // Allow same-origin and localhost for development
+  const allowedOrigins = isDevelopment 
+    ? ['*']
+    : [origin]; // In production, allow the requesting origin (same-origin policy)
+  
+  const requestOrigin = req.headers.origin;
+  if (isDevelopment || !requestOrigin || allowedOrigins.includes(requestOrigin)) {
+    res.header('Access-Control-Allow-Origin', isDevelopment ? '*' : (requestOrigin || '*'));
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, Cache-Control');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  
+  next();
+});
 
 // Security headers
 app.use((req, res, next) => {

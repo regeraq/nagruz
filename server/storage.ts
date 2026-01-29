@@ -15,6 +15,7 @@ export interface IStorage {
   createSession(session: any): Promise<any>;
   deleteSession(id: string): Promise<boolean>;
   getAllNotifications(userId: string): Promise<any[]>;
+  getNotificationById(id: string): Promise<any>;
   markNotificationAsRead(id: string): Promise<void>;
   deleteNotification(id: string): Promise<boolean>;
   clearUserNotifications(userId: string): Promise<boolean>;
@@ -120,6 +121,11 @@ export class DrizzleStorage implements IStorage {
 
   async getAllNotifications(userId: string) {
     return await db.select().from(notifications).where(eq(notifications.userId, userId));
+  }
+
+  async getNotificationById(id: string) {
+    const result = await db.select().from(notifications).where(eq(notifications.id, id));
+    return result[0] || null;
   }
 
   async markNotificationAsRead(id: string) {

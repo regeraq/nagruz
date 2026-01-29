@@ -1,7 +1,19 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
+// SECURITY: Check if JWT_SECRET is properly configured
+const DEFAULT_SECRET = "your-secret-key-change-in-production";
+const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_SECRET;
+
+// Log warning if using default secret in production
+if (JWT_SECRET === DEFAULT_SECRET) {
+  console.warn(
+    "\n⚠️  SECURITY WARNING: Using default JWT_SECRET!\n" +
+    "   This is insecure for production use.\n" +
+    "   Set JWT_SECRET environment variable with a secure random string (min 32 chars).\n" +
+    "   Generate one with: openssl rand -base64 32\n"
+  );
+}
 
 export interface JWTPayload {
   userId: string;
@@ -9,8 +21,11 @@ export interface JWTPayload {
   role: string;
 }
 
+// SECURITY: Use stronger bcrypt rounds (12 recommended for production)
+const BCRYPT_ROUNDS = process.env.NODE_ENV === "production" ? 12 : 10;
+
 export async function hashPassword(password: string): Promise<string> {
-  const salt = await bcrypt.genSalt(10);
+  const salt = await bcrypt.genSalt(BCRYPT_ROUNDS);
   return bcrypt.hash(password, salt);
 }
 
