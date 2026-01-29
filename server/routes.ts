@@ -614,7 +614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // FIXED: Added caching for products - only returns active products for customers
+  // Products API - public endpoint with caching and robust error handling
   app.get("/api/products", rateLimiters.general, async (req, res) => {
     try {
       const cacheKey = 'products-active';
@@ -643,54 +643,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.warn(`⚠️ [GET /api/products] No products found in database! Check if initAdmin was run.`);
         }
         
-        products = allProducts.filter((p: any) => p.isActive !== false).map((p: any) => {
+        products = allProducts.filter((p: any) => p && p.isActive !== false).map((p: any) => {
           let parsedImages: string[] = [];
-          if (p.images) {
-            try {
+          
+          try {
+            if (p.images) {
               if (typeof p.images === 'string') {
                 const trimmed = p.images.trim();
-                // Try to parse as JSON
-                if (trimmed.startsWith('[') || trimmed.startsWith('"')) {
-                  try {
-                    const parsed = JSON.parse(trimmed);
-                    parsedImages = Array.isArray(parsed) ? parsed : [parsed];
-                  } catch (parseError) {
-                    console.warn(`⚠️ [GET /api/products] JSON parse failed for product ${p.id}, treating as single URL:`, parseError);
-                    parsedImages = trimmed ? [trimmed] : [];
+                if (trimmed) {
+                  // Try to parse as JSON
+                  if (trimmed.startsWith('[') || trimmed.startsWith('"')) {
+                    try {
+                      const parsed = JSON.parse(trimmed);
+                      parsedImages = Array.isArray(parsed) ? parsed : [parsed];
+                    } catch (parseError) {
+                      // If JSON parse fails, treat as single URL
+                      parsedImages = [trimmed];
+                    }
+                  } else {
+                    // Single image URL
+                    parsedImages = [trimmed];
                   }
-                } else if (trimmed.length > 0) {
-                  // If it's not JSON, treat as single image URL
-                  parsedImages = [trimmed];
-                } else {
-                  parsedImages = [];
                 }
               } else if (Array.isArray(p.images)) {
                 parsedImages = p.images;
-              } else {
-                parsedImages = [];
               }
               
-              // Ensure all images are valid strings (URLs) - filter null/undefined and trim
+              // Validate and sanitize image URLs
               parsedImages = parsedImages
-                .filter((img: any) => img !== null && img !== undefined)
-                .map((img: any) => String(img).trim())
-                .filter((img: string) => img.length > 0);
-            } catch (e) {
-              console.error(`❌ [GET /api/products] Failed to parse images for product ${p.id}:`, e);
-              console.error(`❌ [GET /api/products] Raw images type:`, typeof p.images);
-              console.error(`❌ [GET /api/products] Raw images value (first 100 chars):`, typeof p.images === 'string' ? p.images.substring(0, 100) : p.images);
-              parsedImages = [];
+                .filter((img: any) => {
+                  if (img === null || img === undefined) return false;
+                  const str = String(img).trim();
+                  // Basic URL validation - must be non-empty and start with valid prefix
+                  return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
+                })
+                .map((img: any) => String(img).trim());
             }
-          } else {
-            console.log(`📸 [GET /api/products] Product ${p.id} (${p.name}): No images field`);
+          } catch (e) {
+            // Fail gracefully - log error but continue
+            console.error(`❌ [GET /api/products] Error parsing images for product ${p.id}:`, e);
+            parsedImages = [];
           }
-          // Log image parsing result
-          console.log(`📸 [GET /api/products] Product ${p.id} (${p.name}): ${parsedImages.length} images parsed`, {
-            originalType: typeof p.images,
-            originalLength: typeof p.images === 'string' ? p.images.length : 'N/A',
-            parsedCount: parsedImages.length,
-            firstImagePreview: parsedImages.length > 0 ? parsedImages[0].substring(0, 50) + '...' : 'none'
-          });
+          
+          // Return product with validated images array
           return {
             ...p,
             images: parsedImages
@@ -713,7 +708,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`⚡ [GET /api/products] Using cached products (${products.length} items)`);
       }
       
-      res.json(products);
+      // Ensure products is always an array before sending
+      const safeProducts = Array.isArray(products) ? products : [];
+      
+      // Set proper headers for security
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'public, max-age=120'); // 2 minutes cache
+      
+      res.json(safeProducts);
     } catch (error) {
       console.error("❌ Error fetching products:", error);
       res.status(500).json({
