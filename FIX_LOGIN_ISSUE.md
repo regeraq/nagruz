@@ -144,3 +144,4 @@ UPDATE users SET is_blocked = false WHERE email = 'your-email@example.com';
 
 После исправления проблемы удалите временный эндпоинт `/api/debug/user-status/:email` из `server/routes.ts` для безопасности.
 
+
