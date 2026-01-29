@@ -12,12 +12,16 @@ async function throwIfResNotOk(res: Response) {
           // Use server-provided message if available
           if (json.message) {
             errorMessage = json.message;
+            // Improve CSRF error messages
+            if (json.message.includes('CSRF')) {
+              errorMessage = "Ошибка безопасности. Пожалуйста, обновите страницу и попробуйте снова";
+            }
           } else {
             // Map status codes to user-friendly messages
             if (res.status === 401) {
               errorMessage = "Требуется авторизация";
             } else if (res.status === 403) {
-              errorMessage = "Доступ запрещен";
+              errorMessage = "Доступ запрещен. Пожалуйста, обновите страницу";
             } else if (res.status === 404) {
               errorMessage = "Ресурс не найден";
             } else if (res.status === 400) {
@@ -31,7 +35,7 @@ async function throwIfResNotOk(res: Response) {
           if (res.status === 401) {
             errorMessage = "Требуется авторизация";
           } else if (res.status === 403) {
-            errorMessage = "Доступ запрещен";
+            errorMessage = "Доступ запрещен. Пожалуйста, обновите страницу";
           } else if (res.status === 404) {
             errorMessage = "Ресурс не найден";
           } else if (res.status >= 500) {
@@ -44,7 +48,7 @@ async function throwIfResNotOk(res: Response) {
       if (res.status === 401) {
         errorMessage = "Требуется авторизация";
       } else if (res.status === 403) {
-        errorMessage = "Доступ запрещен";
+        errorMessage = "Доступ запрещен. Пожалуйста, обновите страницу";
       } else if (res.status === 404) {
         errorMessage = "Ресурс не найден";
       } else if (res.status >= 500) {
@@ -116,8 +120,20 @@ export async function apiRequest(
       csrfToken = await fetchCsrfToken();
     }
     
+    // If still no token, make a GET request to get cookie set
+    if (!csrfToken) {
+      try {
+        await fetch("/api/csrf-token", { credentials: "include" });
+        csrfToken = getCsrfToken();
+      } catch (e) {
+        console.warn("Failed to fetch CSRF token:", e);
+      }
+    }
+    
     if (csrfToken) {
       headers['x-csrf-token'] = csrfToken;
+    } else {
+      console.warn("CSRF token not available, request may fail");
     }
   }
 

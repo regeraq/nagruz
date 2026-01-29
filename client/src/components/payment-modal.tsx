@@ -172,6 +172,12 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
           description: "Пожалуйста, авторизуйтесь для оформления заказа",
           variant: "default",
         });
+      } else if (errorMessage.startsWith("403") || errorMessage.includes("CSRF") || errorMessage.includes("csrf") || errorMessage.includes("обновите страницу")) {
+        toast({
+          title: "Ошибка безопасности",
+          description: "Пожалуйста, обновите страницу и попробуйте снова",
+          variant: "destructive",
+        });
       } else {
         toast({
           title: "Ошибка оформления",
