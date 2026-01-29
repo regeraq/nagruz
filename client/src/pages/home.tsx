@@ -1100,19 +1100,21 @@ export default function Home() {
                     data-testid={`gallery-image-${idx}`}
                   >
                     <div 
-                      className="bg-muted relative flex items-center justify-center"
+                      className="relative flex items-center justify-center bg-white dark:bg-slate-800"
                       style={{ minHeight: '400px', maxHeight: '600px' }}
                     >
                       <img
                         src={trimmedUrl}
                         alt={`${device.name} - Фото ${idx + 1}`}
-                        className="w-auto h-auto object-contain transition-transform duration-300 group-hover:scale-105"
+                        className="object-contain transition-transform duration-300 group-hover:scale-105"
                         style={{ 
                           maxWidth: '100%', 
                           maxHeight: '580px',
                           minWidth: '200px',
                           minHeight: '200px',
-                          padding: '16px'
+                          padding: '16px',
+                          position: 'relative',
+                          zIndex: 10
                         }}
                         onLoad={(e) => {
                           console.log(`[Gallery] Image ${idx} loaded successfully`);
@@ -1126,7 +1128,6 @@ export default function Home() {
                           target.onerror = null;
                         }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                     </div>
                   </div>
                 );
