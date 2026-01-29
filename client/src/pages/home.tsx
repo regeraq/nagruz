@@ -117,221 +117,141 @@ export default function Home() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  // Products API - reliable query with proper error handling
-  const { data: products = [], isLoading: isLoadingProducts, error: productsError, refetch: refetchProducts } = useQuery<Product[]>({
-    queryKey: ['/api/products'],
-    queryFn: async () => {
-      try {
-        // Add cache-busting parameter to ensure fresh data
-        const timestamp = Date.now();
-        console.log('[Products API] Fetching products...');
-        const res = await fetch(`/api/products?_t=${timestamp}`, { 
-          credentials: "include",
-          headers: {
-            'Accept': 'application/json',
-            'Cache-Control': 'no-cache',
-          },
-        });
-        
-        console.log('[Products API] Response status:', res.status, res.ok);
-        
-        if (!res.ok) {
-          if (res.status === 404) {
-            console.log('[Products API] 404 - returning empty array');
-            return [];
-          }
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  // === SIMPLE & RELIABLE: Products and Images State ===
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productImages, setProductImages] = useState<string[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [isLoadingImages, setIsLoadingImages] = useState(false);
+
+  // Simple function to parse images from various formats
+  const parseImages = (data: any): string[] => {
+    if (!data) return [];
+    
+    let images: any[] = [];
+    
+    // Handle string (JSON or single URL)
+    if (typeof data === 'string') {
+      const trimmed = data.trim();
+      if (!trimmed) return [];
+      
+      if (trimmed.startsWith('[')) {
+        try {
+          images = JSON.parse(trimmed);
+        } catch {
+          images = [trimmed];
         }
-        
-        const data = await res.json();
-        console.log('[Products API] Raw data:', data);
-        
-        let productsArray: any[] = [];
-        
-        if (!Array.isArray(data)) {
-          if (data && typeof data === 'object') {
-            if (Array.isArray(data.products)) productsArray = data.products;
-            else if (Array.isArray(data.data)) productsArray = data.data;
-          }
-        } else {
-          productsArray = data;
-        }
-        
-        console.log('[Products API] productsArray length:', productsArray.length);
-        
-        // Filter and ensure images are properly formatted
-        const result = productsArray
-          .filter((p: any) => p && typeof p === 'object' && p.id && p.name)
-          .map((p: any) => {
-            // Ensure images is always an array
-            let images = p.images;
-            if (typeof images === 'string') {
-              try {
-                images = JSON.parse(images);
-              } catch {
-                images = images.trim() ? [images] : [];
-              }
-            }
-            if (!Array.isArray(images)) {
-              images = [];
-            }
-            return { ...p, images };
-          });
-        
-        console.log('[Products API] Final result:', result.map((p: any) => ({ id: p.id, imagesCount: p.images?.length })));
-        return result;
-      } catch (error) {
-        console.error('[Products API] Error fetching products:', error);
-        return [];
+      } else {
+        images = [trimmed];
       }
-    },
-    staleTime: 30 * 1000, // 30 seconds - more frequent updates for images
-    gcTime: 5 * 60 * 1000,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
-  });
-  
-  // Auto-refetch if products are empty after load
+    } else if (Array.isArray(data)) {
+      images = data;
+    }
+    
+    // Filter valid image URLs
+    return images
+      .filter((img): img is string => {
+        if (!img || typeof img !== 'string') return false;
+        const s = img.trim();
+        return s.length > 0 && (s.startsWith('http') || s.startsWith('data:') || s.startsWith('/'));
+      })
+      .map(img => img.trim());
+  };
+
+  // Load products on mount
   useEffect(() => {
-    if (!isLoadingProducts && products.length === 0 && !productsError) {
-      const timer = setTimeout(() => {
-        refetchProducts();
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [isLoadingProducts, products.length, productsError, refetchProducts]);
-
-  // Get product images for current device - robust parsing
-  const currentProduct = useMemo(() => {
-    if (!products || !Array.isArray(products) || products.length === 0) {
-      return null;
-    }
-    const product = products.find((p: Product) => p && p.id === selectedDevice);
-    if (product && typeof product === 'object' && product.id && product.name) {
-      return product;
-    }
-    return null;
-  }, [products, selectedDevice]);
-
-  // Fetch product images directly from public API endpoint (no auth required)
-  const { data: fetchedProductImages = [] } = useQuery<string[]>({
-    queryKey: ['/api/products', selectedDevice, 'images'],
-    queryFn: async () => {
+    let isMounted = true;
+    
+    const loadProducts = async () => {
       try {
-        const timestamp = Date.now();
-        console.log('[Images API] Fetching images for:', selectedDevice);
-        const res = await fetch(`/api/products/${selectedDevice}/images?_t=${timestamp}`, {
-          headers: {
-            'Accept': 'application/json',
-            'Cache-Control': 'no-cache',
-          },
-        });
-        
-        console.log('[Images API] Response status:', res.status, res.ok);
-        
-        if (!res.ok) {
-          console.warn(`[Images API] Failed to fetch images for product ${selectedDevice}: ${res.status}`);
-          return [];
-        }
+        const res = await fetch('/api/products');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         
         const data = await res.json();
-        console.log('[Images API] Raw data:', data);
+        if (!isMounted) return;
+        
+        // Extract products array from response
+        let productsArray: any[] = Array.isArray(data) ? data : (data.products || data.data || []);
+        
+        // Process products
+        const processedProducts = productsArray
+          .filter((p: any) => p && p.id && p.name)
+          .map((p: any) => ({
+            ...p,
+            images: parseImages(p.images)
+          }));
+        
+        setProducts(processedProducts);
+      } catch (error) {
+        console.error('Failed to load products:', error);
+      } finally {
+        if (isMounted) setIsLoadingProducts(false);
+      }
+    };
+    
+    loadProducts();
+    return () => { isMounted = false; };
+  }, []);
+
+  // Load images when device changes
+  useEffect(() => {
+    if (!selectedDevice) return;
+    
+    let isMounted = true;
+    setIsLoadingImages(true);
+    
+    const loadImages = async () => {
+      try {
+        const res = await fetch(`/api/products/${selectedDevice}/images`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        
+        const data = await res.json();
+        if (!isMounted) return;
         
         if (data.success && Array.isArray(data.images)) {
-          const filtered = data.images.filter((img: any) => {
-            if (!img || typeof img !== 'string') return false;
-            const str = img.trim();
-            return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
-          });
-          console.log('[Images API] Filtered images count:', filtered.length);
-          return filtered;
-        }
-        
-        console.log('[Images API] No valid images in response');
-        return [];
-      } catch (error) {
-        console.error('[Images API] Error fetching product images:', error);
-        return [];
-      }
-    },
-    enabled: !!selectedDevice,
-    staleTime: 30 * 1000,
-    gcTime: 5 * 60 * 1000,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
-  });
-
-  // Combine images from product data and direct API call
-  const productImages = useMemo(() => {
-    // Debug logging
-    console.log('[Gallery Debug] selectedDevice:', selectedDevice);
-    console.log('[Gallery Debug] fetchedProductImages:', fetchedProductImages);
-    console.log('[Gallery Debug] currentProduct:', currentProduct?.id, currentProduct?.name);
-    
-    // First try to get images from fetched data (more reliable)
-    if (fetchedProductImages && fetchedProductImages.length > 0) {
-      console.log('[Gallery Debug] Using fetchedProductImages:', fetchedProductImages.length);
-      return fetchedProductImages;
-    }
-    
-    // Fallback to images from product object
-    if (!currentProduct) {
-      return [];
-    }
-    
-    let parsedImages: string[] = [];
-    
-    try {
-      // Images should already be an array from API, but handle string fallback
-      let rawImages = (currentProduct as any)?.images;
-      
-      // If images came as string (JSON), parse it
-      if (typeof rawImages === 'string') {
-        try {
-          const trimmed = rawImages.trim();
-          if (trimmed.startsWith('[')) {
-            rawImages = JSON.parse(trimmed);
-          } else if (trimmed.length > 0) {
-            rawImages = [trimmed];
+          setProductImages(parseImages(data.images));
+        } else {
+          // Fallback: try to get images from products array
+          const product = products.find(p => p.id === selectedDevice);
+          if (product) {
+            const imgs = parseImages(product.images);
+            if (product.imageUrl) {
+              const mainImg = product.imageUrl.trim();
+              if (mainImg && !imgs.includes(mainImg)) {
+                imgs.unshift(mainImg);
+              }
+            }
+            setProductImages(imgs);
           } else {
-            rawImages = [];
+            setProductImages([]);
           }
-        } catch {
-          rawImages = rawImages.trim() ? [rawImages.trim()] : [];
         }
-      }
-      
-      if (Array.isArray(rawImages)) {
-        parsedImages = rawImages
-          .filter((img: any) => {
-            if (img === null || img === undefined) return false;
-            const str = String(img).trim();
-            return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
-          })
-          .map((img: any) => String(img).trim());
-      }
-      
-      // Also include imageUrl if it's set and not already in the array
-      const imageUrl = (currentProduct as any)?.imageUrl;
-      if (imageUrl && typeof imageUrl === 'string') {
-        const trimmedImageUrl = imageUrl.trim();
-        if (trimmedImageUrl.length > 0 && 
-            (trimmedImageUrl.startsWith('http') || trimmedImageUrl.startsWith('data:') || trimmedImageUrl.startsWith('/')) &&
-            !parsedImages.includes(trimmedImageUrl)) {
-          // Add imageUrl at the beginning as the main image
-          parsedImages.unshift(trimmedImageUrl);
+      } catch (error) {
+        console.error('Failed to load images:', error);
+        // Fallback to product images from state
+        const product = products.find(p => p.id === selectedDevice);
+        if (product && isMounted) {
+          const imgs = parseImages(product.images);
+          if (product.imageUrl) {
+            const mainImg = product.imageUrl.trim();
+            if (mainImg && !imgs.includes(mainImg)) {
+              imgs.unshift(mainImg);
+            }
+          }
+          setProductImages(imgs);
         }
+      } finally {
+        if (isMounted) setIsLoadingImages(false);
       }
-      
-      return parsedImages;
-    } catch (error) {
-      console.error('Error parsing product images:', error);
-      return [];
-    }
-  }, [currentProduct, fetchedProductImages]);
+    };
+    
+    loadImages();
+    return () => { isMounted = false; };
+  }, [selectedDevice, products]);
+
+  // Current product (for other uses)
+  const currentProduct = useMemo(() => {
+    return products.find(p => p.id === selectedDevice) || null;
+  }, [products, selectedDevice]);
 
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ['/api/settings'],
@@ -1517,7 +1437,7 @@ export default function Home() {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>+7 (495) 123-45-67</li>
                 <li>info@nm-100.ru</li>
-                <li>Москва, Промышленная, 1</li>
+                <li>Чебоксары</li>
               </ul>
             </div>
           </div>

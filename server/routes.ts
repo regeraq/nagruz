@@ -781,71 +781,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PUBLIC: Get product images (no auth required) - for gallery display
   // IMPORTANT: This route MUST be defined BEFORE /api/products/:id to avoid route conflicts
   app.get("/api/products/:id/images", rateLimiters.general, async (req, res) => {
-    console.log(`🖼️ [GET /api/products/${req.params.id}/images] Request received`);
     try {
       const product = await storage.getProduct(req.params.id);
       
       if (!product) {
-        console.warn(`⚠️ [GET /api/products/${req.params.id}/images] Product not found`);
-        res.status(404).json({
-          success: false,
-          message: "Товар не найден",
-          images: []
-        });
+        res.status(404).json({ success: false, message: "Товар не найден", images: [] });
         return;
       }
       
-      // Parse images correctly
+      // Parse images
       let parsedImages: string[] = [];
-      try {
-        if (product.images) {
-          if (typeof product.images === 'string') {
-            const trimmed = product.images.trim();
-            if (trimmed.startsWith('[')) {
-              parsedImages = JSON.parse(trimmed);
-            } else if (trimmed.length > 0) {
-              parsedImages = [trimmed];
-            }
-          } else if (Array.isArray(product.images)) {
-            parsedImages = product.images;
+      
+      if (product.images) {
+        if (typeof product.images === 'string') {
+          const trimmed = product.images.trim();
+          if (trimmed.startsWith('[')) {
+            try { parsedImages = JSON.parse(trimmed); } catch { parsedImages = [trimmed]; }
+          } else if (trimmed) {
+            parsedImages = [trimmed];
           }
+        } else if (Array.isArray(product.images)) {
+          parsedImages = product.images;
         }
-        
-        // Also include imageUrl if set
-        if (product.imageUrl && typeof product.imageUrl === 'string' && product.imageUrl.trim()) {
-          const trimmedUrl = product.imageUrl.trim();
-          if (!parsedImages.includes(trimmedUrl)) {
-            parsedImages.unshift(trimmedUrl);
-          }
-        }
-        
-        // Filter valid images
-        parsedImages = parsedImages.filter(img => {
-          if (!img || typeof img !== 'string') return false;
-          const str = img.trim();
-          return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
-        });
-      } catch (e) {
-        console.error(`❌ [GET /api/products/${req.params.id}/images] Error parsing images:`, e);
-        parsedImages = [];
       }
       
-      // Set no-cache headers to always get fresh data
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
+      // Include imageUrl at the beginning
+      if (product.imageUrl && typeof product.imageUrl === 'string') {
+        const mainImg = product.imageUrl.trim();
+        if (mainImg && !parsedImages.includes(mainImg)) {
+          parsedImages.unshift(mainImg);
+        }
+      }
       
-      res.json({ 
-        success: true, 
-        images: parsedImages 
+      // Filter valid image URLs only
+      parsedImages = parsedImages.filter(img => {
+        if (!img || typeof img !== 'string') return false;
+        const s = img.trim();
+        return s && (s.startsWith('http') || s.startsWith('data:') || s.startsWith('/'));
       });
+      
+      res.json({ success: true, images: parsedImages });
     } catch (error) {
-      console.error("❌ Error fetching product images:", error);
-      res.status(500).json({
-        success: false,
-        message: "Ошибка при получении изображений",
-        images: []
-      });
+      console.error("Error fetching product images:", error);
+      res.status(500).json({ success: false, message: "Ошибка при получении изображений", images: [] });
     }
   });
 
