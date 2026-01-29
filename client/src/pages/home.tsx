@@ -325,7 +325,7 @@ export default function Home() {
   useEffect(() => {
     const deviceName = currentProductForDevice?.name || device.name;
     const devicePower = device.power || "—";
-    const pageTitle = `(Нагрузочное устройство/${deviceName}) — ${devicePower}`;
+    const pageTitle = `${deviceName} — Нагрузочное устройство ${devicePower}`;
     document.title = pageTitle;
     
     const metaDescription = document.querySelector('meta[name="description"]');
