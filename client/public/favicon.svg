@@ -5,31 +5,21 @@
       <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
     </linearGradient>
   </defs>
-  <!-- Фон с сильно закругленными углами -->
-  <rect width="100" height="100" fill="url(#bg)" rx="22"/>
-  
+  <rect width="100" height="100" fill="url(#bg)" rx="20"/>
   <g transform="translate(50,50)">
-    <!-- Полукруглый датчик (верхняя дуга) -->
-    <path d="M -30 -15 A 30 30 0 0 1 30 -15" 
-          fill="none" 
-          stroke="white" 
-          stroke-width="4" 
-          stroke-linecap="round"/>
-    
-    <!-- Деления на шкале -->
-    <line x1="-25" y1="-12" x2="-25" y2="-18" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    <line x1="-15" y1="-8" x2="-15" y2="-14" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    <line x1="0" y1="-5" x2="0" y2="-11" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    <line x1="15" y1="-8" x2="15" y2="-14" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    <line x1="25" y1="-12" x2="25" y2="-18" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    
-    <!-- Точка поворота стрелки (внизу по центру) -->
-    <circle cx="0" cy="5" r="3.5" fill="white"/>
-    
-    <!-- Стрелка, указывающая в верхнюю правую часть -->
-    <line x1="0" y1="5" x2="18" y2="-10" 
-          stroke="white" 
-          stroke-width="3.5" 
-          stroke-linecap="round"/>
+    <!-- Спидометр -->
+    <circle cx="0" cy="0" r="35" fill="none" stroke="white" stroke-width="3" opacity="0.3"/>
+    <circle cx="0" cy="0" r="28" fill="none" stroke="white" stroke-width="2.5" opacity="0.5"/>
+    <!-- Шкала -->
+    <path d="M -25 -5 L -30 0 L -25 5" fill="white" opacity="0.8"/>
+    <path d="M 0 -30 L 0 -35" stroke="white" stroke-width="2.5" opacity="0.8"/>
+    <path d="M 25 -5 L 30 0 L 25 5" fill="white" opacity="0.8"/>
+    <path d="M 17.5 21.5 L 21 25" stroke="white" stroke-width="2" opacity="0.6"/>
+    <path d="M -17.5 21.5 L -21 25" stroke="white" stroke-width="2" opacity="0.6"/>
+    <!-- Стрелка (показывает около 70%) -->
+    <line x1="0" y1="0" x2="0" y2="-22" stroke="white" stroke-width="3" stroke-linecap="round" transform="rotate(-20)"/>
+    <!-- Центр -->
+    <circle cx="0" cy="0" r="4" fill="white"/>
   </g>
 </svg>
+
