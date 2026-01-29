@@ -138,28 +138,139 @@ export default function Home() {
     }
   }, [selectedDevice]);
 
-  // FIXED: Use getQueryFn with on401: "returnNull" to prevent errors for unauthenticated users
-  // Products API is public and doesn't require authentication
+  // FIXED: Products API is public and doesn't require authentication
+  // Use direct fetch instead of getQueryFn to avoid token issues
   const { data: products = [], isLoading: isLoadingProducts, error: productsError } = useQuery<Product[]>({
     queryKey: ['/api/products'],
-    queryFn: getQueryFn({ on401: "returnNull" }),
+    queryFn: async () => {
+      console.log(`📥 [Home] Fetching products from /api/products`);
+      try {
+        // FIXED: Don't send Authorization header - products are public
+        const res = await fetch("/api/products", {
+          credentials: "include",
+        });
+        
+        console.log(`📥 [Home] Response status: ${res.status} ${res.statusText}`);
+        console.log(`📥 [Home] Response headers:`, Object.fromEntries(res.headers.entries()));
+        
+        if (!res.ok) {
+          console.error(`❌ [Home] Failed to fetch products: ${res.status} ${res.statusText}`);
+          const errorText = await res.text();
+          console.error(`❌ [Home] Error response body:`, errorText);
+          toast({
+            title: "Ошибка загрузки товаров",
+            description: `Сервер вернул ошибку ${res.status}. Проверьте консоль для деталей.`,
+            variant: "destructive",
+          });
+          return [];
+        }
+        
+        const data = await res.json();
+        console.log(`✅ [Home] Received response:`, {
+          type: typeof data,
+          isArray: Array.isArray(data),
+          length: Array.isArray(data) ? data.length : 'N/A',
+          data: data
+        });
+        
+        // Handle different response formats
+        let productsArray: Product[] = [];
+        if (Array.isArray(data)) {
+          productsArray = data;
+        } else if (data && typeof data === 'object' && 'products' in data && Array.isArray(data.products)) {
+          productsArray = data.products;
+        } else if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
+          productsArray = data.data;
+        } else {
+          console.warn(`⚠️ [Home] Unexpected response format:`, data);
+          return [];
+        }
+        
+        console.log(`✅ [Home] Parsed ${productsArray.length} products from API`);
+        
+        if (productsArray.length === 0) {
+          console.warn(`⚠️ [Home] No products received from API. Check server logs and ensure products exist in database.`);
+          toast({
+            title: "Товары не найдены",
+            description: "В базе данных нет активных товаров. Обратитесь к администратору.",
+            variant: "destructive",
+          });
+        }
+        
+        // Log each product's images (but don't log full image data - can be huge base64)
+        productsArray.forEach((p: any) => {
+          const imgCount = Array.isArray(p.images) ? p.images.length : (p.images ? 1 : 0);
+          console.log(`📦 [Home] Product ${p.id} (${p.name}): ${imgCount} images`, {
+            imagesCount: imgCount,
+            imagesType: typeof p.images,
+            isArray: Array.isArray(p.images),
+            firstImagePreview: Array.isArray(p.images) && p.images.length > 0 
+              ? p.images[0].substring(0, 50) + '...' 
+              : (typeof p.images === 'string' && p.images.length > 0 ? p.images.substring(0, 50) + '...' : null)
+          });
+        });
+        return productsArray;
+      } catch (error) {
+        console.error(`❌ [Home] Error fetching products:`, error);
+        console.error(`❌ [Home] Error details:`, {
+          name: (error as any)?.name,
+          message: (error as any)?.message,
+          stack: (error as any)?.stack
+        });
+        toast({
+          title: "Ошибка загрузки товаров",
+          description: "Не удалось загрузить список товаров. Пожалуйста, обновите страницу.",
+          variant: "destructive",
+        });
+        return [];
+      }
+    },
     staleTime: 10 * 60 * 1000, // 10 minutes - keep products fresh longer
     gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache for 30 minutes (formerly cacheTime)
-    refetchOnMount: false, // Don't refetch on mount if data is fresh
+    refetchOnMount: true, // FIXED: Always refetch on mount to ensure fresh data
     refetchOnWindowFocus: false, // Don't refetch on window focus
-    refetchOnReconnect: false, // Don't refetch on reconnect
+    refetchOnReconnect: true, // FIXED: Refetch on reconnect to ensure data is available
     // Keep previous data while fetching new data
     placeholderData: (previousData) => previousData,
     // FIXED: Retry on error with exponential backoff
-    retry: 2,
+    retry: 3, // FIXED: Increase retry count
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    // FIXED: Add error logging
+    onError: (error) => {
+      console.error(`❌ [Home] Products query error:`, error);
+    },
+    // FIXED: Add success logging
+    onSuccess: (data) => {
+      console.log(`✅ [Home] Products query success:`, {
+        count: Array.isArray(data) ? data.length : 'N/A',
+        isArray: Array.isArray(data),
+        data: data
+      });
+    },
   });
 
   // Get product images for current device
   const currentProduct = useMemo(() => {
     // FIXED: Better error handling - check if products array is empty
-    if (!products || products.length === 0) {
-      console.warn(`⚠️ [Home] Products array is empty for device ${selectedDevice}`);
+    console.log(`🔍 [Home] currentProduct useMemo called:`, {
+      productsType: typeof products,
+      productsIsArray: Array.isArray(products),
+      productsLength: Array.isArray(products) ? products.length : 'N/A',
+      isLoadingProducts,
+      selectedDevice,
+      productsError: productsError ? {
+        message: (productsError as any)?.message,
+        name: (productsError as any)?.name
+      } : null,
+      products: products
+    });
+    
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      console.warn(`⚠️ [Home] Products array is empty for device ${selectedDevice}`, {
+        products,
+        isLoadingProducts,
+        productsError
+      });
       return null;
     }
     
@@ -1058,6 +1169,17 @@ export default function Home() {
 
       {/* Product Images Gallery - show for all users, registered or not */}
       {/* FIXED: Gallery should always show if we have images, regardless of authentication status */}
+      {/* DEBUG: Log gallery visibility state */}
+      {(() => {
+        console.log(`🖼️ [Home] Gallery render check:`, {
+          isLoadingProducts,
+          productImagesLength: productImages.length,
+          willShow: !isLoadingProducts && productImages.length > 0,
+          currentProduct: currentProduct ? { id: currentProduct.id, hasImages: !!(currentProduct as any).images } : null,
+          productsCount: products.length
+        });
+        return null;
+      })()}
       {!isLoadingProducts && productImages.length > 0 && (
         <section id="gallery" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
