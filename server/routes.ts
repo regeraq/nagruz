@@ -679,6 +679,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 })
                 .map((img: any) => String(img).trim());
             }
+            
+            // FIXED: Also include imageUrl in images array if it's set and not already included
+            if (p.imageUrl && typeof p.imageUrl === 'string') {
+              const trimmedImageUrl = p.imageUrl.trim();
+              if (trimmedImageUrl.length > 0 && 
+                  (trimmedImageUrl.startsWith('http') || trimmedImageUrl.startsWith('data:') || trimmedImageUrl.startsWith('/')) &&
+                  !parsedImages.includes(trimmedImageUrl)) {
+                // Add imageUrl at the beginning as the main image
+                parsedImages.unshift(trimmedImageUrl);
+              }
+            }
           } catch (e) {
             // Fail gracefully - log error but continue
             console.error(`❌ [GET /api/products] Error parsing images for product ${p.id}:`, e);
@@ -1440,42 +1451,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: Delete products
-  app.delete("/api/admin/products", async (req, res) => {
-    try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      const { ids } = req.body;
-      if (!Array.isArray(ids)) {
-        res.status(400).json({ success: false, message: "Invalid request" });
-        return;
-      }
-
-      res.json({
-        success: true,
-        deleted: ids.length,
-      });
-    } catch (error) {
-      console.error("Delete products error:", error);
-      res.status(500).json({ success: false, message: "Failed to delete products" });
-    }
-  });
+  // Admin: Delete products - REMOVED: Duplicate endpoint, using the one below at line 2021
 
   // Admin: Update order status
   app.patch("/api/admin/orders/:id", async (req, res) => {
@@ -2045,6 +2021,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const deleted = await storage.deleteProducts(ids);
+      
+      // Clear products cache to ensure deleted products are immediately removed
+      cache.delete('products');
+      cache.delete('products-active');
+      console.log(`✅ [DELETE /api/admin/products] Deleted ${deleted} products, cache cleared`);
+      
       res.json({ success: true, deleted });
     } catch (error) {
       console.error("Delete products error:", error);

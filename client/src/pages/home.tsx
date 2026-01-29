@@ -190,55 +190,61 @@ export default function Home() {
       return [];
     }
     
+    let parsedImages: string[] = [];
+    
     try {
       const rawImages = (currentProduct as any)?.images;
       
-      if (rawImages === null || rawImages === undefined) {
-        return [];
-      }
-      
-      if (Array.isArray(rawImages)) {
-        return rawImages
-          .filter((img: any) => {
-            if (img === null || img === undefined) return false;
-            const str = String(img).trim();
-            return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
-          })
-          .map((img: any) => String(img).trim());
-      }
-      
-      if (typeof rawImages === 'string') {
-        const trimmed = rawImages.trim();
-        if (!trimmed) {
-          return [];
-        }
-        
-        try {
-          if (trimmed.startsWith('[') || trimmed.startsWith('"')) {
-            const parsed = JSON.parse(trimmed);
-            const result = Array.isArray(parsed) ? parsed : [parsed];
-            return result
-              .filter((img: any) => {
-                if (img === null || img === undefined) return false;
-                const str = String(img).trim();
-                return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
-              })
-              .map((img: any) => String(img).trim());
-          } else {
-            if (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {
-              return [trimmed];
+      if (rawImages !== null && rawImages !== undefined) {
+        if (Array.isArray(rawImages)) {
+          parsedImages = rawImages
+            .filter((img: any) => {
+              if (img === null || img === undefined) return false;
+              const str = String(img).trim();
+              return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
+            })
+            .map((img: any) => String(img).trim());
+        } else if (typeof rawImages === 'string') {
+          const trimmed = rawImages.trim();
+          if (trimmed) {
+            try {
+              if (trimmed.startsWith('[') || trimmed.startsWith('"')) {
+                const parsed = JSON.parse(trimmed);
+                const result = Array.isArray(parsed) ? parsed : [parsed];
+                parsedImages = result
+                  .filter((img: any) => {
+                    if (img === null || img === undefined) return false;
+                    const str = String(img).trim();
+                    return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
+                  })
+                  .map((img: any) => String(img).trim());
+              } else {
+                if (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {
+                  parsedImages = [trimmed];
+                }
+              }
+            } catch (parseError) {
+              if (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {
+                parsedImages = [trimmed];
+              }
             }
-            return [];
           }
-        } catch (parseError) {
-          if (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {
-            return [trimmed];
-          }
-          return [];
         }
       }
       
-      return [];
+      // FIXED: Also include imageUrl if it's set and not already in the array
+      const imageUrl = (currentProduct as any)?.imageUrl;
+      if (imageUrl && typeof imageUrl === 'string') {
+        const trimmedImageUrl = imageUrl.trim();
+        if (trimmedImageUrl.length > 0 && 
+            (trimmedImageUrl.startsWith('http') || trimmedImageUrl.startsWith('data:') || trimmedImageUrl.startsWith('/')) &&
+            !parsedImages.includes(trimmedImageUrl)) {
+          // Add imageUrl at the beginning as the main image
+          parsedImages.unshift(trimmedImageUrl);
+        }
+      }
+      
+      return parsedImages;
     } catch (error) {
       console.error('Error parsing product images:', error);
       return [];

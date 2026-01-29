@@ -45,14 +45,45 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   
-  // Get products to build dynamic device list
+  // Get products to build dynamic device list - use same queryFn as home page for consistency
   const { data: products = [] } = useQuery({
     queryKey: ['/api/products'],
     queryFn: async () => {
-      const res = await fetch("/api/products");
-      if (!res.ok) return [];
-      return res.json();
+      try {
+        const res = await fetch("/api/products", {
+          credentials: "include",
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+        
+        if (!res.ok) {
+          if (res.status === 404) {
+            return [];
+          }
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        
+        if (!Array.isArray(data)) {
+          if (data && typeof data === 'object') {
+            if (Array.isArray(data.products)) return data.products;
+            if (Array.isArray(data.data)) return data.data;
+          }
+          return [];
+        }
+        
+        return data.filter((p: any) => p && typeof p === 'object' && p.id && p.name);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+        return [];
+      }
     },
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
   });
 
   // Build devices list from products (dynamic, not hardcoded)
@@ -67,10 +98,61 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
     : allDevices;
 
   const currentProduct = products.find((p: any) => p.id === selectedDevice);
-  const hasGallery = currentProduct && 
-    (currentProduct as any)?.images && 
-    Array.isArray((currentProduct as any).images) && 
-    (currentProduct as any).images.length > 0;
+  
+  // Check for gallery images - handle both array and string formats robustly
+  // Also check imageUrl field as fallback
+  const hasGallery = (() => {
+    if (!currentProduct) return false;
+    
+    // Check imageUrl first (main image)
+    const imageUrl = (currentProduct as any)?.imageUrl;
+    if (imageUrl && typeof imageUrl === 'string') {
+      const trimmed = imageUrl.trim();
+      if (trimmed.length > 0 && (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/'))) {
+        return true;
+      }
+    }
+    
+    const images = (currentProduct as any)?.images;
+    if (!images) return false;
+    
+    // If already an array, check length
+    if (Array.isArray(images)) {
+      return images.filter((img: any) => {
+        if (!img) return false;
+        const str = String(img).trim();
+        return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
+      }).length > 0;
+    }
+    
+    // If string, try to parse or check if it's a valid URL
+    if (typeof images === 'string') {
+      const trimmed = images.trim();
+      if (!trimmed) return false;
+      
+      // Check if it's a valid URL directly
+      if (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {
+        return true;
+      }
+      
+      // Try to parse as JSON array
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((img: any) => {
+            if (!img) return false;
+            const str = String(img).trim();
+            return str.length > 0 && (str.startsWith('http') || str.startsWith('data:') || str.startsWith('/'));
+          }).length > 0;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    }
+    
+    return false;
+  })();
 
   // Filter nav links based on gallery availability
   const visibleNavLinks = navLinks.filter(link => {

@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { 
   Package, Users, BarChart3, FileText, Settings, Plus, Edit2, Trash2, 
   Save, X, Search, Shield, Tag, Mail, UserPlus, Image, Bell, Upload, Database, Download,
-  FileText as FileTextIcon, Phone, Cookie
+  FileText as FileTextIcon, Phone, Cookie, CheckCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -47,6 +47,7 @@ export default function Admin() {
   const [responsiblePerson, setResponsiblePerson] = useState("");
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [orderSearchTerm, setOrderSearchTerm] = useState("");
+  const [productSearchTerm, setProductSearchTerm] = useState("");
   
   // Content management state
   const [contentKey, setContentKey] = useState("");
@@ -61,7 +62,27 @@ export default function Admin() {
   // Cookie settings state
   const [cookieSettings, setCookieSettings] = useState({ enabled: true, message: "", acceptButtonText: "", declineButtonText: "" });
   const [selectedProductForImages, setSelectedProductForImages] = useState<string | null>(null);
+  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<any>(null);
   const [newImageUrl, setNewImageUrl] = useState("");
+  
+  // Full product editing state
+  const [showEditProduct, setShowEditProduct] = useState(false);
+  const [editingFullProduct, setEditingFullProduct] = useState<{
+    id: string;
+    name: string;
+    description: string;
+    price: string;
+    currency: string;
+    sku: string;
+    specifications: string;
+    stock: number;
+    category: string;
+    imageUrl: string;
+    isActive: boolean;
+  } | null>(null);
+  const [editProductImages, setEditProductImages] = useState<string[]>([]);
+  const [newEditImageUrl, setNewEditImageUrl] = useState("");
+  const [uploadingEditImage, setUploadingEditImage] = useState(false);
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   const [notificationForm, setNotificationForm] = useState({
     userId: "all",
@@ -105,7 +126,20 @@ export default function Admin() {
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
-  const products = productsData?.products || productsData || [];
+  const allProducts = productsData?.products || productsData || [];
+  
+  // Filter products by search term
+  const products = allProducts.filter((product: any) => {
+    if (!productSearchTerm.trim()) return true;
+    const search = productSearchTerm.toLowerCase();
+    return (
+      product.name?.toLowerCase().includes(search) ||
+      product.sku?.toLowerCase().includes(search) ||
+      product.id?.toLowerCase().includes(search) ||
+      product.category?.toLowerCase().includes(search) ||
+      product.description?.toLowerCase().includes(search)
+    );
+  });
 
   // Fetch users
   const { data: usersData = {} as any } = useQuery({
@@ -201,12 +235,14 @@ export default function Admin() {
       return res.json();
     },
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
-    onSuccess: (data) => {
-      if (data.success && data.settings) {
-        setCookieSettings(data.settings);
-      }
-    },
   });
+  
+  // Update cookie settings when data is fetched
+  useEffect(() => {
+    if (cookieSettingsData?.success && cookieSettingsData?.settings) {
+      setCookieSettings(cookieSettingsData.settings);
+    }
+  }, [cookieSettingsData]);
 
   // Fetch promocodes
   const { data: promoCodesData = {} as any } = useQuery({
@@ -324,10 +360,13 @@ export default function Admin() {
       const res = await apiRequest("POST", "/api/admin/products", data);
       return res.json();
     },
-    onSuccess: () => {
-      // Invalidate both public and admin product queries to ensure fresh data
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+    onSuccess: async () => {
+      // Invalidate and refetch all product queries to ensure fresh data everywhere
+      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      // Force refetch to get fresh data from server (bypasses client cache)
+      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/admin/products"] });
       setShowCreateProduct(false);
       toast({ title: "Товар создан" });
     },
@@ -342,10 +381,18 @@ export default function Admin() {
       const res = await apiRequest("DELETE", "/api/admin/products", { ids });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    onSuccess: async () => {
+      // Invalidate and refetch all product queries to ensure fresh data everywhere
+      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      // Force refetch to get fresh data from server (bypasses client cache)
+      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/admin/products"] });
       setSelectedProducts(new Set());
       toast({ title: "Товары удалены" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось удалить товары", variant: "destructive" });
     },
   });
 
@@ -453,9 +500,11 @@ export default function Admin() {
       const res = await apiRequest("PATCH", `/api/admin/products/${id}`, { isActive });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      // Force refetch to update device lists everywhere
+      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
       toast({ title: "Статус товара обновлен" });
     },
   });
@@ -466,9 +515,11 @@ export default function Admin() {
       const res = await apiRequest("PATCH", `/api/admin/products/${id}`, { price, stock });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      // Force refetch to update data everywhere
+      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
       setEditingProductId(null);
       toast({ title: "Товар обновлен" });
     },
@@ -550,10 +601,12 @@ export default function Admin() {
       });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      // Force refetch to update gallery images everywhere (including for non-authenticated users)
+      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
       setNewImageUrl("");
       toast({ title: "Фотография добавлена" });
     },
@@ -571,16 +624,135 @@ export default function Admin() {
       });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      // Force refetch to update gallery images everywhere
+      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
       toast({ title: "Фотография удалена" });
     },
     onError: (error: any) => {
       toast({ title: "Ошибка", description: error.message, variant: "destructive" });
     },
   });
+
+  // Full product update mutation
+  const updateFullProduct = useMutation({
+    mutationFn: async (data: {
+      id: string;
+      name: string;
+      description: string;
+      price: string;
+      currency: string;
+      sku: string;
+      specifications: string;
+      stock: number;
+      category: string;
+      imageUrl: string;
+      isActive: boolean;
+      images: string[];
+    }) => {
+      const res = await apiRequest("PATCH", `/api/admin/products/${data.id}`, {
+        name: data.name,
+        description: data.description,
+        price: data.price,
+        currency: data.currency,
+        sku: data.sku,
+        specifications: data.specifications,
+        stock: data.stock,
+        category: data.category,
+        imageUrl: data.imageUrl,
+        isActive: data.isActive,
+        images: JSON.stringify(data.images),
+        updatedAt: new Date().toISOString(),
+      });
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      // Force refetch to update data everywhere
+      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+      setShowEditProduct(false);
+      setEditingFullProduct(null);
+      setEditProductImages([]);
+      toast({ title: "Товар успешно обновлен" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Open product for full editing
+  const openProductForEdit = (product: any) => {
+    // Parse images from product
+    let images: string[] = [];
+    try {
+      if (product.images) {
+        if (typeof product.images === 'string') {
+          images = JSON.parse(product.images);
+        } else if (Array.isArray(product.images)) {
+          images = product.images;
+        }
+      }
+    } catch (e) {
+      images = [];
+    }
+    
+    setEditingFullProduct({
+      id: product.id,
+      name: product.name || "",
+      description: product.description || "",
+      price: String(product.price || "0"),
+      currency: product.currency || "RUB",
+      sku: product.sku || "",
+      specifications: product.specifications || "",
+      stock: product.stock || 0,
+      category: product.category || "",
+      imageUrl: product.imageUrl || "",
+      isActive: product.isActive ?? true,
+    });
+    setEditProductImages(images);
+    setShowEditProduct(true);
+  };
+
+  // Handle image upload for edit form
+  const handleEditImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploadingEditImage(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        setEditProductImages(prev => [...prev, base64]);
+        setUploadingEditImage(false);
+      };
+      reader.onerror = () => {
+        toast({ title: "Ошибка", description: "Не удалось загрузить файл", variant: "destructive" });
+        setUploadingEditImage(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      toast({ title: "Ошибка", description: "Не удалось загрузить изображение", variant: "destructive" });
+      setUploadingEditImage(false);
+    }
+  };
+
+  // Add image by URL for edit form
+  const addEditImageByUrl = () => {
+    if (newEditImageUrl.trim()) {
+      setEditProductImages(prev => [...prev, newEditImageUrl.trim()]);
+      setNewEditImageUrl("");
+    }
+  };
+
+  // Remove image from edit form
+  const removeEditImage = (index: number) => {
+    setEditProductImages(prev => prev.filter((_, i) => i !== index));
+  };
 
   // Save privacy policy settings (operator data)
   const savePrivacyPolicySettings = useMutation({
@@ -704,7 +876,7 @@ export default function Admin() {
               <Card>
                 <CardHeader className="pb-2 p-3 sm:p-6">
                   <CardDescription className="text-xs sm:text-sm">Всего товаров</CardDescription>
-                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{products.length}</CardTitle>
+                  <CardTitle className="text-xl sm:text-2xl md:text-3xl">{allProducts.length}</CardTitle>
                 </CardHeader>
               </Card>
               <Card>
@@ -921,18 +1093,21 @@ export default function Admin() {
               <div className="mt-4 sm:mt-6">
             <Card>
               <CardHeader className="p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-                  <div>
-                    <CardTitle className="text-base sm:text-lg md:text-xl">Управление товарами</CardTitle>
-                    <CardDescription className="text-xs sm:text-sm">Создание, редактирование и удаление товаров</CardDescription>
-                  </div>
-                  <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                    {selectedProducts.size > 0 && (
-                      <Button variant="destructive" onClick={() => deleteProducts.mutate(Array.from(selectedProducts))}>
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Удалить ({selectedProducts.size})
-                      </Button>
-                    )}
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                    <div>
+                      <CardTitle className="text-base sm:text-lg md:text-xl">Управление товарами</CardTitle>
+                      <CardDescription className="text-xs sm:text-sm">
+                        Всего товаров: {allProducts.length} | Показано: {products.length}
+                      </CardDescription>
+                    </div>
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                      {selectedProducts.size > 0 && (
+                        <Button variant="destructive" onClick={() => deleteProducts.mutate(Array.from(selectedProducts))}>
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Удалить ({selectedProducts.size})
+                        </Button>
+                      )}
                     <Dialog open={showCreateProduct} onOpenChange={setShowCreateProduct}>
                       <DialogTrigger asChild>
                         <Button>
@@ -940,9 +1115,12 @@ export default function Admin() {
                           Добавить товар
                         </Button>
                       </DialogTrigger>
-                      <DialogContent>
+                      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
-                          <DialogTitle>Создать товар</DialogTitle>
+                          <DialogTitle>Создать новый товар</DialogTitle>
+                          <DialogDescription>
+                            Заполните все обязательные поля для создания нового товара.
+                          </DialogDescription>
                         </DialogHeader>
                         <form
                           onSubmit={(e) => {
@@ -956,51 +1134,114 @@ export default function Admin() {
                               sku: formData.get("sku"),
                               specifications: formData.get("specifications"),
                               stock: parseInt(formData.get("stock") as string),
+                              category: formData.get("category") || "",
+                              imageUrl: formData.get("imageUrl") || "",
                               isActive: true,
-                              currency: "RUB",
+                              currency: formData.get("currency") || "RUB",
                             });
                           }}
                         >
-                          <div className="space-y-4">
-                            <div>
-                              <Label>ID</Label>
-                              <Input name="id" required />
-                            </div>
-                            <div>
-                              <Label>Название</Label>
-                              <Input name="name" required />
-                            </div>
-                            <div>
-                              <Label>Описание</Label>
-                              <Textarea name="description" required />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <Label>Цена (₽)</Label>
-                                <Input name="price" type="number" required />
+                          <div className="space-y-6">
+                            {/* Basic Info */}
+                            <div className="space-y-4">
+                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Основная информация</h3>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label>ID товара *</Label>
+                                  <Input name="id" required placeholder="Уникальный идентификатор (напр. nu-100)" />
+                                  <p className="text-xs text-muted-foreground mt-1">Латиница, цифры, дефисы</p>
+                                </div>
+                                <div>
+                                  <Label>Артикул (SKU) *</Label>
+                                  <Input name="sku" required placeholder="НУ-100-2024" />
+                                </div>
                               </div>
                               <div>
-                                <Label>Количество</Label>
-                                <Input name="stock" type="number" defaultValue="0" required />
+                                <Label>Название товара *</Label>
+                                <Input name="name" required placeholder="Например: Нагрузочное устройство НУ-100" />
+                              </div>
+                              <div>
+                                <Label>Категория</Label>
+                                <Input name="category" placeholder="Нагрузочные устройства" />
+                              </div>
+                              <div>
+                                <Label>Описание *</Label>
+                                <Textarea name="description" required rows={3} placeholder="Подробное описание товара..." />
                               </div>
                             </div>
-                            <div>
-                              <Label>Артикул</Label>
-                              <Input name="sku" required />
+                            
+                            {/* Pricing */}
+                            <div className="space-y-4">
+                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Цена и наличие</h3>
+                              <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                  <Label>Цена *</Label>
+                                  <Input name="price" type="number" step="0.01" min="0" required placeholder="0.00" />
+                                </div>
+                                <div>
+                                  <Label>Валюта</Label>
+                                  <select name="currency" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                                    <option value="RUB">₽ RUB</option>
+                                    <option value="USD">$ USD</option>
+                                    <option value="EUR">€ EUR</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <Label>Количество *</Label>
+                                  <Input name="stock" type="number" min="0" defaultValue="0" required />
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <Label>Характеристики</Label>
-                              <Textarea name="specifications" required />
+                            
+                            {/* Specifications */}
+                            <div className="space-y-4">
+                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Характеристики</h3>
+                              <div>
+                                <Label>Технические характеристики *</Label>
+                                <Textarea 
+                                  name="specifications" 
+                                  required 
+                                  rows={5}
+                                  placeholder="Мощность: 100 кВт&#10;Напряжение: 220-400 В&#10;Ступени: 20&#10;..."
+                                  className="font-mono text-sm"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">Каждая характеристика с новой строки</p>
+                              </div>
+                            </div>
+                            
+                            {/* Image */}
+                            <div className="space-y-4">
+                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Изображение</h3>
+                              <div>
+                                <Label>URL основного изображения</Label>
+                                <Input name="imageUrl" placeholder="https://example.com/image.jpg" />
+                                <p className="text-xs text-muted-foreground mt-1">Дополнительные изображения можно добавить после создания товара</p>
+                              </div>
                             </div>
                           </div>
-                          <DialogFooter className="mt-4">
+                          <DialogFooter className="mt-6">
+                            <Button type="button" variant="outline" onClick={() => setShowCreateProduct(false)}>
+                              Отмена
+                            </Button>
                             <Button type="submit" disabled={createProduct.isPending}>
-                              {createProduct.isPending ? "Создание..." : "Создать"}
+                              <Plus className="h-4 w-4 mr-2" />
+                              {createProduct.isPending ? "Создание..." : "Создать товар"}
                             </Button>
                           </DialogFooter>
                         </form>
                       </DialogContent>
                     </Dialog>
+                  </div>
+                  </div>
+                  {/* Search bar */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Поиск по названию, артикулу, категории..."
+                      value={productSearchTerm}
+                      onChange={(e) => setProductSearchTerm(e.target.value)}
+                      className="pl-10 w-full sm:w-80"
+                    />
                   </div>
                 </div>
               </CardHeader>
@@ -1022,12 +1263,12 @@ export default function Admin() {
                           }}
                         />
                       </TableHead>
-                      <TableHead className="text-xs sm:text-sm">Название</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Товар</TableHead>
                       <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Артикул</TableHead>
+                      <TableHead className="text-xs sm:text-sm hidden lg:table-cell">Категория</TableHead>
                       <TableHead className="text-xs sm:text-sm">Цена</TableHead>
-                      <TableHead className="text-xs sm:text-sm hidden md:table-cell">Количество</TableHead>
+                      <TableHead className="text-xs sm:text-sm hidden md:table-cell">Склад</TableHead>
                       <TableHead className="text-xs sm:text-sm hidden md:table-cell">Статус</TableHead>
-                      <TableHead className="text-xs sm:text-sm hidden lg:table-cell">Видимость</TableHead>
                       <TableHead className="text-xs sm:text-sm">Действия</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1048,8 +1289,30 @@ export default function Admin() {
                             }}
                           />
                         </TableCell>
-                        <TableCell className="font-medium text-xs sm:text-sm">{product.name}</TableCell>
+                        <TableCell className="font-medium text-xs sm:text-sm">
+                          <div className="flex items-center gap-2">
+                            {product.imageUrl && (
+                              <img 
+                                src={product.imageUrl} 
+                                alt={product.name} 
+                                className="w-8 h-8 object-cover rounded hidden md:block"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            )}
+                            <div>
+                              <div className="font-medium">{product.name}</div>
+                              <div className="text-xs text-muted-foreground hidden md:block">ID: {product.id}</div>
+                            </div>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-xs sm:text-sm hidden sm:table-cell">{product.sku}</TableCell>
+                        <TableCell className="text-xs sm:text-sm hidden lg:table-cell">
+                          {product.category ? (
+                            <Badge variant="outline" className="text-xs">{product.category}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs sm:text-sm">
                           {editingProductId === product.id ? (
                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
@@ -1064,10 +1327,20 @@ export default function Admin() {
                                 size="sm"
                                 variant="default"
                                 onClick={() => {
+                                  const priceVal = parseFloat(editPrice);
+                                  const stockVal = parseInt(editStock);
+                                  if (isNaN(priceVal) || priceVal < 0) {
+                                    toast({ title: "Ошибка", description: "Введите корректную цену", variant: "destructive" });
+                                    return;
+                                  }
+                                  if (isNaN(stockVal) || stockVal < 0) {
+                                    toast({ title: "Ошибка", description: "Введите корректное количество", variant: "destructive" });
+                                    return;
+                                  }
                                   updateProductPriceStock.mutate({
                                     id: product.id,
                                     price: editPrice,
-                                    stock: parseInt(editStock),
+                                    stock: stockVal,
                                   });
                                 }}
                                 disabled={updateProductPriceStock.isPending}
@@ -1087,7 +1360,7 @@ export default function Admin() {
                               className="cursor-pointer hover:opacity-60"
                               data-testid={`cell-price-${product.id}`}
                             >
-                              {product.price} ₽
+                              {Number(product.price).toLocaleString('ru-RU')} {product.currency === 'USD' ? '$' : product.currency === 'EUR' ? '€' : '₽'}
                             </div>
                           )}
                         </TableCell>
@@ -1110,37 +1383,53 @@ export default function Admin() {
                               className="cursor-pointer hover:opacity-60"
                               data-testid={`cell-stock-${product.id}`}
                             >
-                              {product.stock}
+                              <Badge 
+                                variant={product.stock > 5 ? "default" : product.stock > 0 ? "secondary" : "destructive"}
+                                className="text-xs"
+                              >
+                                {product.stock} шт.
+                              </Badge>
                             </div>
                           )}
                         </TableCell>
                         <TableCell className="text-xs sm:text-sm hidden md:table-cell">
-                          <Badge variant={product.isActive ? "default" : "secondary"} className="text-xs">
-                            {product.isActive ? "Активен" : "Неактивен"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm hidden lg:table-cell">
-                          <Button
-                            size="sm"
-                            variant={product.isActive ? "default" : "outline"}
-                            onClick={() => updateProductStatus.mutate({ id: product.id, isActive: !product.isActive })}
-                            disabled={updateProductStatus.isPending}
-                            data-testid={`button-toggle-product-${product.id}`}
-                            className="text-xs h-7 sm:h-8"
-                          >
-                            {product.isActive ? "Скрыть" : "Показать"}
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={product.isActive ? "default" : "secondary"} className="text-xs">
+                              {product.isActive ? "Активен" : "Скрыт"}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => updateProductStatus.mutate({ id: product.id, isActive: !product.isActive })}
+                              disabled={updateProductStatus.isPending}
+                              data-testid={`button-toggle-product-${product.id}`}
+                              className="h-6 w-6 p-0"
+                            >
+                              {product.isActive ? <X className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
+                            </Button>
+                          </div>
                         </TableCell>
                         <TableCell className="text-xs sm:text-sm">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setSelectedProductForImages(product.id)}
-                            className="text-xs h-7 sm:h-8"
-                          >
-                            <Image className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                            <span className="hidden sm:inline">Фото</span>
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openProductForEdit(product)}
+                              className="text-xs h-7 sm:h-8"
+                            >
+                              <Edit2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                              <span className="hidden sm:inline">Редактировать</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setSelectedProductForImages(product.id)}
+                              className="text-xs h-7 sm:h-8"
+                            >
+                              <Image className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                              <span className="hidden sm:inline">Фото</span>
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1150,6 +1439,294 @@ export default function Admin() {
                 </div>
               </CardContent>
             </Card>
+            
+            {/* Full Product Edit Dialog */}
+            <Dialog open={showEditProduct} onOpenChange={(open) => {
+              if (!open) {
+                setShowEditProduct(false);
+                setEditingFullProduct(null);
+                setEditProductImages([]);
+                setNewEditImageUrl("");
+              }
+            }}>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="text-xl">Редактирование товара</DialogTitle>
+                  <DialogDescription>
+                    Измените информацию о товаре. Все поля обязательны, кроме категории и URL изображения.
+                  </DialogDescription>
+                </DialogHeader>
+                {editingFullProduct && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      updateFullProduct.mutate({
+                        ...editingFullProduct,
+                        images: editProductImages,
+                      });
+                    }}
+                    className="space-y-6"
+                  >
+                    {/* Basic Info Section */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold border-b pb-2">Основная информация</h3>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="edit-id">ID товара</Label>
+                          <Input
+                            id="edit-id"
+                            value={editingFullProduct.id}
+                            disabled
+                            className="bg-muted"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">ID нельзя изменить</p>
+                        </div>
+                        <div>
+                          <Label htmlFor="edit-sku">Артикул (SKU) *</Label>
+                          <Input
+                            id="edit-sku"
+                            value={editingFullProduct.sku}
+                            onChange={(e) => setEditingFullProduct({ ...editingFullProduct, sku: e.target.value })}
+                            required
+                            placeholder="Например: NU-100-2024"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="edit-name">Название товара *</Label>
+                        <Input
+                          id="edit-name"
+                          value={editingFullProduct.name}
+                          onChange={(e) => setEditingFullProduct({ ...editingFullProduct, name: e.target.value })}
+                          required
+                          placeholder="Введите название товара"
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="edit-description">Описание товара *</Label>
+                        <Textarea
+                          id="edit-description"
+                          value={editingFullProduct.description}
+                          onChange={(e) => setEditingFullProduct({ ...editingFullProduct, description: e.target.value })}
+                          required
+                          rows={4}
+                          placeholder="Подробное описание товара..."
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="edit-category">Категория</Label>
+                        <Input
+                          id="edit-category"
+                          value={editingFullProduct.category}
+                          onChange={(e) => setEditingFullProduct({ ...editingFullProduct, category: e.target.value })}
+                          placeholder="Например: Нагрузочные устройства"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Pricing Section */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold border-b pb-2">Цена и наличие</h3>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="edit-price">Цена *</Label>
+                          <Input
+                            id="edit-price"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={editingFullProduct.price}
+                            onChange={(e) => setEditingFullProduct({ ...editingFullProduct, price: e.target.value })}
+                            required
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit-currency">Валюта</Label>
+                          <Select
+                            value={editingFullProduct.currency}
+                            onValueChange={(value) => setEditingFullProduct({ ...editingFullProduct, currency: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Выберите валюту" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="RUB">₽ Рубли (RUB)</SelectItem>
+                              <SelectItem value="USD">$ Доллары (USD)</SelectItem>
+                              <SelectItem value="EUR">€ Евро (EUR)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="edit-stock">Количество на складе *</Label>
+                          <Input
+                            id="edit-stock"
+                            type="number"
+                            min="0"
+                            value={editingFullProduct.stock}
+                            onChange={(e) => setEditingFullProduct({ ...editingFullProduct, stock: parseInt(e.target.value) || 0 })}
+                            required
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <Checkbox
+                          id="edit-isActive"
+                          checked={editingFullProduct.isActive}
+                          onCheckedChange={(checked) => setEditingFullProduct({ ...editingFullProduct, isActive: !!checked })}
+                        />
+                        <div>
+                          <Label htmlFor="edit-isActive" className="cursor-pointer">Товар активен</Label>
+                          <p className="text-xs text-muted-foreground">Если отключено, товар не будет отображаться на сайте</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Specifications Section */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold border-b pb-2">Технические характеристики</h3>
+                      
+                      <div>
+                        <Label htmlFor="edit-specifications">Характеристики *</Label>
+                        <Textarea
+                          id="edit-specifications"
+                          value={editingFullProduct.specifications}
+                          onChange={(e) => setEditingFullProduct({ ...editingFullProduct, specifications: e.target.value })}
+                          required
+                          rows={6}
+                          placeholder="Введите характеристики товара. Рекомендуется формат:&#10;Мощность: 100 кВт&#10;Напряжение: 220-400 В&#10;и т.д."
+                          className="font-mono text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Каждая характеристика с новой строки</p>
+                      </div>
+                    </div>
+                    
+                    {/* Images Section */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold border-b pb-2">Изображения товара</h3>
+                      
+                      <div>
+                        <Label htmlFor="edit-imageUrl">Основной URL изображения</Label>
+                        <Input
+                          id="edit-imageUrl"
+                          value={editingFullProduct.imageUrl}
+                          onChange={(e) => setEditingFullProduct({ ...editingFullProduct, imageUrl: e.target.value })}
+                          placeholder="https://example.com/image.jpg"
+                        />
+                      </div>
+                      
+                      {/* Gallery Images */}
+                      <div>
+                        <Label>Галерея изображений ({editProductImages.length})</Label>
+                        
+                        {editProductImages.length > 0 && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3">
+                            {editProductImages.map((img, index) => (
+                              <div key={index} className="relative group">
+                                <img
+                                  src={img.startsWith('data:') ? img : img}
+                                  alt={`Изображение ${index + 1}`}
+                                  className="w-full h-24 object-cover rounded-lg border"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = '/favicon.png';
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="destructive"
+                                  className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => removeEditImage(index)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                                <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                                  {index + 1}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Add new images */}
+                        <div className="mt-4 space-y-3">
+                          <div className="flex gap-2">
+                            <Input
+                              value={newEditImageUrl}
+                              onChange={(e) => setNewEditImageUrl(e.target.value)}
+                              placeholder="URL изображения"
+                              className="flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={addEditImageByUrl}
+                              disabled={!newEditImageUrl.trim()}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Добавить
+                            </Button>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">или</span>
+                          </div>
+                          
+                          <div>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleEditImageUpload}
+                              className="hidden"
+                              id="edit-image-upload"
+                              disabled={uploadingEditImage}
+                            />
+                            <label htmlFor="edit-image-upload">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="cursor-pointer"
+                                disabled={uploadingEditImage}
+                                asChild
+                              >
+                                <span>
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  {uploadingEditImage ? "Загрузка..." : "Загрузить файл"}
+                                </span>
+                              </Button>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <DialogFooter className="gap-2 sm:gap-0">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setShowEditProduct(false);
+                          setEditingFullProduct(null);
+                          setEditProductImages([]);
+                        }}
+                      >
+                        Отмена
+                      </Button>
+                      <Button type="submit" disabled={updateFullProduct.isPending}>
+                        <Save className="h-4 w-4 mr-2" />
+                        {updateFullProduct.isPending ? "Сохранение..." : "Сохранить изменения"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                )}
+              </DialogContent>
+            </Dialog>
               </div>
             )}
 
@@ -1420,7 +1997,11 @@ export default function Admin() {
                         </TableCell>
                         <TableCell>{format(new Date(order.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
                         <TableCell>
-                          <Button size="sm" variant="outline">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setSelectedOrderForDetails(order)}
+                          >
                             Детали
                           </Button>
                         </TableCell>
@@ -1430,6 +2011,95 @@ export default function Admin() {
                 </Table>
               </CardContent>
             </Card>
+
+            {/* Order Details Dialog */}
+            <Dialog open={!!selectedOrderForDetails} onOpenChange={(open) => !open && setSelectedOrderForDetails(null)}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Детали заказа</DialogTitle>
+                  <DialogDescription>
+                    ID: {selectedOrderForDetails?.id}
+                  </DialogDescription>
+                </DialogHeader>
+                {selectedOrderForDetails && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-muted-foreground">Клиент</Label>
+                        <p className="font-medium">{selectedOrderForDetails.customerName || "—"}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Email</Label>
+                        <p className="font-medium">{selectedOrderForDetails.customerEmail || "—"}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Телефон</Label>
+                        <p className="font-medium">{selectedOrderForDetails.customerPhone || "—"}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Товар</Label>
+                        <p className="font-medium">{selectedOrderForDetails.productId}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Количество</Label>
+                        <p className="font-medium">{selectedOrderForDetails.quantity} шт.</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Способ оплаты</Label>
+                        <p className="font-medium">{selectedOrderForDetails.paymentMethod || "—"}</p>
+                      </div>
+                    </div>
+                    <div className="border-t pt-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-muted-foreground">Сумма заказа</Label>
+                          <p className="font-medium">{selectedOrderForDetails.totalAmount} ₽</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Скидка</Label>
+                          <p className="font-medium">{selectedOrderForDetails.discountAmount || 0} ₽</p>
+                        </div>
+                        {selectedOrderForDetails.promoCode && (
+                          <div>
+                            <Label className="text-muted-foreground">Промокод</Label>
+                            <p className="font-medium">{selectedOrderForDetails.promoCode}</p>
+                          </div>
+                        )}
+                        <div>
+                          <Label className="text-muted-foreground">Итого к оплате</Label>
+                          <p className="font-bold text-lg text-primary">{selectedOrderForDetails.finalAmount} ₽</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="border-t pt-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-muted-foreground">Статус</Label>
+                          <Badge variant={selectedOrderForDetails.paymentStatus === 'paid' || selectedOrderForDetails.paymentStatus === 'delivered' ? 'default' : 'secondary'}>
+                            {selectedOrderForDetails.paymentStatus}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Дата создания</Label>
+                          <p className="font-medium">{format(new Date(selectedOrderForDetails.createdAt), "dd.MM.yyyy HH:mm", { locale: ru })}</p>
+                        </div>
+                      </div>
+                    </div>
+                    {selectedOrderForDetails.paymentDetails && (
+                      <div className="border-t pt-4">
+                        <Label className="text-muted-foreground">Детали оплаты</Label>
+                        <p className="font-medium text-sm">{selectedOrderForDetails.paymentDetails}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setSelectedOrderForDetails(null)}>
+                    Закрыть
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
               </div>
             )}
 
@@ -2260,7 +2930,7 @@ export default function Admin() {
           <DialogHeader>
             <DialogTitle>Управление фотографиями</DialogTitle>
             <DialogDescription>
-              {products.find((p: any) => p.id === selectedProductForImages)?.name || "Товар"}
+              {allProducts.find((p: any) => p.id === selectedProductForImages)?.name || "Товар"}
             </DialogDescription>
           </DialogHeader>
           
@@ -2281,6 +2951,10 @@ export default function Admin() {
                       };
                       reader.readAsDataURL(file);
                     }
+                  }}
+                  onClick={(e) => {
+                    // Reset input value to allow re-selecting same file
+                    (e.target as HTMLInputElement).value = '';
                   }}
                   data-testid="input-product-image"
                 />
