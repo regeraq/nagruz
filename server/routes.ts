@@ -668,7 +668,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               parsedImages = [];
             }
           }
-          console.log(`📸 [GET /api/products] Product ${p.id} (${p.name}): ${parsedImages.length} images`, parsedImages);
+          // Log image parsing result
+          console.log(`📸 [GET /api/products] Product ${p.id} (${p.name}): ${parsedImages.length} images parsed`, {
+            originalType: typeof p.images,
+            originalLength: typeof p.images === 'string' ? p.images.length : 'N/A',
+            parsedCount: parsedImages.length,
+            firstImagePreview: parsedImages.length > 0 ? parsedImages[0].substring(0, 50) + '...' : 'none'
+          });
           return {
             ...p,
             images: parsedImages
@@ -2560,7 +2566,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { value, type, description } = req.body;
-      const setting = await storage.setSiteSetting(req.params.key, value, type, description);
+      // FIXED: Pass userId explicitly to avoid null reference error
+      const setting = await storage.setSiteSetting(req.params.key, value, type, description, payload.userId);
       res.json({ success: true, setting });
     } catch (error) {
       console.error("Update setting error:", error);

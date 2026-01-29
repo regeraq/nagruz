@@ -127,12 +127,13 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     
-    // Invalidate user-related queries
+    // Invalidate user-related queries only (not products - they should be public)
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     
-    // Refetch products to ensure gallery images are reloaded
-    queryClient.invalidateQueries({ queryKey: ['/api/products'] });
-    queryClient.refetchQueries({ queryKey: ['/api/products'] });
+    // FIXED: Don't invalidate products cache - products are public and should remain cached
+    // This ensures gallery images remain visible after logout
+    // queryClient.invalidateQueries({ queryKey: ['/api/products'] });
+    // queryClient.refetchQueries({ queryKey: ['/api/products'] });
     
     // Redirect immediately
     setLocation("/");

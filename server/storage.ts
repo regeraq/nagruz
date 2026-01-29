@@ -53,7 +53,7 @@ export interface IStorage {
   deletePromoCode(id: string): Promise<boolean>;
   getSiteSettings(): Promise<any[]>;
   getSiteSetting(key: string): Promise<any>;
-  setSiteSetting(key: string, value: string, type?: string, description?: string): Promise<any>;
+  setSiteSetting(key: string, value: string, type?: string, description?: string, updatedBy?: string): Promise<any>;
   getProductImages(productId: string): Promise<string[]>;
   addProductImage(productId: string, imageUrl: string): Promise<any>;
   removeProductImage(productId: string, imageUrl: string): Promise<any>;
@@ -420,10 +420,15 @@ export class DrizzleStorage implements IStorage {
     return result[0] || null;
   }
 
-  async setSiteSetting(key: string, value: string, type: string = "string", description?: string) {
+  async setSiteSetting(key: string, value: string, type: string = "string", description?: string, updatedBy?: string) {
     const existing = await this.getSiteSetting(key);
     if (existing) {
-      const result = await db.update(siteSettings).set({ value, type, description }).where(eq(siteSettings.key, key)).returning();
+      // FIXED: Include updatedBy if provided
+      const updateData: any = { value, type, description };
+      if (updatedBy) {
+        updateData.updatedBy = updatedBy;
+      }
+      const result = await db.update(siteSettings).set(updateData).where(eq(siteSettings.key, key)).returning();
       return result[0];
     } else {
       const result = await db.insert(siteSettings).values({
@@ -432,6 +437,7 @@ export class DrizzleStorage implements IStorage {
         value,
         type,
         description: description || "",
+        updatedBy: updatedBy || null,
       }).returning();
       return result[0];
     }

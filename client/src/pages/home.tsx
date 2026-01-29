@@ -138,48 +138,11 @@ export default function Home() {
     }
   }, [selectedDevice]);
 
+  // FIXED: Use getQueryFn with on401: "returnNull" to prevent errors for unauthenticated users
+  // Products API is public and doesn't require authentication
   const { data: products = [], isLoading: isLoadingProducts, error: productsError } = useQuery<Product[]>({
     queryKey: ['/api/products'],
-    queryFn: async () => {
-      console.log(`📥 [Home] Fetching products from /api/products`);
-      try {
-        const res = await fetch("/api/products");
-        if (!res.ok) {
-          console.error(`❌ [Home] Failed to fetch products: ${res.status} ${res.statusText}`);
-          // FIXED: Log error details for debugging
-          const errorText = await res.text();
-          console.error(`❌ [Home] Error response:`, errorText);
-          return [];
-        }
-        const data = await res.json();
-        console.log(`✅ [Home] Received ${data.length} products from API`);
-        
-        // FIXED: Log warning if no products received
-        if (data.length === 0) {
-          console.warn(`⚠️ [Home] No products received from API. Check server logs and ensure products exist in database.`);
-        }
-        
-        // Log each product's images
-        data.forEach((p: any) => {
-          const imgCount = Array.isArray(p.images) ? p.images.length : (p.images ? 1 : 0);
-          console.log(`📦 [Home] Product ${p.id} (${p.name}): ${imgCount} images`, {
-            images: p.images,
-            imagesType: typeof p.images,
-            isArray: Array.isArray(p.images)
-          });
-        });
-        return data;
-      } catch (error) {
-        console.error(`❌ [Home] Error fetching products:`, error);
-        // FIXED: Show user-friendly error message
-        toast({
-          title: "Ошибка загрузки товаров",
-          description: "Не удалось загрузить список товаров. Пожалуйста, обновите страницу.",
-          variant: "destructive",
-        });
-        return [];
-      }
-    },
+    queryFn: getQueryFn({ on401: "returnNull" }),
     staleTime: 10 * 60 * 1000, // 10 minutes - keep products fresh longer
     gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache for 30 minutes (formerly cacheTime)
     refetchOnMount: false, // Don't refetch on mount if data is fresh
@@ -229,13 +192,19 @@ export default function Home() {
     
     const rawImages = (currentProduct as any)?.images;
     
+    // FIXED: Don't log full image data (can be huge base64 strings)
     console.log(`🖼️ [Home] Parsing images for ${selectedDevice}:`, {
       hasCurrentProduct: !!currentProduct,
       productId: currentProduct.id,
       hasRawImages: !!rawImages,
       rawImagesType: typeof rawImages,
-      rawImagesValue: rawImages,
-      isArray: Array.isArray(rawImages)
+      rawImagesLength: typeof rawImages === 'string' ? rawImages.length : (Array.isArray(rawImages) ? rawImages.length : 0),
+      isArray: Array.isArray(rawImages),
+      preview: typeof rawImages === 'string' && rawImages.length > 0 
+        ? rawImages.substring(0, 50) + '...' 
+        : (Array.isArray(rawImages) && rawImages.length > 0 
+          ? `[${rawImages.length} items, first: ${rawImages[0].substring(0, 30)}...]` 
+          : null)
     });
     
     if (!rawImages) {
@@ -1088,6 +1057,7 @@ export default function Home() {
       </section>
 
       {/* Product Images Gallery - show for all users, registered or not */}
+      {/* FIXED: Gallery should always show if we have images, regardless of authentication status */}
       {!isLoadingProducts && productImages.length > 0 && (
         <section id="gallery" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
@@ -1103,33 +1073,41 @@ export default function Home() {
               </p>
             </div>
 
-            <div className={`grid gap-4 sm:gap-6 scroll-animate ${
-              productImages.length === 1 
-                ? "grid-cols-1 max-w-3xl mx-auto" 
-                : productImages.length === 2
-                ? "grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto justify-items-center"
-                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-            }`}>
-              {productImages.map((imageData: string, idx: number) => (
-                <div
-                  key={idx}
-                  className="group relative overflow-hidden rounded-lg sm:rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
-                  data-testid={`gallery-image-${idx}`}
-                >
-                  <div className="bg-muted relative" style={{ minHeight: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <img
-                      src={imageData}
-                      alt={`${device.name} - Фото ${idx + 1}`}
-                      className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105 p-4"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {productImages.length > 0 ? (
+              <div className={`grid gap-4 sm:gap-6 scroll-animate ${
+                productImages.length === 1 
+                  ? "grid-cols-1 max-w-3xl mx-auto" 
+                  : productImages.length === 2
+                  ? "grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto justify-items-center"
+                  : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+              }`}>
+                {productImages.map((imageData: string, idx: number) => (
+                  <div
+                    key={idx}
+                    className="group relative overflow-hidden rounded-lg sm:rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
+                    data-testid={`gallery-image-${idx}`}
+                  >
+                    <div className="bg-muted relative" style={{ minHeight: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img
+                        src={imageData}
+                        alt={`${device.name} - Фото ${idx + 1}`}
+                        className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105 p-4"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 px-4">
+                <p className="text-muted-foreground text-sm sm:text-base">
+                  Фотографии для этого устройства пока не добавлены
+                </p>
+              </div>
+            )}
           </div>
         </section>
       )}

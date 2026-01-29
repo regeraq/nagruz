@@ -78,28 +78,36 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // FIXED: Correct path resolution - dist/public is relative to project root, not server directory
-  // import.meta.dirname in compiled code points to dist/, so we need to go up one level
-  const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+  // FIXED: Use process.cwd() to get project root - works correctly in production
+  // import.meta.dirname in compiled code points to dist/, but we need project root
+  const projectRoot = process.cwd();
+  const distPath = path.resolve(projectRoot, "dist", "public");
   
-  // Alternative: use process.cwd() to get project root
-  // const distPath = path.resolve(process.cwd(), "dist", "public");
+  // Fallback: try relative to import.meta.dirname if process.cwd() doesn't work
+  let finalDistPath = distPath;
+  if (!fs.existsSync(finalDistPath)) {
+    const altPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+    if (fs.existsSync(altPath)) {
+      finalDistPath = altPath;
+    }
+  }
 
-  if (!fs.existsSync(distPath)) {
+  if (!fs.existsSync(finalDistPath)) {
     // FIXED: Better error message with actual path
-    const errorMsg = `Could not find the build directory: ${distPath}, make sure to build the client first (npm run build)`;
+    const errorMsg = `Could not find the build directory: ${finalDistPath}, make sure to build the client first (npm run build)`;
     console.error(`❌ [serveStatic] ${errorMsg}`);
     console.error(`❌ [serveStatic] Current working directory: ${process.cwd()}`);
     console.error(`❌ [serveStatic] import.meta.dirname: ${import.meta.dirname}`);
+    console.error(`❌ [serveStatic] Tried paths: ${distPath}, ${path.resolve(import.meta.dirname, "..", "dist", "public")}`);
     throw new Error(errorMsg);
   }
-
-  console.log(`✅ [serveStatic] Serving static files from: ${distPath}`);
-  app.use(express.static(distPath));
+  
+  console.log(`✅ [serveStatic] Serving static files from: ${finalDistPath}`);
+  app.use(express.static(finalDistPath));
 
   // fall through to index.html if the file doesn't exist
   app.use("*", async (req, res) => {
-    const indexPath = path.resolve(distPath, "index.html");
+    const indexPath = path.resolve(finalDistPath, "index.html");
     
     // FIXED: Better error handling
     if (!fs.existsSync(indexPath)) {
