@@ -32,3 +32,4 @@ git push origin main --force
 Write-Host "`n✅ Готово! Проект полностью загружен на GitHub." -ForegroundColor Green
 Write-Host "🔗 Репозиторий: https://github.com/regeraq/nagruz" -ForegroundColor Cyan
 
+

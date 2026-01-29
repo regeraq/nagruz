@@ -28,9 +28,10 @@ export function csrfToken(req: Request, res: Response, next: NextFunction) {
   const token = generateToken();
   
   // Set non-httpOnly cookie so client can read it for API calls
+  // FIXED: secure: false for HTTP connections (site may not have HTTPS yet)
   res.cookie(CSRF_TOKEN_COOKIE, token, {
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
+    secure: false, // Changed from process.env.NODE_ENV === 'production' to allow HTTP
     sameSite: 'lax',
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
   });

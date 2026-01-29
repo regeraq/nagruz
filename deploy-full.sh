@@ -293,3 +293,4 @@ echo "   Password: admin123"
 echo "   ⚠️  ОБЯЗАТЕЛЬНО СМЕНИТЕ ПАРОЛЬ!"
 echo ""
 
+

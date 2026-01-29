@@ -1185,6 +1185,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      // Check if user is blocked
+      if (user.isBlocked) {
+        res.status(403).json({ 
+          success: false, 
+          message: "Ваш аккаунт заблокирован. Обратитесь в поддержку." 
+        });
+        return;
+      }
+
       const passwordHash = user.passwordHash || user.password;
       const isPasswordValid = await verifyPassword(password, passwordHash);
       if (!isPasswordValid) {
@@ -3123,7 +3132,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        res.json({ success: true, count: notifications.length });
+        res.json({ 
+          success: true, 
+          notifications,
+          count: notifications.length
+        });
       }
     } catch (error) {
       console.error("Send notification error:", error);

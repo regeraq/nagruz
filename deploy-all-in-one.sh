@@ -129,3 +129,4 @@ echo ""
 echo "🌐 Сайт доступен: http://vm3848909.firstbyte.club"
 echo "📝 После настройки DNS выполните: sudo certbot --nginx -d vm3848909.firstbyte.club -d www.vm3848909.firstbyte.club"
 
+

@@ -180,3 +180,4 @@ Write-Host "   4. Скопируйте содержимое файла deploy-al
 Write-Host ""
 Write-Host "Или следуйте пошаговой инструкции из POWERSHELL_DEPLOY.md" -ForegroundColor Yellow
 
+

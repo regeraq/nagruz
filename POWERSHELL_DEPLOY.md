@@ -563,3 +563,4 @@ npm run build
 2. Получите SSL сертификат через Certbot
 3. Настройте автоматический деплой (см. `AUTO_DEPLOY_SETUP.md`)
 
+

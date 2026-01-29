@@ -143,6 +143,8 @@ export class DrizzleStorage implements IStorage {
       type: notification.type || "info",
       title: notification.title || "",
       message: notification.message || "",
+      link: notification.link || null,
+      metadata: notification.metadata || null,
       isRead: false,
     }).returning();
     return result[0];

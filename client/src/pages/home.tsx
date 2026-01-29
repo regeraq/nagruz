@@ -1013,8 +1013,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Images Gallery - only show if images exist */}
-      {productImages.length > 0 && (
+      {/* Product Images Gallery - show for all users, registered or not */}
+      {!isLoadingProducts && productImages.length > 0 && (
         <section id="gallery" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
             <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">

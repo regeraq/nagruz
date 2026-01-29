@@ -61,3 +61,4 @@ pm2 status
 echo "✅ Deployment completed successfully!"
 echo "📍 New commit: $(git rev-parse HEAD)"
 
+

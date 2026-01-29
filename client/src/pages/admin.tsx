@@ -727,48 +727,120 @@ export default function Admin() {
 
             {/* User Activity Chart */}
             {userActivityByDay && userActivityByDay.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Активность пользователей (последние 30 дней)</CardTitle>
-                  <CardDescription>Регистрации и входы по дням</CardDescription>
+              <Card className="border-2 border-primary/20 shadow-lg">
+                <CardHeader className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                        📊 Активность пользователей
+                      </CardTitle>
+                      <CardDescription className="mt-2 text-base">
+                        Анализ регистраций и входов за последние 30 дней
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-600"></div>
+                        <span className="font-medium">Регистрации</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-gradient-to-r from-green-500 to-green-600"></div>
+                        <span className="font-medium">Входы</span>
+                      </div>
+                    </div>
+                  </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6 bg-gradient-to-br from-background via-background to-muted/20">
                   <ChartContainer
                     config={{
-                      registrations: { label: "Регистрации", color: "hsl(var(--chart-1))" },
-                      logins: { label: "Входы", color: "hsl(var(--chart-2))" },
+                      registrations: { 
+                        label: "Регистрации", 
+                        color: "hsl(217, 91%, 60%)" // Blue
+                      },
+                      logins: { 
+                        label: "Входы", 
+                        color: "hsl(142, 76%, 36%)" // Green
+                      },
                     }}
-                    className="min-h-[300px] w-full"
+                    className="min-h-[400px] w-full"
                   >
-                    <AreaChart data={userActivityByDay}>
-                      <CartesianGrid vertical={false} />
+                    <AreaChart 
+                      data={userActivityByDay}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorRegistrations" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.6}/>
+                          <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.1}/>
+                        </linearGradient>
+                        <linearGradient id="colorLogins" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.6}/>
+                          <stop offset="95%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.1}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid 
+                        strokeDasharray="3 3" 
+                        vertical={false}
+                        stroke="hsl(var(--border))"
+                        opacity={0.3}
+                      />
                       <XAxis
                         dataKey="date"
                         tickLine={false}
                         axisLine={false}
-                        tickMargin={8}
+                        tickMargin={12}
                         tickFormatter={(value) => format(new Date(value), "dd.MM", { locale: ru })}
+                        style={{ fontSize: '12px', fontWeight: 500 }}
                       />
-                      <YAxis tickLine={false} axisLine={false} tickMargin={8} />
-                      <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                      <YAxis 
+                        tickLine={false} 
+                        axisLine={false} 
+                        tickMargin={12}
+                        style={{ fontSize: '12px', fontWeight: 500 }}
+                      />
+                      <ChartTooltip 
+                        cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 2 }}
+                        content={<ChartTooltipContent 
+                          className="bg-background border-2 border-primary/20 shadow-xl rounded-lg"
+                          labelFormatter={(value) => format(new Date(value), "dd MMMM yyyy", { locale: ru })}
+                        />} 
+                      />
                       <Area
                         dataKey="registrations"
-                        type="natural"
-                        fill="var(--color-registrations)"
-                        fillOpacity={0.4}
-                        stroke="var(--color-registrations)"
-                        stackId="a"
+                        type="monotone"
+                        fill="url(#colorRegistrations)"
+                        fillOpacity={1}
+                        stroke="hsl(217, 91%, 60%)"
+                        strokeWidth={3}
+                        dot={{ fill: "hsl(217, 91%, 60%)", strokeWidth: 2, r: 4 }}
+                        activeDot={{ r: 6, strokeWidth: 2 }}
                       />
                       <Area
                         dataKey="logins"
-                        type="natural"
-                        fill="var(--color-logins)"
-                        fillOpacity={0.4}
-                        stroke="var(--color-logins)"
-                        stackId="a"
+                        type="monotone"
+                        fill="url(#colorLogins)"
+                        fillOpacity={1}
+                        stroke="hsl(142, 76%, 36%)"
+                        strokeWidth={3}
+                        dot={{ fill: "hsl(142, 76%, 36%)", strokeWidth: 2, r: 4 }}
+                        activeDot={{ r: 6, strokeWidth: 2 }}
                       />
                     </AreaChart>
                   </ChartContainer>
+                  <div className="mt-6 grid grid-cols-2 gap-4 pt-4 border-t border-border">
+                    <div className="text-center p-4 rounded-lg bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20">
+                      <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                        {userActivityByDay.reduce((sum: number, day: any) => sum + (day.registrations || 0), 0)}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">Всего регистраций</div>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/20">
+                      <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+                        {userActivityByDay.reduce((sum: number, day: any) => sum + (day.logins || 0), 0)}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">Всего входов</div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             )}

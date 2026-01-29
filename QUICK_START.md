@@ -78,3 +78,4 @@ curl -fsSL https://raw.githubusercontent.com/regeraq/nagruz/main/deploy-all-in-o
 
 **Удачи! 🎉**
 
+
