@@ -235,6 +235,15 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
     // Invalidate user-related queries only (not products - they should be public)
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     
+    // Clear all admin-related cache to prevent 401 errors on next visit
+    queryClient.removeQueries({ queryKey: ["/api/admin/settings"] });
+    queryClient.removeQueries({ queryKey: ["/api/admin/users"] });
+    queryClient.removeQueries({ queryKey: ["/api/admin/orders"] });
+    queryClient.removeQueries({ queryKey: ["/api/admin/stats"] });
+    queryClient.removeQueries({ queryKey: ["/api/admin/products"] });
+    queryClient.removeQueries({ queryKey: ["/api/admin/contacts"] });
+    queryClient.removeQueries({ queryKey: ["/api/admin/promocodes"] });
+    
     // FIXED: Don't invalidate products cache - products are public and should remain cached
     // This ensures gallery images remain visible after logout
     // queryClient.invalidateQueries({ queryKey: ['/api/products'] });

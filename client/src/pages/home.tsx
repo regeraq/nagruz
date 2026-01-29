@@ -311,7 +311,7 @@ export default function Home() {
   }, [currentProduct, fetchedProductImages]);
 
   const { data: settingsData = {} as any } = useQuery({
-    queryKey: ['/api/admin/settings'],
+    queryKey: ['/api/settings'],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
