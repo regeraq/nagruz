@@ -3400,6 +3400,7 @@ export default function Admin() {
           </main>
         </div>
       </div>
+    </div>
 
       {/* Dialog for managing product images */}
       <Dialog open={!!selectedProductForImages} onOpenChange={(open) => !open && setSelectedProductForImages(null)}>
