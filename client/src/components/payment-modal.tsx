@@ -19,7 +19,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Product } from "@shared/schema";
-import { SiVisa, SiMastercard, SiMir } from "react-icons/si";
+import { SiVisa, SiMastercard } from "react-icons/si";
+
+// Custom MIR logo component (since react-icons doesn't have SiMir)
+const MirLogo = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 48 16" className={className} fill="currentColor">
+    <path d="M8.5 2L5.3 14H2.7L0 2h2.4l1.8 9.2L6.1 2h2.4l2 9.2L12.2 2H8.5zM17.8 2v12h-2.3V2h2.3zM26.5 2c2.3 0 3.8 1.5 3.8 3.8v4.4c0 2.3-1.5 3.8-3.8 3.8h-4.8V2h4.8zm1.5 3.8c0-1-.7-1.7-1.7-1.7h-2.3v7.8h2.3c1 0 1.7-.7 1.7-1.7V5.8z"/>
+  </svg>
+);
+
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -735,10 +743,10 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                             <span className="font-medium">Банковская карта</span>
                             <p className="text-xs text-muted-foreground">Visa, Mastercard, МИР</p>
                           </div>
-                          <div className="flex gap-1.5">
+                          <div className="flex gap-1.5 items-center">
                             <SiVisa className="w-8 h-5 opacity-60" />
                             <SiMastercard className="w-8 h-5 opacity-60" />
-                            <SiMir className="w-8 h-5 opacity-60" />
+                            <MirLogo className="w-8 h-5 opacity-60" />
                           </div>
                         </Label>
                       </div>
