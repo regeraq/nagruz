@@ -113,124 +113,128 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Регистрация</CardTitle>
-          <CardDescription>Создайте новый аккаунт</CardDescription>
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-6 sm:py-12 pt-20 sm:pt-12">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="space-y-1 p-4 sm:p-6">
+          <CardTitle className="text-xl sm:text-2xl">Регистрация</CardTitle>
+          <CardDescription className="text-sm">Создайте новый аккаунт</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <CardContent className="p-4 sm:p-6 pt-0">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 sm:space-y-4">
             {error && (
               <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
               </Alert>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">Имя</Label>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="space-y-1.5 sm:space-y-2">
+                <Label htmlFor="firstName" className="text-sm">Имя</Label>
                 <Input
                   id="firstName"
                   {...register("firstName")}
                   disabled={isLoading}
+                  className="h-11 sm:h-12"
                 />
                 {errors.firstName && (
-                  <p className="text-sm text-destructive">{errors.firstName.message}</p>
+                  <p className="text-xs text-destructive">{errors.firstName.message}</p>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Фамилия</Label>
+              <div className="space-y-1.5 sm:space-y-2">
+                <Label htmlFor="lastName" className="text-sm">Фамилия</Label>
                 <Input
                   id="lastName"
                   {...register("lastName")}
                   disabled={isLoading}
+                  className="h-11 sm:h-12"
                 />
                 {errors.lastName && (
-                  <p className="text-sm text-destructive">{errors.lastName.message}</p>
+                  <p className="text-xs text-destructive">{errors.lastName.message}</p>
                 )}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="email" className="text-sm">Email *</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="your@email.com"
                 {...register("email")}
                 disabled={isLoading}
+                className="h-11 sm:h-12"
               />
               {errors.email && (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
+                <p className="text-xs text-destructive">{errors.email.message}</p>
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="phone">Телефон</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="phone" className="text-sm">Телефон</Label>
               <Input
                 id="phone"
                 type="tel"
                 placeholder="+7 (999) 123-45-67"
                 {...register("phone")}
                 disabled={isLoading}
+                className="h-11 sm:h-12"
               />
               {errors.phone && (
-                <p className="text-sm text-destructive">{errors.phone.message}</p>
+                <p className="text-xs text-destructive">{errors.phone.message}</p>
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Пароль *</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="password" className="text-sm">Пароль *</Label>
               <Input
                 id="password"
                 type="password"
                 placeholder="Минимум 8 символов"
                 {...register("password")}
                 disabled={isLoading}
-                className={errors.password ? "border-destructive" : ""}
+                className={`h-11 sm:h-12 ${errors.password ? "border-destructive" : ""}`}
                 autoComplete="new-password"
               />
               {errors.password && (
-                <p className="text-sm text-destructive flex items-center gap-1">
+                <p className="text-xs text-destructive flex items-center gap-1">
                   <span>•</span>
                   {errors.password.message}
                 </p>
               )}
-              <p className="text-xs text-muted-foreground">
-                Пароль должен содержать минимум 8 символов
+              <p className="text-[11px] sm:text-xs text-muted-foreground">
+                Минимум 8 символов
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Подтвердите пароль *</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="confirmPassword" className="text-sm">Подтвердите пароль *</Label>
               <Input
                 id="confirmPassword"
                 type="password"
                 placeholder="Повторите пароль"
                 {...register("confirmPassword")}
                 disabled={isLoading}
-                className={errors.confirmPassword ? "border-destructive" : ""}
+                className={`h-11 sm:h-12 ${errors.confirmPassword ? "border-destructive" : ""}`}
                 autoComplete="new-password"
               />
               {errors.confirmPassword && (
-                <p className="text-sm text-destructive flex items-center gap-1">
+                <p className="text-xs text-destructive flex items-center gap-1">
                   <span>•</span>
                   {errors.confirmPassword.message}
                 </p>
               )}
             </div>
 
-            <div className="space-y-3 pt-2">
+            <div className="space-y-2.5 sm:space-y-3 pt-2">
               <div className="flex items-start gap-2">
                 <input
                   type="checkbox"
                   id="consent-personal-data-register"
                   required
-                  className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                 />
-                <Label htmlFor="consent-personal-data-register" className="text-sm leading-relaxed cursor-pointer">
+                <Label htmlFor="consent-personal-data-register" className="text-xs sm:text-sm leading-relaxed cursor-pointer">
                   Я даю согласие на обработку персональных данных *
                 </Label>
               </div>
@@ -239,12 +243,12 @@ export default function Register() {
                   type="checkbox"
                   id="consent-data-processing-register"
                   required
-                  className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                 />
-                <Label htmlFor="consent-data-processing-register" className="text-sm leading-relaxed cursor-pointer">
+                <Label htmlFor="consent-data-processing-register" className="text-xs sm:text-sm leading-relaxed cursor-pointer">
                   Я принимаю условия{" "}
                   <a href="/data-processing-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                    Политики обработки персональных данных
+                    Политики обработки данных
                   </a>{" "}
                   и{" "}
                   <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
@@ -254,7 +258,7 @@ export default function Register() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full h-11 sm:h-12 text-sm sm:text-base" disabled={isLoading}>
               {isLoading ? "Регистрация..." : "Зарегистрироваться"}
             </Button>
 
@@ -263,7 +267,7 @@ export default function Register() {
               <button
                 type="button"
                 onClick={() => setLocation("/login")}
-                className="text-primary hover:underline"
+                className="text-primary hover:underline font-medium"
               >
                 Войти
               </button>

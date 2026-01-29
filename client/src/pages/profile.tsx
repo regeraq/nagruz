@@ -819,73 +819,73 @@ export default function Profile() {
         <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 dark:from-blue-800 dark:via-indigo-800 dark:to-violet-900" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
         
-        <div className="relative container mx-auto px-4 py-8 pt-24 pb-32">
+        <div className="relative container mx-auto px-4 py-6 sm:py-8 pt-20 sm:pt-24 pb-24 sm:pb-32">
           <div className="max-w-6xl mx-auto">
-            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6 lg:gap-8">
+            <div className="flex flex-col items-center text-center lg:flex-row lg:items-center lg:text-left gap-4 sm:gap-6 lg:gap-8">
               {/* Avatar Section */}
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 rounded-full blur opacity-40 group-hover:opacity-60 transition duration-500" />
-                <Avatar className="relative w-28 h-28 lg:w-36 lg:h-36 border-4 border-white/20 shadow-2xl">
+                <Avatar className="relative w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 border-4 border-white/20 shadow-2xl">
                   <AvatarImage src={userData.avatar || undefined} className="object-cover" />
-                  <AvatarFallback className="text-3xl lg:text-4xl font-bold bg-gradient-to-br from-white/20 to-white/5 text-white">
+                  <AvatarFallback className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-br from-white/20 to-white/5 text-white">
                     {getUserInitials()}
                   </AvatarFallback>
                 </Avatar>
-                <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-emerald-500 rounded-full border-4 border-white flex items-center justify-center shadow-lg">
-                  <CheckCircle2 className="w-4 h-4 text-white" />
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 sm:w-8 sm:h-8 bg-emerald-500 rounded-full border-4 border-white flex items-center justify-center shadow-lg">
+                  <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
                 </div>
               </div>
               
               {/* User Info */}
-              <div className="flex-1 text-white">
-                <div className="flex flex-wrap items-center gap-3 mb-2">
-                  <h1 className="text-2xl lg:text-4xl font-bold">
+              <div className="flex-1 text-white min-w-0">
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+                  <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold truncate max-w-full">
                     {userData.firstName && userData.lastName
                       ? `${userData.firstName} ${userData.lastName}`
                       : userData.email.split('@')[0]}
                   </h1>
                   {userData.isEmailVerified && (
-                    <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm">
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                    <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-[10px] sm:text-xs">
+                      <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" />
                       Подтверждён
                     </Badge>
                   )}
                 </div>
-                <p className="text-white/70 text-sm lg:text-base mb-4">{userData.email}</p>
+                <p className="text-white/70 text-xs sm:text-sm lg:text-base mb-3 sm:mb-4 truncate">{userData.email}</p>
                 
                 {/* Quick Stats */}
-                <div className="flex flex-wrap gap-4 lg:gap-6">
-                  <div className="flex items-center gap-2 text-white/80">
-                    <Calendar className="w-4 h-4" />
-                    <span className="text-sm">С {format(new Date(userData.createdAt), "MMMM yyyy", { locale: ru })}</span>
+                <div className="flex flex-wrap justify-center lg:justify-start gap-3 sm:gap-4 lg:gap-6">
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-white/80">
+                    <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span className="text-xs sm:text-sm">С {format(new Date(userData.createdAt), "MMMM yyyy", { locale: ru })}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-white/80">
-                    <Package className="w-4 h-4" />
-                    <span className="text-sm">{orders.length} заказов</span>
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-white/80">
+                    <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span className="text-xs sm:text-sm">{orders.length} заказов</span>
                   </div>
-                  <div className="flex items-center gap-2 text-white/80">
-                    <Heart className="w-4 h-4" />
-                    <span className="text-sm">{favorites.length} в избранном</span>
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-white/80">
+                    <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span className="text-xs sm:text-sm">{favorites.length} в избранном</span>
                   </div>
                 </div>
               </div>
               
               {/* Actions */}
-              <div className="flex flex-wrap gap-2 lg:flex-col">
+              <div className="flex gap-2 sm:gap-3 lg:flex-col w-full sm:w-auto mt-2 sm:mt-0">
                 <Button
                   variant="outline"
                   onClick={() => setIsEditing(true)}
-                  className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
+                  className="flex-1 sm:flex-none bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm h-10 sm:h-11 text-sm"
                 >
-                  <Edit2 className="w-4 h-4 mr-2" />
+                  <Edit2 className="w-4 h-4 mr-1.5 sm:mr-2" />
                   Редактировать
                 </Button>
                 <Button
                   variant="outline"
                   onClick={handleLogout}
-                  className="bg-white/10 border-white/20 text-white hover:bg-red-500/20 hover:border-red-500/40 backdrop-blur-sm"
+                  className="flex-1 sm:flex-none bg-white/10 border-white/20 text-white hover:bg-red-500/20 hover:border-red-500/40 backdrop-blur-sm h-10 sm:h-11 text-sm"
                 >
-                  <LogOut className="w-4 h-4 mr-2" />
+                  <LogOut className="w-4 h-4 mr-1.5 sm:mr-2" />
                   Выйти
                 </Button>
               </div>
@@ -904,75 +904,75 @@ export default function Profile() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 -mt-16 relative z-10 pb-12">
+      <div className="container mx-auto px-3 sm:px-4 -mt-12 sm:-mt-16 relative z-10 pb-8 sm:pb-12">
         <div className="max-w-6xl mx-auto">
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
             {/* Profile Completion */}
             <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-300 group">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                    <User className="w-6 h-6 text-white" />
+              <CardContent className="p-3 sm:p-6">
+                <div className="flex items-center justify-between mb-2 sm:mb-4">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                    <User className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
                   </div>
-                  <span className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+                  <span className="text-xl sm:text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
                     {profileCompletion}%
                   </span>
                 </div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Заполнение профиля</p>
-                <Progress value={profileCompletion} className="h-2" />
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1.5 sm:mb-2">Профиль</p>
+                <Progress value={profileCompletion} className="h-1.5 sm:h-2" />
               </CardContent>
             </Card>
 
             {/* Total Orders */}
             <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-300 group">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                    <Package className="w-6 h-6 text-white" />
+              <CardContent className="p-3 sm:p-6">
+                <div className="flex items-center justify-between mb-2 sm:mb-4">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                    <Package className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
                   </div>
-                  <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  <span className="text-xl sm:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                     {orders.length}
                   </span>
                 </div>
-                <p className="text-sm font-medium text-muted-foreground">Всего заказов</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {orders.filter((o: any) => o.paymentStatus === 'pending').length} ожидают оплаты
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Заказов</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1">
+                  {orders.filter((o: any) => o.paymentStatus === 'pending').length} ожидают
                 </p>
               </CardContent>
             </Card>
 
             {/* Total Spent */}
             <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-300 group">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                    <CreditCard className="w-6 h-6 text-white" />
+              <CardContent className="p-3 sm:p-6">
+                <div className="flex items-center justify-between mb-2 sm:mb-4">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                    <CreditCard className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
                   </div>
-                  <TrendingUp className="w-5 h-5 text-emerald-500" />
+                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
                 </div>
-                <p className="text-2xl font-bold">{totalSpent.toLocaleString('ru-RU')} ₽</p>
-                <p className="text-sm font-medium text-muted-foreground">Сумма покупок</p>
+                <p className="text-base sm:text-2xl font-bold truncate">{totalSpent.toLocaleString('ru-RU')} ₽</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Покупки</p>
               </CardContent>
             </Card>
 
             {/* Notifications */}
             <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-300 group cursor-pointer" onClick={() => setActiveTab("notifications")}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform relative">
-                    <Bell className="w-6 h-6 text-white" />
+              <CardContent className="p-3 sm:p-6">
+                <div className="flex items-center justify-between mb-2 sm:mb-4">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform relative">
+                    <Bell className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
                     {unreadNotifications > 0 && (
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs text-white flex items-center justify-center font-bold">
+                      <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 rounded-full text-[10px] sm:text-xs text-white flex items-center justify-center font-bold">
                         {unreadNotifications}
                       </span>
                     )}
                   </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
                 </div>
-                <p className="text-sm font-medium text-muted-foreground">Уведомления</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {unreadNotifications > 0 ? `${unreadNotifications} непрочитанных` : "Нет новых"}
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Уведомления</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1">
+                  {unreadNotifications > 0 ? `${unreadNotifications} новых` : "Нет новых"}
                 </p>
               </CardContent>
             </Card>
@@ -980,28 +980,28 @@ export default function Profile() {
 
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl mb-6">
-              <CardContent className="p-2">
-                <TabsList className="w-full h-auto flex flex-wrap gap-1 bg-transparent p-0">
+            <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl mb-4 sm:mb-6">
+              <CardContent className="p-1.5 sm:p-2">
+                <TabsList className="w-full h-auto grid grid-cols-3 sm:flex sm:flex-wrap gap-1 bg-transparent p-0">
                   {[
-                    { value: "overview", icon: User, label: "Профиль" },
-                    { value: "orders", icon: Package, label: "Заказы", badge: orders.length },
-                    { value: "favorites", icon: Heart, label: "Избранное", badge: favorites.length },
-                    { value: "notifications", icon: Bell, label: "Уведомления", badge: unreadNotifications },
-                    { value: "security", icon: Shield, label: "Безопасность" },
-                    { value: "settings", icon: Settings, label: "Настройки" },
+                    { value: "overview", icon: User, label: "Профиль", shortLabel: "Профиль" },
+                    { value: "orders", icon: Package, label: "Заказы", shortLabel: "Заказы", badge: orders.length },
+                    { value: "favorites", icon: Heart, label: "Избранное", shortLabel: "Избр.", badge: favorites.length },
+                    { value: "notifications", icon: Bell, label: "Уведомления", shortLabel: "Увед.", badge: unreadNotifications },
+                    { value: "security", icon: Shield, label: "Безопасность", shortLabel: "Защита" },
+                    { value: "settings", icon: Settings, label: "Настройки", shortLabel: "Настр." },
                   ].map((tab) => (
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="flex-1 min-w-[100px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white rounded-xl py-3 px-4 transition-all duration-300"
+                      className="sm:flex-1 sm:min-w-[100px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white rounded-lg sm:rounded-xl py-2 sm:py-3 px-2 sm:px-4 transition-all duration-300 flex-col sm:flex-row gap-0.5 sm:gap-0"
                     >
-                      <tab.icon className="w-4 h-4 mr-2" />
-                      <span className="hidden sm:inline">{tab.label}</span>
+                      <tab.icon className="w-4 h-4 sm:mr-2" />
+                      <span className="text-[10px] sm:text-sm sm:inline truncate">{tab.shortLabel}</span>
                       {tab.badge !== undefined && tab.badge > 0 && (
                         <Badge 
                           variant={tab.value === "notifications" ? "destructive" : "secondary"} 
-                          className="ml-2 h-5 min-w-[20px] text-xs"
+                          className="hidden sm:flex ml-2 h-5 min-w-[20px] text-xs"
                         >
                           {tab.badge}
                         </Badge>

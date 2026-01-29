@@ -105,33 +105,33 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Вход</CardTitle>
-          <CardDescription>Войдите в свой аккаунт</CardDescription>
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8 sm:py-12 pt-20 sm:pt-12">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="space-y-1 p-4 sm:p-6">
+          <CardTitle className="text-xl sm:text-2xl">Вход</CardTitle>
+          <CardDescription className="text-sm">Войдите в свой аккаунт</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6 pt-0">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {error && (
               <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription className="text-sm">{error}</AlertDescription>
               </Alert>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-sm">Email</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="your@email.com"
                 {...register("email")}
                 disabled={isLoading}
-                className={errors.email ? "border-destructive" : ""}
+                className={`h-11 sm:h-12 ${errors.email ? "border-destructive" : ""}`}
                 autoComplete="email"
               />
               {errors.email && (
-                <p className="text-sm text-destructive flex items-center gap-1">
+                <p className="text-xs sm:text-sm text-destructive flex items-center gap-1">
                   <span>•</span>
                   {errors.email.message}
                 </p>
@@ -139,24 +139,24 @@ export default function Login() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Пароль</Label>
+              <Label htmlFor="password" className="text-sm">Пароль</Label>
               <Input
                 id="password"
                 type="password"
                 {...register("password")}
                 disabled={isLoading}
-                className={errors.password ? "border-destructive" : ""}
+                className={`h-11 sm:h-12 ${errors.password ? "border-destructive" : ""}`}
                 autoComplete="current-password"
               />
               {errors.password && (
-                <p className="text-sm text-destructive flex items-center gap-1">
+                <p className="text-xs sm:text-sm text-destructive flex items-center gap-1">
                   <span>•</span>
                   {errors.password.message}
                 </p>
               )}
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full h-11 sm:h-12 text-sm sm:text-base" disabled={isLoading}>
               {isLoading ? "Вход..." : "Войти"}
             </Button>
 
@@ -165,7 +165,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setLocation("/register")}
-                className="text-primary hover:underline"
+                className="text-primary hover:underline font-medium"
               >
                 Зарегистрироваться
               </button>

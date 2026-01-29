@@ -531,77 +531,77 @@ export default function Home() {
       >
         <div className="absolute inset-0 bg-grid-pattern opacity-30 animate-fade-up" />
         
-        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-8 py-32 md:py-40 text-center">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-20 sm:py-28 md:py-32 lg:py-40 text-center">
           <Badge 
             variant="secondary" 
-            className="mb-6 text-sm font-medium px-4 py-2 animate-fade-scale"
+            className="mb-4 sm:mb-6 text-xs sm:text-sm font-medium px-3 sm:px-4 py-1.5 sm:py-2 animate-fade-scale"
             data-testid="badge-new-equipment"
           >
             Новое оборудование 2025 года
           </Badge>
           
-          <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 animate-fade-up" style={{ animationDelay: "0.1s" }} data-testid="heading-hero">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold mb-4 sm:mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 animate-fade-up leading-tight" style={{ animationDelay: "0.1s" }} data-testid="heading-hero">
             {device.name}
           </h1>
           
-          <p className="text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-4xl mx-auto mb-8 leading-relaxed animate-fade-up" style={{ animationDelay: "0.2s" }} data-testid="text-hero-description">
+          <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-4xl mx-auto mb-6 sm:mb-8 leading-relaxed animate-fade-up px-2" style={{ animationDelay: "0.2s" }} data-testid="text-hero-description">
             {device.description}
           </p>
           
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-12 animate-fade-up" style={{ animationDelay: "0.3s" }}>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-power">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 md:gap-4 mb-8 sm:mb-12 animate-fade-up" style={{ animationDelay: "0.3s" }}>
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-card px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-power">
               <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power" key={selectedDevice}>{device?.power ? parseInt(device.power) : "—"}</span>
               <span className="font-mono text-xs sm:text-sm font-semibold">кВт</span>
             </div>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-steps">
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-card px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-steps">
               <Zap className="h-4 sm:h-5 w-4 sm:w-5 text-tech-cyan" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-steps">{device.steps}</span>
             </div>
-            <div className="flex items-center gap-2 bg-card px-3 sm:px-4 py-2 rounded-lg border border-card-border hover:border-chart-3/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-voltage">
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-card px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-card-border hover:border-chart-3/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-voltage">
               <Cable className="h-4 sm:h-5 w-4 sm:w-5 text-chart-3" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-voltage">{device.voltage}</span>
             </div>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
-            <div className="arrow-button">
+          <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 justify-center items-center animate-fade-up px-4 sm:px-0" style={{ animationDelay: "0.4s" }}>
+            <div className="arrow-button w-full sm:w-auto">
               <Button 
                 size="lg" 
                 onClick={scrollToContact}
                 data-testid="button-hero-cta-primary"
-                className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold"
+                className="text-sm sm:text-base w-full sm:w-auto px-6 sm:px-8 h-11 sm:h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold"
               >
                 Получить спецификацию
-                <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
+                <ArrowRight className="ml-2 h-4 sm:h-5 w-4 sm:w-5 animated-arrow" />
               </Button>
             </div>
-            <div className="arrow-button">
+            <div className="arrow-button w-full sm:w-auto">
               <Button 
                 size="lg" 
                 variant="outline"
                 onClick={() => document.getElementById("specifications")?.scrollIntoView({ behavior: "smooth" })}
                 data-testid="button-hero-cta-secondary"
-                className="text-base px-8 h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80"
+                className="text-sm sm:text-base w-full sm:w-auto px-6 sm:px-8 h-11 sm:h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80"
               >
                 Технические характеристики
-                <ArrowRight className="ml-2 h-5 w-5 animated-arrow" />
+                <ArrowRight className="ml-2 h-4 sm:h-5 w-4 sm:w-5 animated-arrow" />
               </Button>
             </div>
           </div>
-          <div className="mt-12 flex justify-center animate-fade-up" style={{ animationDelay: "0.5s" }}>
+          <div className="mt-6 sm:mt-12 flex justify-center animate-fade-up px-4 sm:px-0" style={{ animationDelay: "0.5s" }}>
             <Button 
               size="lg" 
               onClick={handleBuyClick}
               data-testid="button-hero-buy"
-              className="text-base px-12 h-12 magnetic-btn shadow-lg shadow-green-600/40 hover:shadow-green-600/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
+              className="text-sm sm:text-base w-full sm:w-auto px-8 sm:px-12 h-11 sm:h-12 magnetic-btn shadow-lg shadow-green-600/40 hover:shadow-green-600/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
             >
-              <ShoppingCart className="mr-2 h-5 w-5 transition-all duration-300 group-hover:rotate-12" />
+              <ShoppingCart className="mr-2 h-4 sm:h-5 w-4 sm:w-5 transition-all duration-300 group-hover:rotate-12" />
               Купить
             </Button>
           </div>
           
-          <div className="mt-16 text-xs text-muted-foreground uppercase tracking-wider animate-float">
+          <div className="mt-8 sm:mt-16 text-xs text-muted-foreground uppercase tracking-wider animate-float hidden sm:block">
             Прокрутите вниз
           </div>
         </div>
@@ -1262,76 +1262,76 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="contact" className="py-24 md:py-32 bg-muted/30 scroll-animate">
-        <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
-            <Badge variant="secondary" className="mb-4" data-testid="badge-contact-section">
+      <section id="contact" className="py-16 sm:py-20 md:py-24 lg:py-32 bg-muted/30 scroll-animate">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-8 sm:mb-12 md:mb-16 animate-fade-up">
+            <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-contact-section">
               Контакты
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-contact">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4" data-testid="heading-contact">
               Получить коммерческое предложение
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-contact-desc">
+            <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-contact-desc">
               Заполните форму, и мы свяжемся с вами в ближайшее время
             </p>
           </div>
 
-          <div className="grid lg:grid-cols-5 gap-12">
+          <div className="grid lg:grid-cols-5 gap-6 sm:gap-8 lg:gap-12">
             <div className="lg:col-span-3">
               <Card>
-                <CardContent className="pt-6">
-                  <form onSubmit={(e) => { e.preventDefault(); contactMutation.mutate(form.getValues()); }} className="space-y-6">
+                <CardContent className="p-4 sm:p-6">
+                  <form onSubmit={(e) => { e.preventDefault(); contactMutation.mutate(form.getValues()); }} className="space-y-4 sm:space-y-6">
                     <div>
-                      <label className="text-sm font-medium">Имя и фамилия *</label>
+                      <label className="text-xs sm:text-sm font-medium">Имя и фамилия *</label>
                       <Input 
                         placeholder="Иван Иванов" 
                         value={form.watch("name")}
                         onChange={(e) => form.setValue("name", e.target.value)}
                         data-testid="input-name"
-                        className="mt-2"
+                        className="mt-1.5 sm:mt-2 h-11 sm:h-12"
                       />
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div>
-                        <label className="text-sm font-medium">Телефон *</label>
+                        <label className="text-xs sm:text-sm font-medium">Телефон *</label>
                         <Input 
                           placeholder="+7 (999) 123-45-67" 
                           value={form.watch("phone")}
                           onChange={(e) => form.setValue("phone", e.target.value)}
                           data-testid="input-phone"
-                          className="mt-2"
+                          className="mt-1.5 sm:mt-2 h-11 sm:h-12"
                         />
                       </div>
                       <div>
-                        <label className="text-sm font-medium">Email *</label>
+                        <label className="text-xs sm:text-sm font-medium">Email *</label>
                         <Input 
                           type="email"
                           placeholder="ivanov@company.ru" 
                           value={form.watch("email")}
                           onChange={(e) => form.setValue("email", e.target.value)}
                           data-testid="input-email"
-                          className="mt-2"
+                          className="mt-1.5 sm:mt-2 h-11 sm:h-12"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium">Компания *</label>
+                      <label className="text-xs sm:text-sm font-medium">Компания *</label>
                       <Input 
                         placeholder="ООО 'Название компании'" 
                         value={form.watch("company")}
                         onChange={(e) => form.setValue("company", e.target.value)}
                         data-testid="input-company"
-                        className="mt-2"
+                        className="mt-1.5 sm:mt-2 h-11 sm:h-12"
                       />
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium">Сообщение *</label>
+                      <label className="text-xs sm:text-sm font-medium">Сообщение *</label>
                       <Textarea 
                         placeholder="Опишите ваши требования и вопросы..."
-                        className="min-h-32 resize-none mt-2"
+                        className="min-h-[120px] sm:min-h-32 resize-none mt-1.5 sm:mt-2 text-sm"
                         value={form.watch("message")}
                         onChange={(e) => form.setValue("message", e.target.value)}
                         data-testid="input-message"
@@ -1339,15 +1339,15 @@ export default function Home() {
                     </div>
 
                     <div>
-                      <Label>Прикрепить файл (опционально)</Label>
+                      <Label className="text-xs sm:text-sm">Прикрепить файл (опционально)</Label>
                       {!selectedFile ? (
                         <label
                           htmlFor="file-upload"
-                          className="mt-2 flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover-elevate transition-all"
+                          className="mt-1.5 sm:mt-2 flex flex-col items-center justify-center w-full h-24 sm:h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover-elevate transition-all"
                           data-testid="file-drop-zone"
                         >
-                          <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                          <span className="text-sm text-muted-foreground">
+                          <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground mb-1.5 sm:mb-2" />
+                          <span className="text-xs sm:text-sm text-muted-foreground">
                             Нажмите для выбора файла
                           </span>
                           <span className="text-xs text-muted-foreground mt-1">
@@ -1363,10 +1363,10 @@ export default function Home() {
                           />
                         </label>
                       ) : (
-                        <div className="mt-2 flex items-center justify-between p-4 bg-muted rounded-lg" data-testid="file-selected">
-                          <div className="flex items-center gap-3">
-                            <FileCheck className="h-5 w-5 text-primary" />
-                            <span className="text-sm font-medium" data-testid="text-file-name">{selectedFile.name}</span>
+                        <div className="mt-1.5 sm:mt-2 flex items-center justify-between p-3 sm:p-4 bg-muted rounded-lg" data-testid="file-selected">
+                          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                            <FileCheck className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+                            <span className="text-xs sm:text-sm font-medium truncate" data-testid="text-file-name">{selectedFile.name}</span>
                           </div>
                           <Button
                             type="button"
@@ -1374,6 +1374,7 @@ export default function Home() {
                             size="icon"
                             onClick={removeFile}
                             data-testid="button-remove-file"
+                            className="h-8 w-8 flex-shrink-0"
                           >
                             <X className="h-4 w-4" />
                           </Button>
@@ -1381,16 +1382,16 @@ export default function Home() {
                       )}
                     </div>
 
-                    <div className="space-y-3 pt-2 border-t border-border">
+                    <div className="space-y-3 pt-3 sm:pt-4 border-t border-border">
                       <div className="flex items-start gap-2">
                         <Checkbox
                           id="consent-personal-data-home"
                           checked={consentPersonalData}
                           onCheckedChange={(checked) => setConsentPersonalData(checked === true)}
-                          className="mt-1"
+                          className="mt-0.5"
                           data-testid="checkbox-consent-personal-data"
                         />
-                        <Label htmlFor="consent-personal-data-home" className="text-sm leading-relaxed cursor-pointer">
+                        <Label htmlFor="consent-personal-data-home" className="text-xs sm:text-sm leading-relaxed cursor-pointer">
                           Я даю согласие на обработку персональных данных *
                         </Label>
                       </div>
@@ -1399,10 +1400,10 @@ export default function Home() {
                           id="consent-data-processing-home"
                           checked={consentDataProcessing}
                           onCheckedChange={(checked) => setConsentDataProcessing(checked === true)}
-                          className="mt-1"
+                          className="mt-0.5"
                           data-testid="checkbox-consent-data-processing"
                         />
-                        <Label htmlFor="consent-data-processing-home" className="text-sm leading-relaxed cursor-pointer">
+                        <Label htmlFor="consent-data-processing-home" className="text-xs sm:text-sm leading-relaxed cursor-pointer">
                           Я принимаю условия{" "}
                           <a href="/data-processing-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                             Политики обработки персональных данных
@@ -1417,13 +1418,13 @@ export default function Home() {
 
                     <Button 
                       type="submit" 
-                      className="w-full h-12 text-base"
+                      className="w-full h-11 sm:h-12 text-sm sm:text-base"
                       data-testid="button-submit-contact"
                       disabled={contactMutation.isPending || !consentPersonalData || !consentDataProcessing}
                     >
                       {contactMutation.isPending ? (
                         <>
-                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          <Loader2 className="mr-2 h-4 sm:h-5 w-4 sm:w-5 animate-spin" />
                           Отправка...
                         </>
                       ) : (
@@ -1435,37 +1436,37 @@ export default function Home() {
               </Card>
             </div>
 
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Контактная информация</CardTitle>
+                <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-4">
+                  <CardTitle className="text-base sm:text-lg">Контактная информация</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-start gap-3" data-testid="contact-phone">
-                    <Phone className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-3 sm:space-y-4">
+                  <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-phone">
+                    <Phone className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="text-sm font-medium">Телефон</div>
-                      <div className="text-sm text-muted-foreground" data-testid="text-phone">{contactPhone}</div>
+                      <div className="text-xs sm:text-sm font-medium">Телефон</div>
+                      <a href={`tel:${contactPhone.replace(/\D/g, '')}`} className="text-xs sm:text-sm text-muted-foreground hover:text-primary" data-testid="text-phone">{contactPhone}</a>
                     </div>
                   </div>
                   <Separator />
-                  <div className="flex items-start gap-3" data-testid="contact-email">
-                    <Mail className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-email">
+                    <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="text-sm font-medium">Email</div>
-                      <div className="text-sm text-muted-foreground" data-testid="text-email">{contactEmail}</div>
+                      <div className="text-xs sm:text-sm font-medium">Email</div>
+                      <a href={`mailto:${contactEmail}`} className="text-xs sm:text-sm text-muted-foreground hover:text-primary break-all" data-testid="text-email">{contactEmail}</a>
                     </div>
                   </div>
                   <Separator />
-                  <div className="flex items-start gap-3" data-testid="contact-telegram">
-                    <Send className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-telegram">
+                    <Send className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="text-sm font-medium">Telegram</div>
+                      <div className="text-xs sm:text-sm font-medium">Telegram</div>
                       <a 
                         href="https://t.me/nu_equipment" 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline"
+                        className="text-xs sm:text-sm text-primary hover:underline"
                         data-testid="link-telegram"
                       >
                         @nu_equipment
@@ -1473,11 +1474,11 @@ export default function Home() {
                     </div>
                   </div>
                   <Separator />
-                  <div className="flex items-start gap-3" data-testid="contact-address">
-                    <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-address">
+                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="text-sm font-medium">Адрес</div>
-                      <div className="text-sm text-muted-foreground" data-testid="text-address">
+                      <div className="text-xs sm:text-sm font-medium">Адрес</div>
+                      <div className="text-xs sm:text-sm text-muted-foreground" data-testid="text-address">
                         {contactAddress}
                       </div>
                     </div>
@@ -1486,9 +1487,9 @@ export default function Home() {
               </Card>
 
               <Card className="bg-primary/5 border-primary/20" data-testid="card-response-time">
-                <CardContent className="pt-6">
-                  <div className="text-sm text-center">
-                    <div className="font-semibold mb-2" data-testid="text-response-time-title">Время ответа</div>
+                <CardContent className="p-4 sm:pt-6">
+                  <div className="text-xs sm:text-sm text-center">
+                    <div className="font-semibold mb-1.5 sm:mb-2" data-testid="text-response-time-title">Время ответа</div>
                     <div className="text-muted-foreground" data-testid="text-response-time-desc">
                       Мы отвечаем на заявки в течение 24 часов в рабочие дни
                     </div>
@@ -1500,27 +1501,27 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="bg-card border-t border-border py-12">
-        <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="grid md:grid-cols-3 gap-12 mb-8">
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-xl font-mono">НУ</span>
+      <footer className="bg-card border-t border-border py-8 sm:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 sm:gap-12 mb-6 sm:mb-8">
+            <div className="text-center sm:text-left">
+              <div className="flex items-center gap-3 mb-3 sm:mb-4 justify-center sm:justify-start">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-primary rounded-md flex items-center justify-center">
+                  <span className="text-primary-foreground font-bold text-lg sm:text-xl font-mono">НУ</span>
                 </div>
                 <div>
                   <div className="text-sm font-semibold">{device.name}</div>
                   <div className="text-xs text-muted-foreground">Нагрузочное устройство</div>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Профессиональное оборудование для тестирования электрогенераторов и ИБП
               </p>
             </div>
 
-            <div>
-              <h3 className="font-semibold mb-4">Навигация</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
+            <div className="text-center sm:text-left">
+              <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Навигация</h3>
+              <ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
                 {navLinks.filter(link => link.id !== "gallery" || productImages.length > 0).map((link) => (
                   <li key={link.id}>
                     <button
@@ -1535,26 +1536,26 @@ export default function Home() {
               </ul>
             </div>
 
-            <div>
-              <h3 className="font-semibold mb-4">Контакты</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>+7 (495) 123-45-67</li>
-                <li>info@nm-100.ru</li>
+            <div className="text-center sm:text-left sm:col-span-2 md:col-span-1">
+              <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Контакты</h3>
+              <ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
+                <li><a href="tel:+74951234567" className="hover:text-foreground">+7 (495) 123-45-67</a></li>
+                <li><a href="mailto:info@nm-100.ru" className="hover:text-foreground">info@nm-100.ru</a></li>
                 <li>Чебоксары</li>
               </ul>
             </div>
           </div>
 
-          <Separator className="mb-8" />
+          <Separator className="mb-6 sm:mb-8" />
 
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
-            <div>© 2025 {device.name}. Все права защищены.</div>
-            <div className="flex gap-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs sm:text-sm text-muted-foreground">
+            <div className="text-center md:text-left">© 2025 {device.name}. Все права защищены.</div>
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 md:gap-6 text-center">
               <a href="/privacy-policy" className="hover:text-foreground transition-colors">
                 Политика конфиденциальности
               </a>
               <a href="/data-processing-policy" className="hover:text-foreground transition-colors">
-                Политика обработки персональных данных
+                Политика обработки данных
               </a>
               <a href="/public-offer" className="hover:text-foreground transition-colors">
                 Публичная оферта

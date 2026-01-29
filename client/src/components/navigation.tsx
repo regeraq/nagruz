@@ -282,7 +282,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
             : "bg-background/50 backdrop-blur-sm"
         }`}
       >
-        <nav className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+        <nav className="max-w-7xl mx-auto px-3 sm:px-6 md:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16 md:h-20">
             <div className="flex items-center gap-2 sm:gap-4">
               <button
@@ -295,25 +295,30 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                 </div>
               </button>
               
-              {/* Выбор устройства */}
+              {/* Выбор устройства - теперь видно и на мобильных */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
                     data-testid="button-device-selector"
-                    className="hidden md:flex items-center gap-2"
+                    className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3"
                   >
-                    <Gauge className="h-4 w-4" />
-                    {devices.find(d => d.id === selectedDevice)?.name || "Устройство"}
+                    <Gauge className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <span className="max-w-[80px] sm:max-w-none truncate">
+                      {devices.find(d => d.id === selectedDevice)?.name || "Устройство"}
+                    </span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
+                <DropdownMenuContent align="start" className="min-w-[140px]">
                   {devices.map((device) => (
                     <DropdownMenuItem
                       key={device.id}
                       onClick={() => onDeviceChange?.(device.id)}
-                      className={selectedDevice === device.id ? "bg-accent" : ""}
+                      className={cn(
+                        "text-sm py-2.5",
+                        selectedDevice === device.id ? "bg-accent font-medium" : ""
+                      )}
                       data-testid={`device-option-${device.id}`}
                     >
                       {device.name}
@@ -360,7 +365,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
               })}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <ThemeToggle />
               
               {isLoadingUser ? (
@@ -371,30 +376,30 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                     <button className="flex items-center gap-2 rounded-full focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-transform hover:scale-105 active:scale-95">
                       <Avatar className="w-8 h-8 ring-2 ring-background hover:ring-primary transition-all">
                         <AvatarImage src={userData.avatar || undefined} />
-                        <AvatarFallback>{getUserInitials(userData)}</AvatarFallback>
+                        <AvatarFallback className="text-xs">{getUserInitials(userData)}</AvatarFallback>
                       </Avatar>
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      <div className="font-medium">{userData.email}</div>
+                      <div className="font-medium truncate">{userData.email}</div>
                       {userData.firstName && userData.lastName && (
                         <div className="text-xs">{userData.firstName} {userData.lastName}</div>
                       )}
                     </div>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setLocation("/profile")}>
+                    <DropdownMenuItem onClick={() => setLocation("/profile")} className="py-2.5">
                       <User className="mr-2 h-4 w-4" />
                       Профиль
                     </DropdownMenuItem>
                     {isAdmin && (
-                      <DropdownMenuItem onClick={() => setLocation("/admin")}>
+                      <DropdownMenuItem onClick={() => setLocation("/admin")} className="py-2.5">
                         <Settings className="mr-2 h-4 w-4" />
                         Админ-панель
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
+                    <DropdownMenuItem onClick={handleLogout} className="py-2.5 text-destructive focus:text-destructive">
                       <LogOut className="mr-2 h-4 w-4" />
                       Выйти
                     </DropdownMenuItem>
@@ -402,16 +407,19 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                 </DropdownMenu>
               ) : (
                 <>
+                  {/* На десктопе показываем обе кнопки */}
                   <Button
                     variant="ghost"
+                    size="sm"
                     onClick={() => setLocation("/login")}
-                    className="hidden md:flex"
+                    className="hidden lg:flex text-sm h-9"
                   >
                     Войти
                   </Button>
                   <Button
+                    size="sm"
                     onClick={() => setLocation("/register")}
-                    className="hidden md:flex"
+                    className="hidden lg:flex text-sm h-9"
                   >
                     Регистрация
                   </Button>
@@ -421,8 +429,9 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden"
+                className="lg:hidden h-9 w-9"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                aria-label={isMobileMenuOpen ? "Закрыть меню" : "Открыть меню"}
               >
                 {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </Button>
@@ -432,46 +441,70 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
       </header>
 
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden bg-background/98 backdrop-blur-md pt-14 sm:pt-20 animate-in slide-in-from-top">
-          <div className="flex flex-col gap-2 p-4 sm:p-6">
+        <div className="fixed inset-0 z-40 lg:hidden bg-background/98 backdrop-blur-md pt-14 sm:pt-16 animate-in slide-in-from-top overflow-y-auto">
+          <div className="flex flex-col gap-1 p-4 pb-20">
+            {/* Секция навигации */}
+            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 px-2">
+              Навигация
+            </div>
             {visibleNavLinks.map((link) => {
               return (
                 <Button
                   key={link.id}
                   variant="ghost"
                   onClick={() => {
-                    const element = document.getElementById(link.id);
-                    if (element) {
-                      const offset = 80;
-                      const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
-                      window.scrollTo({
-                        top: elementPosition - offset,
-                        behavior: "smooth",
-                      });
+                    if (location !== "/") {
+                      setLocation("/");
+                      setTimeout(() => {
+                        const element = document.getElementById(link.id);
+                        if (element) {
+                          const offset = 70;
+                          const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+                          window.scrollTo({
+                            top: elementPosition - offset,
+                            behavior: "smooth",
+                          });
+                        }
+                      }, 100);
+                    } else {
+                      const element = document.getElementById(link.id);
+                      if (element) {
+                        const offset = 70;
+                        const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+                        window.scrollTo({
+                          top: elementPosition - offset,
+                          behavior: "smooth",
+                        });
+                      }
                     }
                     setIsMobileMenuOpen(false);
                   }}
                   className={cn(
-                    "justify-start text-lg h-12 transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground"
+                    "justify-start text-base h-12 w-full transition-colors rounded-xl",
+                    "hover:bg-accent hover:text-accent-foreground active:scale-[0.98]"
                   )}
                 >
                   {link.label}
                 </Button>
               );
             })}
+            
+            {/* Секция аккаунта */}
             <div className="mt-4 pt-4 border-t">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 px-2">
+                Аккаунт
+              </div>
               {userData ? (
-                <>
+                <div className="space-y-1">
                   <Button
                     variant="ghost"
                     onClick={() => {
                       setIsMobileMenuOpen(false);
                       setLocation("/profile");
                     }}
-                    className="justify-start text-lg h-12 w-full"
+                    className="justify-start text-base h-12 w-full rounded-xl"
                   >
-                    <User className="mr-2 h-5 w-5" />
+                    <User className="mr-3 h-5 w-5" />
                     Профиль
                   </Button>
                   {isAdmin && (
@@ -481,9 +514,9 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                         setIsMobileMenuOpen(false);
                         setLocation("/admin");
                       }}
-                      className="justify-start text-lg h-12 w-full"
+                      className="justify-start text-base h-12 w-full rounded-xl"
                     >
-                      <Settings className="mr-2 h-5 w-5" />
+                      <Settings className="mr-3 h-5 w-5" />
                       Админ-панель
                     </Button>
                   )}
@@ -493,21 +526,21 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                       setIsMobileMenuOpen(false);
                       handleLogout();
                     }}
-                    className="justify-start text-lg h-12 w-full"
+                    className="justify-start text-base h-12 w-full rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
-                    <LogOut className="mr-2 h-5 w-5" />
+                    <LogOut className="mr-3 h-5 w-5" />
                     Выйти
                   </Button>
-                </>
+                </div>
               ) : (
-                <>
+                <div className="space-y-2 mt-2">
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     onClick={() => {
                       setIsMobileMenuOpen(false);
                       setLocation("/login");
                     }}
-                    className="justify-start text-lg h-12 w-full"
+                    className="w-full h-12 text-base rounded-xl"
                   >
                     Войти
                   </Button>
@@ -516,11 +549,11 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                       setIsMobileMenuOpen(false);
                       setLocation("/register");
                     }}
-                    className="justify-start text-lg h-12 w-full"
+                    className="w-full h-12 text-base rounded-xl"
                   >
                     Регистрация
                   </Button>
-                </>
+                </div>
               )}
             </div>
           </div>

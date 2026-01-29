@@ -365,34 +365,34 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 animate-fade-scale">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-scale">
       <div
         className="absolute inset-0 bg-gradient-to-br from-black/70 via-slate-900/60 to-black/70 backdrop-blur-md"
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-3xl max-h-[95vh] overflow-hidden bg-gradient-to-br from-white via-slate-50 to-blue-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/20 rounded-2xl shadow-2xl border border-white/20 dark:border-slate-700/50">
+      <div className="relative w-full sm:max-w-3xl max-h-[90vh] sm:max-h-[95vh] overflow-hidden bg-gradient-to-br from-white via-slate-50 to-blue-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/20 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-white/20 dark:border-slate-700/50">
         {/* Header */}
-        <div className="sticky top-0 z-20 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 dark:from-blue-700 dark:via-indigo-700 dark:to-violet-700 p-4 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <ShoppingBag className="w-6 h-6 text-white" />
+        <div className="sticky top-0 z-20 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 dark:from-blue-700 dark:via-indigo-700 dark:to-violet-700 p-3 sm:p-6">
+          <div className="flex items-center justify-between gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-white">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-2xl font-bold text-white truncate">
                   Оформление заказа
                 </h2>
-                <div className="flex items-center gap-3 mt-1">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-white/70" />
-                    <span className={`text-sm font-medium ${timeLeft < 60 ? "text-red-200" : "text-white/80"}`}>
+                <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1">
+                  <div className="flex items-center gap-1 sm:gap-1.5">
+                    <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/70" />
+                    <span className={`text-xs sm:text-sm font-medium ${timeLeft < 60 ? "text-red-200" : "text-white/80"}`}>
                       {formatTime(timeLeft)}
                     </span>
                   </div>
                   {isLoggedIn && (
-                    <Badge className="bg-white/20 text-white border-0 text-xs">
-                      <Sparkles className="w-3 h-3 mr-1" />
+                    <Badge className="bg-white/20 text-white border-0 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5">
+                      <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" />
                       Авторизован
                     </Badge>
                   )}
@@ -403,14 +403,14 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-white hover:bg-white/20 rounded-full"
+              className="text-white hover:bg-white/20 rounded-full h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
             >
               <X className="w-5 h-5" />
             </Button>
           </div>
 
           {/* Step Progress */}
-          <div className="mt-6">
+          <div className="mt-4 sm:mt-6">
             <div className="flex items-center justify-between mb-2">
               {STEPS.map((step, index) => {
                 const Icon = step.icon;
@@ -421,20 +421,20 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 return (
                   <div key={step.key} className="flex items-center">
                     <div className={`
-                      flex items-center justify-center w-10 h-10 rounded-full transition-all duration-300
+                      flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full transition-all duration-300
                       ${isSuccess ? "bg-emerald-500 scale-110" : ""}
                       ${isActive && !isSuccess ? "bg-white text-blue-600 scale-110 shadow-lg" : ""}
                       ${isCompleted ? "bg-white/30 text-white" : ""}
                       ${!isActive && !isCompleted && !isSuccess ? "bg-white/10 text-white/50" : ""}
                     `}>
                       {isCompleted || isSuccess ? (
-                        <Check className="w-5 h-5" />
+                        <Check className="w-4 h-4 sm:w-5 sm:h-5" />
                       ) : (
-                        <Icon className="w-5 h-5" />
+                        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
                       )}
                     </div>
                     {index < STEPS.length - 1 && (
-                      <div className={`hidden sm:block w-12 h-0.5 mx-2 transition-all duration-300 ${
+                      <div className={`hidden sm:block w-8 md:w-12 h-0.5 mx-1 sm:mx-2 transition-all duration-300 ${
                         isCompleted ? "bg-white/60" : "bg-white/20"
                       }`} />
                     )}
@@ -447,7 +447,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(95vh-200px)] p-4 sm:p-6">
+        <div className="overflow-y-auto max-h-[calc(90vh-180px)] sm:max-h-[calc(95vh-200px)] p-3 sm:p-6">
           {/* Step 1: Product */}
           {currentStep === "product" && (
             <div className="space-y-6 animate-fade-in">
@@ -964,16 +964,16 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
         {/* Footer */}
         {paymentStatus !== "success" && paymentStatus !== "error" && (
-          <div className="sticky bottom-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row gap-3">
+          <div className="sticky bottom-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t p-3 sm:p-6 safe-area-bottom">
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3">
               {currentStepIndex > 0 && (
                 <Button
                   variant="outline"
                   onClick={goToPrevStep}
-                  className="sm:flex-1 h-12"
+                  className="sm:flex-1 h-11 sm:h-12 text-sm sm:text-base"
                   disabled={paymentStatus === "processing"}
                 >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  <ArrowLeft className="w-4 h-4 mr-1.5 sm:mr-2" />
                   Назад
                 </Button>
               )}
@@ -982,7 +982,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 <Button
                   variant="outline"
                   onClick={onClose}
-                  className="sm:flex-1 h-12"
+                  className="sm:flex-1 h-11 sm:h-12 text-sm sm:text-base"
                 >
                   Отмена
                 </Button>
@@ -992,17 +992,19 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 <Button
                   onClick={handlePayment}
                   disabled={paymentStatus === "processing" || timeLeft === 0}
-                  className="flex-1 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-base font-semibold"
+                  className="flex-1 h-11 sm:h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm sm:text-base font-semibold"
                 >
                   {paymentStatus === "processing" ? (
                     <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-1.5 sm:mr-2 animate-spin" />
                       Оформление...
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-5 h-5 mr-2" />
-                      Подтвердить заказ — {formatPrice(finalAmount)}
+                      <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 mr-1.5 sm:mr-2" />
+                      <span className="hidden sm:inline">Подтвердить заказ — </span>
+                      <span className="sm:hidden">Подтвердить — </span>
+                      {formatPrice(finalAmount)}
                     </>
                   )}
                 </Button>
@@ -1010,10 +1012,10 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 <Button
                   onClick={goToNextStep}
                   disabled={!canProceedToNext()}
-                  className="flex-1 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-base font-semibold"
+                  className="flex-1 h-11 sm:h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm sm:text-base font-semibold"
                 >
                   Далее
-                  <ArrowRight className="w-5 h-5 ml-2" />
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-1.5 sm:ml-2" />
                 </Button>
               )}
             </div>
