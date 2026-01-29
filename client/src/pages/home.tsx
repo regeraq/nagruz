@@ -97,18 +97,15 @@ const devices = {
 };
 
 export default function Home() {
-  // Initialize from URL parameter or default to nu-100
-  const [selectedDevice, setSelectedDeviceState] = useState<"nu-100" | "nu-200" | "nu-30">(() => {
+  // Initialize from URL parameter or default to first available device
+  const [selectedDevice, setSelectedDeviceState] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
     const deviceParam = params.get("device");
-    if (deviceParam === "nu-100" || deviceParam === "nu-200" || deviceParam === "nu-30") {
-      return deviceParam;
-    }
-    return "nu-100";
+    return deviceParam || "nu-100"; // Default fallback
   });
 
   // Wrapper to update both state and URL
-  const setSelectedDevice = (device: "nu-100" | "nu-200" | "nu-30") => {
+  const setSelectedDevice = (device: string) => {
     setSelectedDeviceState(device);
     const params = new URLSearchParams(window.location.search);
     params.set("device", device);
@@ -119,29 +116,6 @@ export default function Home() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const device = devices[selectedDevice] || devices["nu-100"];
-
-  // Update page title and Open Graph meta tags when device changes
-  useEffect(() => {
-    const deviceMap = {
-      "nu-100": { name: "НУ-100", power: "100 кВт" },
-      "nu-200": { name: "НУ-200", power: "200 кВт" },
-      "nu-30": { name: "НУ-30", power: "30 кВт" },
-    };
-    const deviceInfo = deviceMap[selectedDevice];
-    const pageTitle = `(Нагрузочное устройство/${deviceInfo.name}) — ${deviceInfo.power}`;
-    document.title = pageTitle;
-    
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) {
-      metaDescription.setAttribute("content", device.description);
-    }
-    
-    const ogTitle = document.querySelector('meta[property="og:title"]');
-    if (ogTitle) {
-      ogTitle.setAttribute("content", pageTitle);
-    }
-  }, [selectedDevice, device.description]);
 
   // Products API - reliable query with proper error handling
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, refetch: refetchProducts } = useQuery<Product[]>({
@@ -285,10 +259,55 @@ export default function Home() {
   const availableProducts = products.filter((p: Product) => p.isActive !== false);
   const availableDeviceIds = availableProducts.map((p: Product) => p.id);
 
+  // Get device info from products or fallback to hardcoded devices
+  const currentProductForDevice = useMemo(() => {
+    return products.find((p: Product) => p.id === selectedDevice);
+  }, [products, selectedDevice]);
+
+  const device = useMemo(() => {
+    if (currentProductForDevice) {
+      return {
+        name: currentProductForDevice.name,
+        power: currentProductForDevice.specifications?.split(',')[0] || "—",
+        steps: currentProductForDevice.specifications?.split(',')[1]?.trim() || "—",
+        voltage: "AC/DC",
+        minVoltage: "230-400 В / 110-220 В",
+        maxPower: currentProductForDevice.specifications?.split(',')[0] || "—",
+        frequency: "50 Гц",
+        phases: "3",
+        cosφ: "0.99",
+        cooling: "Воздушное принудительное",
+        description: currentProductForDevice.description || "",
+        powerRange: currentProductForDevice.specifications?.split(',')[0] || "—",
+        acVoltage: "230–400 В",
+        dcVoltage: "110–220 В"
+      };
+    }
+    return (devices[selectedDevice as keyof typeof devices] || devices["nu-100"]);
+  }, [currentProductForDevice, selectedDevice]);
+
+  // Update page title and Open Graph meta tags when device changes
+  useEffect(() => {
+    const deviceName = currentProductForDevice?.name || device.name;
+    const devicePower = device.power || "—";
+    const pageTitle = `(Нагрузочное устройство/${deviceName}) — ${devicePower}`;
+    document.title = pageTitle;
+    
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute("content", device.description);
+    }
+    
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) {
+      ogTitle.setAttribute("content", pageTitle);
+    }
+  }, [selectedDevice, device.description, device.name, device.power, currentProductForDevice]);
+
   // Auto-switch to first available device if current is not available
   useEffect(() => {
     if (availableProducts.length > 0 && !availableDeviceIds.includes(selectedDevice)) {
-      setSelectedDevice(availableDeviceIds[0] as "nu-100" | "nu-200" | "nu-30");
+      setSelectedDevice(availableDeviceIds[0]);
     }
   }, [availableProducts, availableDeviceIds, selectedDevice]);
 

@@ -25,8 +25,8 @@ interface User {
 }
 
 interface NavigationProps {
-  selectedDevice?: "nu-100" | "nu-200" | "nu-30";
-  onDeviceChange?: (device: "nu-100" | "nu-200" | "nu-30") => void;
+  selectedDevice?: string;
+  onDeviceChange?: (device: string) => void;
   availableDeviceIds?: string[];
 }
 
@@ -44,19 +44,8 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const allDevices = [
-    { id: "nu-100", name: "НУ-100" },
-    { id: "nu-200", name: "НУ-200" },
-    { id: "nu-30", name: "НУ-30" },
-  ];
   
-  // Filter to show only available devices
-  // FIXED: If availableDeviceIds is empty or not provided, show all devices (fallback)
-  const devices = availableDeviceIds.length > 0 
-    ? allDevices.filter(d => availableDeviceIds.includes(d.id))
-    : allDevices;
-
-  // Get products to check if gallery should be shown
+  // Get products to build dynamic device list
   const { data: products = [] } = useQuery({
     queryKey: ['/api/products'],
     queryFn: async () => {
@@ -65,6 +54,17 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
       return res.json();
     },
   });
+
+  // Build devices list from products (dynamic, not hardcoded)
+  const allDevices = products
+    .filter((p: any) => p && p.id && p.name && p.isActive !== false)
+    .map((p: any) => ({ id: p.id, name: p.name }));
+  
+  // Filter to show only available devices
+  // FIXED: If availableDeviceIds is empty or not provided, show all devices (fallback)
+  const devices = availableDeviceIds.length > 0 
+    ? allDevices.filter(d => availableDeviceIds.includes(d.id))
+    : allDevices;
 
   const currentProduct = products.find((p: any) => p.id === selectedDevice);
   const hasGallery = currentProduct && 
@@ -198,7 +198,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                   {devices.map((device) => (
                     <DropdownMenuItem
                       key={device.id}
-                      onClick={() => onDeviceChange?.(device.id as "nu-100" | "nu-200" | "nu-30")}
+                      onClick={() => onDeviceChange?.(device.id)}
                       className={selectedDevice === device.id ? "bg-accent" : ""}
                       data-testid={`device-option-${device.id}`}
                     >

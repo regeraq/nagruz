@@ -1426,6 +1426,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       product.stock = stock;
 
+      // Clear products cache to ensure updated stock is immediately available
+      cache.delete('products');
+      cache.delete('products-active');
+
       res.json({
         success: true,
         product,
@@ -1832,6 +1836,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      // Clear products cache to ensure updated price is immediately available
+      cache.delete('products');
+      cache.delete('products-active');
+
       res.json({ success: true, product });
     } catch (error) {
       console.error("Update price error:", error);
@@ -1996,6 +2004,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const product = await storage.createProduct(req.body);
+      
+      // Clear products cache to ensure new product is immediately available
+      cache.delete('products');
+      cache.delete('products-active');
+      console.log(`✅ [POST /api/admin/products] Product ${product.id} created, cache cleared`);
+      
       res.status(201).json({ success: true, product });
     } catch (error) {
       console.error("Create product error:", error);

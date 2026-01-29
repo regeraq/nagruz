@@ -325,7 +325,9 @@ export default function Admin() {
       return res.json();
     },
     onSuccess: () => {
+      // Invalidate both public and admin product queries to ensure fresh data
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
       setShowCreateProduct(false);
       toast({ title: "Товар создан" });
     },
