@@ -100,14 +100,8 @@ const devices = {
 
 export default function Home() {
   // Initialize from URL parameter or default to nu-100
-  const [selectedDevice, setSelectedDeviceState] = useState<"nu-100" | "nu-200" | "nu-30">(() => {
-    const params = new URLSearchParams(window.location.search);
-    const deviceParam = params.get("device");
-    if (deviceParam === "nu-100" || deviceParam === "nu-200" || deviceParam === "nu-30") {
-      return deviceParam;
-    }
-    return "nu-100";
-  });
+  // FIXED: This will be updated after products load to ensure only active devices are selectable
+  const [selectedDevice, setSelectedDeviceState] = useState<"nu-100" | "nu-200" | "nu-30">("nu-100");
 
   // Wrapper to update both state and URL
   const setSelectedDevice = (device: "nu-100" | "nu-200" | "nu-30") => {
@@ -152,10 +146,19 @@ export default function Home() {
         const res = await fetch("/api/products");
         if (!res.ok) {
           console.error(`❌ [Home] Failed to fetch products: ${res.status} ${res.statusText}`);
+          // FIXED: Log error details for debugging
+          const errorText = await res.text();
+          console.error(`❌ [Home] Error response:`, errorText);
           return [];
         }
         const data = await res.json();
         console.log(`✅ [Home] Received ${data.length} products from API`);
+        
+        // FIXED: Log warning if no products received
+        if (data.length === 0) {
+          console.warn(`⚠️ [Home] No products received from API. Check server logs and ensure products exist in database.`);
+        }
+        
         // Log each product's images
         data.forEach((p: any) => {
           const imgCount = Array.isArray(p.images) ? p.images.length : (p.images ? 1 : 0);
@@ -168,6 +171,12 @@ export default function Home() {
         return data;
       } catch (error) {
         console.error(`❌ [Home] Error fetching products:`, error);
+        // FIXED: Show user-friendly error message
+        toast({
+          title: "Ошибка загрузки товаров",
+          description: "Не удалось загрузить список товаров. Пожалуйста, обновите страницу.",
+          variant: "destructive",
+        });
         return [];
       }
     },
@@ -178,10 +187,19 @@ export default function Home() {
     refetchOnReconnect: false, // Don't refetch on reconnect
     // Keep previous data while fetching new data
     placeholderData: (previousData) => previousData,
+    // FIXED: Retry on error with exponential backoff
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   // Get product images for current device
   const currentProduct = useMemo(() => {
+    // FIXED: Better error handling - check if products array is empty
+    if (!products || products.length === 0) {
+      console.warn(`⚠️ [Home] Products array is empty for device ${selectedDevice}`);
+      return null;
+    }
+    
     const product = products.find((p: Product) => p.id === selectedDevice);
     console.log(`🔍 [Home] Looking for product ${selectedDevice}:`, {
       found: !!product,
@@ -189,6 +207,12 @@ export default function Home() {
       productIds: products.map((p: any) => p.id),
       productData: product ? { id: product.id, name: product.name, hasImages: !!(product as any).images } : null
     });
+    
+    // FIXED: Log warning if product not found
+    if (!product) {
+      console.warn(`⚠️ [Home] Product ${selectedDevice} not found in products list. Available IDs:`, products.map((p: any) => p.id));
+    }
+    
     return product;
   }, [products, selectedDevice]);
   
@@ -196,7 +220,10 @@ export default function Home() {
   const productImages = useMemo(() => {
     // If no current product, return empty array
     if (!currentProduct) {
-      console.log(`⚠️ [Home] No currentProduct for ${selectedDevice}`);
+      // FIXED: Only log warning if products are loaded (not during initial load)
+      if (!isLoadingProducts && products.length > 0) {
+        console.warn(`⚠️ [Home] No currentProduct for ${selectedDevice} - product may not exist in database`);
+      }
       return [];
     }
     
@@ -257,6 +284,11 @@ export default function Home() {
   
   // Debug logging
   useEffect(() => {
+    // FIXED: Only log debug info if products are loaded (not during initial load)
+    if (isLoadingProducts) {
+      return; // Skip logging during initial load
+    }
+    
     const rawImages = (currentProduct as any)?.images;
     console.log(`🖼️ [Home] Gallery state for ${selectedDevice}:`, {
       isLoadingProducts,
@@ -280,8 +312,10 @@ export default function Home() {
         productId: currentProduct.id,
         rawImages: (currentProduct as any).images
       });
+    } else if (products.length === 0) {
+      console.error(`❌ [Home] No products loaded from API - check server logs and database connection`);
     } else {
-      console.warn(`⚠️ [Home] Gallery should NOT be visible - product ${selectedDevice} not found in ${products.length} products`);
+      console.warn(`⚠️ [Home] Gallery should NOT be visible - product ${selectedDevice} not found in ${products.length} products. Available IDs:`, products.map((p: any) => p.id));
     }
   }, [currentProduct, productImages, selectedDevice, products.length, isLoadingProducts]);
 
@@ -298,10 +332,50 @@ export default function Home() {
   const availableProducts = products.filter((p: Product) => p.isActive !== false);
   const availableDeviceIds = availableProducts.map((p: Product) => p.id);
 
+  // FIXED: Initialize device from URL parameter after products are loaded
+  // This ensures only active devices can be selected
+  useEffect(() => {
+    if (!isLoadingProducts && availableProducts.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const deviceParam = params.get("device") as "nu-100" | "nu-200" | "nu-30" | null;
+      
+      // Only set from URL if device is available and valid
+      if (deviceParam && availableDeviceIds.includes(deviceParam)) {
+        // Device is available, use it
+        if (selectedDevice !== deviceParam) {
+          setSelectedDeviceState(deviceParam);
+        }
+        // Update URL to match (in case it was malformed)
+        const newParams = new URLSearchParams(window.location.search);
+        newParams.set("device", deviceParam);
+        window.history.replaceState({}, "", `?${newParams.toString()}`);
+      } else {
+        // Device from URL is not available OR no device in URL
+        if (deviceParam && !availableDeviceIds.includes(deviceParam)) {
+          // FIXED: Log warning when trying to access inactive device
+          console.warn(`⚠️ [Home] Device ${deviceParam} from URL is not available (inactive). Switching to first available device.`);
+        }
+        
+        // If current device is not available, switch to first available
+        if (!availableDeviceIds.includes(selectedDevice)) {
+          const firstAvailable = availableDeviceIds[0] as "nu-100" | "nu-200" | "nu-30";
+          console.log(`🔄 [Home] Switching to available device: ${firstAvailable}`);
+          setSelectedDevice(firstAvailable);
+        } else if (!deviceParam) {
+          // No device in URL, but current device is available - update URL
+          const newParams = new URLSearchParams(window.location.search);
+          newParams.set("device", selectedDevice);
+          window.history.replaceState({}, "", `?${newParams.toString()}`);
+        }
+      }
+    }
+  }, [isLoadingProducts, availableProducts, availableDeviceIds, selectedDevice]);
+
   // Auto-switch to first available device if current is not available
   useEffect(() => {
     if (availableProducts.length > 0 && !availableDeviceIds.includes(selectedDevice)) {
-      setSelectedDevice(availableDeviceIds[0] as "nu-100" | "nu-200" | "nu-30");
+      const firstAvailable = availableDeviceIds[0] as "nu-100" | "nu-200" | "nu-30";
+      setSelectedDevice(firstAvailable);
     }
   }, [availableProducts, availableDeviceIds, selectedDevice]);
 
@@ -466,7 +540,7 @@ export default function Home() {
       <Navigation 
         selectedDevice={selectedDevice} 
         onDeviceChange={setSelectedDevice}
-        availableDeviceIds={availableDeviceIds}
+        availableDeviceIds={availableDeviceIds.length > 0 ? availableDeviceIds : ["nu-100", "nu-30"]}
       />
       
       {showScrollTop && (

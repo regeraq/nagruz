@@ -39,7 +39,7 @@ const navLinks = [
   { label: "Контакты", id: "contact" },
 ];
 
-export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availableDeviceIds = ["nu-100", "nu-200", "nu-30"] }: NavigationProps = {}) {
+export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availableDeviceIds = [] }: NavigationProps = {}) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [location, setLocation] = useLocation();
@@ -51,7 +51,10 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
   ];
   
   // Filter to show only available devices
-  const devices = allDevices.filter(d => availableDeviceIds.includes(d.id));
+  // FIXED: If availableDeviceIds is empty or not provided, show all devices (fallback)
+  const devices = availableDeviceIds.length > 0 
+    ? allDevices.filter(d => availableDeviceIds.includes(d.id))
+    : allDevices;
 
   // Get products to check if gallery should be shown
   const { data: products = [] } = useQuery({

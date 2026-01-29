@@ -78,19 +78,45 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  // FIXED: Correct path resolution - dist/public is relative to project root, not server directory
+  // import.meta.dirname in compiled code points to dist/, so we need to go up one level
+  const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+  
+  // Alternative: use process.cwd() to get project root
+  // const distPath = path.resolve(process.cwd(), "dist", "public");
 
   if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
-    );
+    // FIXED: Better error message with actual path
+    const errorMsg = `Could not find the build directory: ${distPath}, make sure to build the client first (npm run build)`;
+    console.error(`❌ [serveStatic] ${errorMsg}`);
+    console.error(`❌ [serveStatic] Current working directory: ${process.cwd()}`);
+    console.error(`❌ [serveStatic] import.meta.dirname: ${import.meta.dirname}`);
+    throw new Error(errorMsg);
   }
 
+  console.log(`✅ [serveStatic] Serving static files from: ${distPath}`);
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
   app.use("*", async (req, res) => {
     const indexPath = path.resolve(distPath, "index.html");
+    
+    // FIXED: Better error handling
+    if (!fs.existsSync(indexPath)) {
+      console.error(`❌ [serveStatic] index.html not found at: ${indexPath}`);
+      res.status(500).send(`
+        <html>
+          <head><title>Build Error</title></head>
+          <body>
+            <h1>Build Error</h1>
+            <p>index.html not found at: ${indexPath}</p>
+            <p>Please run: npm run build</p>
+          </body>
+        </html>
+      `);
+      return;
+    }
+    
     let html = await fs.promises.readFile(indexPath, "utf-8");
     
     // Inject CSRF token for client-side use

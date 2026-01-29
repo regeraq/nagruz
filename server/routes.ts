@@ -89,12 +89,22 @@ async function sendEmail(to: string, subject: string, html: string) {
       });
       
       // Special handling for domain verification error
-      if (data.message && data.message.includes("domain is not verified")) {
+      if (data.message && (data.message.includes("domain is not verified") || data.message.includes("You can only send testing emails"))) {
         console.error("⚠️ [sendEmail] DOMAIN VERIFICATION REQUIRED:");
         console.error("   Resend requires a verified domain to send to external emails.");
         console.error("   Please verify your domain at: https://resend.com/domains");
         console.error("   Current from email:", RESEND_FROM_EMAIL);
+        console.error("   Target email:", to);
+        console.error("   Error:", data.message);
         console.error("   See RESEND_DOMAIN_VERIFICATION.md for instructions");
+        
+        // FIXED: Return more helpful error message
+        return { 
+          success: false, 
+          error: "Domain verification required. Please verify your domain in Resend dashboard.",
+          requiresDomainVerification: true,
+          data 
+        };
       }
       
       return { success: false, error: data.message || "Failed to send email", data };
@@ -196,12 +206,22 @@ async function sendEmailWithAttachment(emailData: {
       });
       
       // Special handling for domain verification error
-      if (data.message && data.message.includes("domain is not verified")) {
+      if (data.message && (data.message.includes("domain is not verified") || data.message.includes("You can only send testing emails"))) {
         console.error("⚠️ [sendEmailWithAttachment] DOMAIN VERIFICATION REQUIRED:");
         console.error("   Resend requires a verified domain to send to external emails.");
         console.error("   Please verify your domain at: https://resend.com/domains");
         console.error("   Current from email:", RESEND_FROM_EMAIL);
+        console.error("   Target email:", emailData.to);
+        console.error("   Error:", data.message);
         console.error("   See RESEND_DOMAIN_VERIFICATION.md for instructions");
+        
+        // FIXED: Return more helpful error message
+        return { 
+          success: false, 
+          error: "Domain verification required. Please verify your domain in Resend dashboard.",
+          requiresDomainVerification: true,
+          data 
+        };
       }
       
       return { success: false, error: data.message || "Failed to send email", data };
@@ -607,6 +627,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const allProducts = await storage.getProducts();
         console.log(`📦 [GET /api/products] Got ${allProducts.length} total products from DB`);
         
+        // FIXED: Log product IDs for debugging
+        if (allProducts.length > 0) {
+          console.log(`📦 [GET /api/products] Product IDs:`, allProducts.map((p: any) => ({ id: p.id, name: p.name, isActive: p.isActive })));
+          
+          // FIXED: Check for expected products (nu-100, nu-200, nu-30)
+          const expectedIds = ['nu-100', 'nu-200', 'nu-30'];
+          const foundIds = allProducts.map((p: any) => p.id);
+          const missingIds = expectedIds.filter(id => !foundIds.includes(id));
+          if (missingIds.length > 0) {
+            console.warn(`⚠️ [GET /api/products] Missing expected products: ${missingIds.join(', ')}`);
+            console.warn(`⚠️ [GET /api/products] Found products: ${foundIds.join(', ')}`);
+          }
+        } else {
+          console.warn(`⚠️ [GET /api/products] No products found in database! Check if initAdmin was run.`);
+        }
+        
         products = allProducts.filter((p: any) => p.isActive !== false).map((p: any) => {
           let parsedImages: string[] = [];
           if (p.images) {
@@ -640,6 +676,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         
         console.log(`✅ [GET /api/products] Parsed ${products.length} active products, setting cache`);
+        
+        // FIXED: Warn if no active products found
+        if (products.length === 0 && allProducts.length > 0) {
+          console.warn(`⚠️ [GET /api/products] No active products found! All ${allProducts.length} products are inactive.`);
+        } else if (products.length === 0) {
+          console.error(`❌ [GET /api/products] No products in database! Run initAdmin to create default products.`);
+        }
+        
         if (!cacheBust) {
           cache.set(cacheKey, products, CACHE_TTL.PRODUCTS);
         }

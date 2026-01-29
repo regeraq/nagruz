@@ -727,118 +727,149 @@ export default function Admin() {
 
             {/* User Activity Chart */}
             {userActivityByDay && userActivityByDay.length > 0 && (
-              <Card className="border-2 border-primary/20 shadow-lg">
-                <CardHeader className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                        📊 Активность пользователей
+              <Card className="border border-border/50 shadow-xl backdrop-blur-sm bg-gradient-to-br from-card/50 via-card to-card/30 overflow-hidden">
+                <CardHeader className="relative pb-6 pt-6 px-6 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent border-b border-border/50">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent opacity-50"></div>
+                  <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/80 bg-clip-text text-transparent">
+                        Активность пользователей
                       </CardTitle>
-                      <CardDescription className="mt-2 text-base">
-                        Анализ регистраций и входов за последние 30 дней
+                      <CardDescription className="text-sm sm:text-base text-muted-foreground/80">
+                        Динамика регистраций и входов за последние 30 дней
                       </CardDescription>
                     </div>
-                    <div className="flex gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-600"></div>
-                        <span className="font-medium">Регистрации</span>
+                    <div className="flex flex-wrap gap-3 sm:gap-4">
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+                        <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 shadow-sm"></div>
+                        <span className="text-xs sm:text-sm font-medium text-blue-600 dark:text-blue-400">Регистрации</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-gradient-to-r from-green-500 to-green-600"></div>
-                        <span className="font-medium">Входы</span>
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-sm">
+                        <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-sm"></div>
+                        <span className="text-xs sm:text-sm font-medium text-emerald-600 dark:text-emerald-400">Входы</span>
                       </div>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="p-6 bg-gradient-to-br from-background via-background to-muted/20">
+                <CardContent className="p-6 sm:p-8 bg-gradient-to-b from-transparent via-background/50 to-background">
                   <ChartContainer
                     config={{
                       registrations: { 
                         label: "Регистрации", 
-                        color: "hsl(217, 91%, 60%)" // Blue
+                        color: "hsl(199, 89%, 48%)" // Softer blue
                       },
                       logins: { 
                         label: "Входы", 
-                        color: "hsl(142, 76%, 36%)" // Green
+                        color: "hsl(160, 84%, 39%)" // Softer green
                       },
                     }}
-                    className="min-h-[400px] w-full"
+                    className="min-h-[380px] sm:min-h-[420px] w-full"
                   >
                     <AreaChart 
                       data={userActivityByDay}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                      margin={{ top: 10, right: 10, left: 0, bottom: 10 }}
                     >
                       <defs>
                         <linearGradient id="colorRegistrations" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.6}/>
-                          <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.1}/>
+                          <stop offset="0%" stopColor="hsl(199, 89%, 48%)" stopOpacity={0.4}/>
+                          <stop offset="50%" stopColor="hsl(199, 89%, 48%)" stopOpacity={0.2}/>
+                          <stop offset="100%" stopColor="hsl(199, 89%, 48%)" stopOpacity={0.05}/>
                         </linearGradient>
                         <linearGradient id="colorLogins" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.6}/>
-                          <stop offset="95%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.1}/>
+                          <stop offset="0%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.4}/>
+                          <stop offset="50%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.2}/>
+                          <stop offset="100%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.05}/>
                         </linearGradient>
+                        <filter id="glow">
+                          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                          <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                          </feMerge>
+                        </filter>
                       </defs>
                       <CartesianGrid 
-                        strokeDasharray="3 3" 
+                        strokeDasharray="2 2" 
                         vertical={false}
                         stroke="hsl(var(--border))"
-                        opacity={0.3}
+                        opacity={0.2}
+                        strokeWidth={1}
                       />
                       <XAxis
                         dataKey="date"
                         tickLine={false}
                         axisLine={false}
-                        tickMargin={12}
+                        tickMargin={10}
                         tickFormatter={(value) => format(new Date(value), "dd.MM", { locale: ru })}
-                        style={{ fontSize: '12px', fontWeight: 500 }}
+                        style={{ fontSize: '11px', fontWeight: 400, fill: 'hsl(var(--muted-foreground))' }}
+                        interval="preserveStartEnd"
                       />
                       <YAxis 
                         tickLine={false} 
                         axisLine={false} 
-                        tickMargin={12}
-                        style={{ fontSize: '12px', fontWeight: 500 }}
+                        tickMargin={8}
+                        style={{ fontSize: '11px', fontWeight: 400, fill: 'hsl(var(--muted-foreground))' }}
+                        width={40}
                       />
                       <ChartTooltip 
-                        cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 2 }}
+                        cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1.5, strokeDasharray: "5 5" }}
                         content={<ChartTooltipContent 
-                          className="bg-background border-2 border-primary/20 shadow-xl rounded-lg"
+                          className="bg-background/95 backdrop-blur-md border border-border/50 shadow-2xl rounded-xl p-3"
                           labelFormatter={(value) => format(new Date(value), "dd MMMM yyyy", { locale: ru })}
                         />} 
                       />
                       <Area
                         dataKey="registrations"
-                        type="monotone"
+                        type="natural"
                         fill="url(#colorRegistrations)"
                         fillOpacity={1}
-                        stroke="hsl(217, 91%, 60%)"
-                        strokeWidth={3}
-                        dot={{ fill: "hsl(217, 91%, 60%)", strokeWidth: 2, r: 4 }}
-                        activeDot={{ r: 6, strokeWidth: 2 }}
+                        stroke="hsl(199, 89%, 48%)"
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 2, fill: "hsl(199, 89%, 48%)", stroke: "white" }}
+                        animationDuration={800}
+                        animationBegin={0}
                       />
                       <Area
                         dataKey="logins"
-                        type="monotone"
+                        type="natural"
                         fill="url(#colorLogins)"
                         fillOpacity={1}
-                        stroke="hsl(142, 76%, 36%)"
-                        strokeWidth={3}
-                        dot={{ fill: "hsl(142, 76%, 36%)", strokeWidth: 2, r: 4 }}
-                        activeDot={{ r: 6, strokeWidth: 2 }}
+                        stroke="hsl(160, 84%, 39%)"
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 2, fill: "hsl(160, 84%, 39%)", stroke: "white" }}
+                        animationDuration={800}
+                        animationBegin={100}
                       />
                     </AreaChart>
                   </ChartContainer>
-                  <div className="mt-6 grid grid-cols-2 gap-4 pt-4 border-t border-border">
-                    <div className="text-center p-4 rounded-lg bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20">
-                      <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                        {userActivityByDay.reduce((sum: number, day: any) => sum + (day.registrations || 0), 0)}
+                  <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6 border-t border-border/50">
+                    <div className="group relative overflow-hidden rounded-xl p-5 bg-gradient-to-br from-blue-50/50 via-blue-50/30 to-transparent dark:from-blue-950/20 dark:via-blue-950/10 dark:to-transparent border border-blue-200/30 dark:border-blue-800/30 backdrop-blur-sm hover:border-blue-300/50 dark:hover:border-blue-700/50 transition-all duration-300">
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                      <div className="relative">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-2 h-2 rounded-full bg-gradient-to-br from-blue-400 to-blue-600"></div>
+                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Регистрации</span>
+                        </div>
+                        <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
+                          {userActivityByDay.reduce((sum: number, day: any) => sum + (day.registrations || 0), 0)}
+                        </div>
+                        <div className="text-xs sm:text-sm text-muted-foreground/70 mt-1">за весь период</div>
                       </div>
-                      <div className="text-sm text-muted-foreground mt-1">Всего регистраций</div>
                     </div>
-                    <div className="text-center p-4 rounded-lg bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/20">
-                      <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                        {userActivityByDay.reduce((sum: number, day: any) => sum + (day.logins || 0), 0)}
+                    <div className="group relative overflow-hidden rounded-xl p-5 bg-gradient-to-br from-emerald-50/50 via-emerald-50/30 to-transparent dark:from-emerald-950/20 dark:via-emerald-950/10 dark:to-transparent border border-emerald-200/30 dark:border-emerald-800/30 backdrop-blur-sm hover:border-emerald-300/50 dark:hover:border-emerald-700/50 transition-all duration-300">
+                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                      <div className="relative">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-2 h-2 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600"></div>
+                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Входы</span>
+                        </div>
+                        <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-emerald-600 to-emerald-500 bg-clip-text text-transparent">
+                          {userActivityByDay.reduce((sum: number, day: any) => sum + (day.logins || 0), 0)}
+                        </div>
+                        <div className="text-xs sm:text-sm text-muted-foreground/70 mt-1">за весь период</div>
                       </div>
-                      <div className="text-sm text-muted-foreground mt-1">Всего входов</div>
                     </div>
                   </div>
                 </CardContent>
