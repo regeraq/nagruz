@@ -648,12 +648,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (p.images) {
             try {
               if (typeof p.images === 'string') {
+                const trimmed = p.images.trim();
                 // Try to parse as JSON
-                if (p.images.trim().startsWith('[') || p.images.trim().startsWith('"')) {
-                  parsedImages = JSON.parse(p.images);
-                } else {
+                if (trimmed.startsWith('[') || trimmed.startsWith('"')) {
+                  try {
+                    const parsed = JSON.parse(trimmed);
+                    parsedImages = Array.isArray(parsed) ? parsed : [parsed];
+                  } catch (parseError) {
+                    console.warn(`⚠️ [GET /api/products] JSON parse failed for product ${p.id}, treating as single URL:`, parseError);
+                    parsedImages = trimmed ? [trimmed] : [];
+                  }
+                } else if (trimmed.length > 0) {
                   // If it's not JSON, treat as single image URL
-                  parsedImages = [p.images];
+                  parsedImages = [trimmed];
+                } else {
+                  parsedImages = [];
                 }
               } else if (Array.isArray(p.images)) {
                 parsedImages = p.images;
@@ -661,12 +670,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 parsedImages = [];
               }
               
-              // Ensure all images are strings (URLs)
-              parsedImages = parsedImages.filter((img: any) => img && typeof img === 'string' && img.length > 0);
+              // Ensure all images are valid strings (URLs) - filter null/undefined and trim
+              parsedImages = parsedImages
+                .filter((img: any) => img !== null && img !== undefined)
+                .map((img: any) => String(img).trim())
+                .filter((img: string) => img.length > 0);
             } catch (e) {
-              console.error(`❌ [GET /api/products] Failed to parse images for product ${p.id}:`, e, 'Raw images:', p.images);
+              console.error(`❌ [GET /api/products] Failed to parse images for product ${p.id}:`, e);
+              console.error(`❌ [GET /api/products] Raw images type:`, typeof p.images);
+              console.error(`❌ [GET /api/products] Raw images value (first 100 chars):`, typeof p.images === 'string' ? p.images.substring(0, 100) : p.images);
               parsedImages = [];
             }
+          } else {
+            console.log(`📸 [GET /api/products] Product ${p.id} (${p.name}): No images field`);
           }
           // Log image parsing result
           console.log(`📸 [GET /api/products] Product ${p.id} (${p.name}): ${parsedImages.length} images parsed`, {

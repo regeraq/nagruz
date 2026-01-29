@@ -18,7 +18,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertContactSubmissionSchema, type InsertContactSubmission, type Product } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Navigation } from "@/components/navigation";
@@ -138,6 +138,14 @@ export default function Home() {
     }
   }, [selectedDevice]);
 
+  const queryClient = useQueryClient();
+  
+  // FIXED: Clear cache on mount to ensure fresh data
+  useEffect(() => {
+    console.log(`🧹 [Home] Clearing products cache on mount`);
+    queryClient.removeQueries({ queryKey: ['/api/products'] });
+  }, [queryClient]);
+
   // FIXED: Products API is public and doesn't require authentication
   // Use direct fetch instead of getQueryFn to avoid token issues
   console.log(`🔧 [Home] Initializing products query at ${new Date().toISOString()}`);
@@ -145,7 +153,7 @@ export default function Home() {
     queryKey: ['/api/products'],
     enabled: true, // FIXED: Explicitly enable the query
     queryFn: async () => {
-      console.log(`📥 [Home] queryFn called - Fetching products from /api/products`);
+      console.log(`📥 [Home] queryFn called at ${new Date().toISOString()} - Fetching products from /api/products`);
       try {
         // FIXED: Don't send Authorization header - products are public
         const res = await fetch("/api/products", {
@@ -347,36 +355,43 @@ export default function Home() {
     
     // If already an array, return it directly (server should send arrays)
     if (Array.isArray(rawImages)) {
-      const filtered = rawImages.filter((img: any) => img && typeof img === 'string' && img.length > 0);
+      const filtered = rawImages
+        .filter((img: any) => img !== null && img !== undefined)
+        .map((img: any) => String(img).trim())
+        .filter((img: string) => img.length > 0);
       console.log(`✅ [Home] Images already array: ${filtered.length} valid images out of ${rawImages.length}`);
       return filtered;
     }
     
     // If string, try to parse
     if (typeof rawImages === 'string') {
+      const trimmed = rawImages.trim();
       // If empty string, return empty array
-      if (!rawImages.trim()) {
+      if (!trimmed) {
         console.log(`⚠️ [Home] Empty images string for ${selectedDevice}`);
         return [];
       }
       
       try {
         // Try to parse as JSON
-        if (rawImages.trim().startsWith('[') || rawImages.trim().startsWith('"')) {
-          const parsed = JSON.parse(rawImages);
+        if (trimmed.startsWith('[') || trimmed.startsWith('"')) {
+          const parsed = JSON.parse(trimmed);
           const result = Array.isArray(parsed) ? parsed : [parsed];
-          const filtered = result.filter((img: any) => img && typeof img === 'string' && img.length > 0);
+          const filtered = result
+            .filter((img: any) => img !== null && img !== undefined)
+            .map((img: any) => String(img).trim())
+            .filter((img: string) => img.length > 0);
           console.log(`✅ [Home] Parsed JSON string to array: ${filtered.length} valid images`);
           return filtered;
         } else {
           // Single image URL, not JSON
-          console.log(`✅ [Home] Single image URL (not JSON): ${rawImages}`);
-          return [rawImages];
+          console.log(`✅ [Home] Single image URL (not JSON): ${trimmed}`);
+          return [trimmed];
         }
       } catch (e) {
         // If JSON parse fails, treat as single image URL
         console.log(`⚠️ [Home] JSON parse failed, treating as single URL:`, e);
-        return [rawImages];
+        return trimmed ? [trimmed] : [];
       }
     }
     
@@ -1211,7 +1226,8 @@ export default function Home() {
         });
         return null;
       })()}
-      {!isLoadingProducts && productImages.length > 0 && (
+      {/* Gallery - Show for ALL users (registered or not) if we have images OR if product exists */}
+      {!isLoadingProducts && (productImages.length > 0 || (currentProduct && products.length > 0)) && (
         <section id="gallery" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
             <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
