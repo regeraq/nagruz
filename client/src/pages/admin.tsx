@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import { 
   Package, Users, BarChart3, FileText, Settings, Plus, Edit2, Trash2, 
   Save, X, Search, Shield, Tag, Mail, UserPlus, Image, Bell, Upload, Database, Download,
-  FileText as FileTextIcon, Phone, Cookie, CheckCircle
+  FileText as FileTextIcon, Phone, Cookie, CheckCircle, TrendingUp, Activity,
+  Crown, Zap, ChevronRight, Eye, Clock, AlertTriangle, Home, LogOut,
+  DollarSign, ShoppingCart, UserCheck, Sparkles
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale/ru";
 import { apiRequest } from "@/lib/queryClient";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -800,12 +805,32 @@ export default function Admin() {
   const isAdmin = (userData as any)?.role === "admin" || (userData as any)?.role === "superadmin";
   const isSuperAdmin = (userData as any)?.role === "superadmin";
 
+  // Calculate stats
+  const pendingOrders = useMemo(() => allOrders.filter((o: any) => o.paymentStatus === 'pending').length, [allOrders]);
+  const newUsersThisWeek = useMemo(() => {
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    return allUsers.filter((u: any) => new Date(u.createdAt) > weekAgo).length;
+  }, [allUsers]);
+
   if (!isAdmin) {
     return (
-      <div className="container mx-auto px-4 py-8 pt-24">
-        <Alert>
-          <AlertDescription>У вас нет доступа к админ-панели</AlertDescription>
-        </Alert>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-red-50/20 to-orange-50/10 dark:from-slate-950 dark:via-red-950/10 dark:to-orange-950/5 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full border-0 shadow-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+          <CardContent className="pt-8 pb-8 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center">
+              <Shield className="w-10 h-10 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Доступ запрещён</h2>
+            <p className="text-muted-foreground mb-6">У вас нет прав для доступа к админ-панели</p>
+            <Button 
+              onClick={() => setLocation("/")} 
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+            >
+              Вернуться на главную
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -813,163 +838,319 @@ export default function Admin() {
   const admins = allUsers.filter((u: any) => ["admin", "superadmin", "moderator"].includes(u.role));
 
   const navItems = [
-    { id: "analytics", label: "Аналитика", icon: BarChart3 },
-    { id: "products", label: "Товары", icon: Package },
-    { id: "users", label: "Пользователи", icon: Users },
-    { id: "admins", label: "Админы", icon: Shield },
-    { id: "orders", label: "Заказы", icon: FileText },
-    { id: "contacts", label: "Заявки", icon: Mail },
-    { id: "promocodes", label: "Промокоды", icon: Tag },
-    { id: "content", label: "Контент", icon: FileTextIcon },
-    { id: "site-contacts", label: "Контакты", icon: Phone },
-    { id: "compliance", label: "Compliance", icon: Cookie },
-    { id: "privacy", label: "Политика", icon: Shield },
-    { id: "notifications", label: "Уведомления", icon: Bell },
-    { id: "settings", label: "Настройки", icon: Settings },
-    { id: "database", label: "БД", icon: Database },
+    { id: "analytics", label: "Аналитика", icon: BarChart3, color: "from-blue-500 to-indigo-500" },
+    { id: "products", label: "Товары", icon: Package, color: "from-violet-500 to-purple-500", badge: allProducts.length },
+    { id: "users", label: "Пользователи", icon: Users, color: "from-cyan-500 to-blue-500", badge: allUsers.length },
+    { id: "admins", label: "Администраторы", icon: Crown, color: "from-amber-500 to-orange-500", badge: admins.length },
+    { id: "orders", label: "Заказы", icon: ShoppingCart, color: "from-emerald-500 to-teal-500", badge: allOrders.length },
+    { id: "contacts", label: "Заявки", icon: Mail, color: "from-pink-500 to-rose-500", badge: contactSubmissions.length },
+    { id: "promocodes", label: "Промокоды", icon: Tag, color: "from-lime-500 to-green-500" },
+    { id: "content", label: "Контент", icon: FileTextIcon, color: "from-slate-500 to-gray-600" },
+    { id: "site-contacts", label: "Контакты сайта", icon: Phone, color: "from-teal-500 to-cyan-500" },
+    { id: "compliance", label: "Compliance", icon: Cookie, color: "from-orange-500 to-amber-500" },
+    { id: "privacy", label: "Политика", icon: Shield, color: "from-red-500 to-rose-500" },
+    { id: "notifications", label: "Уведомления", icon: Bell, color: "from-yellow-500 to-amber-500" },
+    { id: "settings", label: "Настройки", icon: Settings, color: "from-gray-500 to-slate-600" },
+    { id: "database", label: "База данных", icon: Database, color: "from-indigo-500 to-violet-500" },
   ];
 
+  const getUserInitials = () => {
+    if (userData?.firstName && userData?.lastName) {
+      return `${userData.firstName[0]}${userData.lastName[0]}`.toUpperCase();
+    }
+    return userData?.email?.[0]?.toUpperCase() || 'A';
+  };
+
   return (
-    <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8 pt-20 sm:pt-24">
-      <div className="max-w-[1600px] mx-auto">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">Админ-панель</h1>
-          <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
-            <Badge variant="outline" className="text-xs sm:text-sm">{userData?.role}</Badge>
-            <Button variant="outline" onClick={() => setLocation("/")} className="text-xs sm:text-sm h-9 sm:h-10 flex-1 sm:flex-none">
-              На главную
-            </Button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/10">
+      {/* Hero Admin Header */}
+      <div className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900" />
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
+        
+        {/* Animated background elements */}
+        <div className="absolute top-10 left-10 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-10 right-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        
+        <div className="relative container mx-auto px-4 py-6 pt-20">
+          <div className="max-w-[1600px] mx-auto">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+              {/* Admin Info */}
+              <div className="flex items-center gap-4">
+                <div className="relative group">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-full blur opacity-40 group-hover:opacity-60 transition duration-500" />
+                  <Avatar className="relative w-16 h-16 lg:w-20 lg:h-20 border-4 border-white/20 shadow-2xl">
+                    <AvatarImage src={userData?.avatar || undefined} className="object-cover" />
+                    <AvatarFallback className="text-xl lg:text-2xl font-bold bg-gradient-to-br from-amber-500 to-orange-600 text-white">
+                      {getUserInitials()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
+                    <Crown className="w-3 h-3 text-white" />
+                  </div>
+                </div>
+                
+                <div className="text-white">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h1 className="text-2xl lg:text-3xl font-bold">Панель управления</h1>
+                    <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 border-0 text-white text-xs">
+                      {userData?.role === 'superadmin' ? 'Super Admin' : 'Admin'}
+                    </Badge>
+                  </div>
+                  <p className="text-white/60 text-sm">
+                    {userData?.email}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Quick Stats */}
+              <div className="flex flex-wrap gap-3">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
+                  <Package className="w-4 h-4 text-violet-400" />
+                  <span className="text-white/80 text-sm">{allProducts.length} товаров</span>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
+                  <Users className="w-4 h-4 text-cyan-400" />
+                  <span className="text-white/80 text-sm">{allUsers.length} пользователей</span>
+                </div>
+                {pendingOrders > 0 && (
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/20 backdrop-blur-sm border border-amber-500/30">
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                    <span className="text-amber-300 text-sm">{pendingOrders} ожидают</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setLocation("/")}
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
+                >
+                  <Home className="w-4 h-4 mr-2" />
+                  На сайт
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setLocation("/profile")}
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Профиль
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
+        
+        {/* Wave divider */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full">
+            <path 
+              d="M0 60V30C240 50 480 10 720 30C960 50 1200 10 1440 30V60H0Z" 
+              className="fill-slate-50 dark:fill-slate-950"
+            />
+          </svg>
+        </div>
+      </div>
 
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Sidebar Navigation */}
-          <aside className="w-full lg:w-64 flex-shrink-0">
-            <nav className="bg-card border border-border rounded-lg p-2 space-y-1 sticky top-24">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      activeTab === item.id
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </aside>
+      <div className="container mx-auto px-4 -mt-4 relative z-10 pb-12">
+        <div className="max-w-[1600px] mx-auto">
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Modern Sidebar Navigation */}
+            <aside className="w-full lg:w-72 flex-shrink-0">
+              <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl sticky top-20 overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                    Навигация
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-2">
+                  <nav className="space-y-1">
+                    {navItems.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveTab(item.id)}
+                          className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 group ${
+                            isActive
+                              ? `bg-gradient-to-r ${item.color} text-white shadow-lg`
+                              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`p-1.5 rounded-lg ${isActive ? 'bg-white/20' : 'bg-muted/50 group-hover:bg-muted'}`}>
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <span>{item.label}</span>
+                          </div>
+                          {item.badge !== undefined && item.badge > 0 && (
+                            <Badge 
+                              variant={isActive ? "outline" : "secondary"} 
+                              className={`text-xs ${isActive ? 'bg-white/20 border-white/30 text-white' : ''}`}
+                            >
+                              {item.badge}
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </nav>
+                </CardContent>
+                
+                {/* System Status */}
+                <div className="p-4 border-t border-border/50">
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/50">
+                    <div className="relative">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                      <div className="absolute inset-0 w-3 h-3 rounded-full bg-emerald-500 animate-ping opacity-50" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Система работает</p>
+                      <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70">Все сервисы активны</p>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </aside>
 
-          {/* Main Content */}
-          <main className="flex-1 min-w-0">
+            {/* Main Content */}
+            <main className="flex-1 min-w-0 space-y-6">
 
             {/* Analytics Section */}
             {activeTab === "analytics" && (
               <div className="space-y-6">
+                {/* Welcome Card */}
+                <Card className="border-0 shadow-xl bg-gradient-to-br from-white/80 to-white/60 dark:from-slate-900/80 dark:to-slate-900/60 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-500/10 to-indigo-500/5 rounded-full blur-3xl -mr-32 -mt-32" />
+                  <CardContent className="p-6 relative">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-2xl font-bold mb-1">
+                          Добро пожаловать, {userData?.firstName || 'Администратор'}! 👋
+                        </h2>
+                        <p className="text-muted-foreground">
+                          Сегодня {format(new Date(), "d MMMM yyyy", { locale: ru })} • Обзор вашей статистики
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={() => setShowNotificationDialog(true)}
+                          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                        >
+                          <Bell className="w-4 h-4 mr-2" />
+                          Уведомление
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
             
-            {/* Modern Stats Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Products Card */}
-              <div className="group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-violet-500/10 via-violet-500/5 to-transparent border border-violet-500/20 backdrop-blur-xl hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-500">
-                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-violet-500/20 to-transparent rounded-bl-[100px] transition-all duration-500 group-hover:w-24 group-hover:h-24"></div>
-                <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-violet-500/10 rounded-full blur-2xl"></div>
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="p-2.5 rounded-xl bg-violet-500/20 backdrop-blur-sm">
-                      <Package className="w-5 h-5 text-violet-500" />
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-violet-500/80">
-                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
-                      Live
-                    </div>
-                  </div>
-                  <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider mb-1">Товары</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-violet-600 to-violet-400 bg-clip-text text-transparent">{allProducts.length}</p>
-                  <div className="mt-3 h-1 rounded-full bg-violet-500/10 overflow-hidden">
-                    <div className="h-full w-3/4 rounded-full bg-gradient-to-r from-violet-600 to-violet-400 animate-pulse"></div>
-                  </div>
-                </div>
-              </div>
+                {/* Modern Stats Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Products Card */}
+                  <Card className="group relative overflow-hidden border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-500">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-violet-500/20 to-transparent rounded-bl-[100px]" />
+                    <CardContent className="p-6 relative">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg group-hover:scale-110 transition-transform">
+                          <Package className="w-6 h-6 text-white" />
+                        </div>
+                        <Badge variant="outline" className="border-violet-300 text-violet-600 dark:text-violet-400">
+                          <Activity className="w-3 h-3 mr-1" />
+                          Live
+                        </Badge>
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Товаров</p>
+                      <p className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+                        {allProducts.length}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {allProducts.filter((p: any) => p.isActive).length} активных
+                      </p>
+                    </CardContent>
+                  </Card>
 
-              {/* Users Card */}
-              <div className="group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-cyan-500/10 via-cyan-500/5 to-transparent border border-cyan-500/20 backdrop-blur-xl hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/10 transition-all duration-500">
-                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-transparent rounded-bl-[100px] transition-all duration-500 group-hover:w-24 group-hover:h-24"></div>
-                <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-cyan-500/10 rounded-full blur-2xl"></div>
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="p-2.5 rounded-xl bg-cyan-500/20 backdrop-blur-sm">
-                      <Users className="w-5 h-5 text-cyan-500" />
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-cyan-500/80">
-                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
-                      Active
-                    </div>
-                  </div>
-                  <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider mb-1">Пользователи</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-cyan-600 to-cyan-400 bg-clip-text text-transparent">{allUsers.length}</p>
-                  <div className="mt-3 h-1 rounded-full bg-cyan-500/10 overflow-hidden">
-                    <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-cyan-600 to-cyan-400"></div>
-                  </div>
-                </div>
-              </div>
+                  {/* Users Card */}
+                  <Card className="group relative overflow-hidden border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-500">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-cyan-500/20 to-transparent rounded-bl-[100px]" />
+                    <CardContent className="p-6 relative">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg group-hover:scale-110 transition-transform">
+                          <Users className="w-6 h-6 text-white" />
+                        </div>
+                        {newUsersThisWeek > 0 && (
+                          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+                            <TrendingUp className="w-3 h-3 mr-1" />
+                            +{newUsersThisWeek}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Пользователей</p>
+                      <p className="text-4xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
+                        {allUsers.length}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {admins.length} администраторов
+                      </p>
+                    </CardContent>
+                  </Card>
 
-              {/* Orders Card */}
-              <div className="group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 backdrop-blur-xl hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-500">
-                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-amber-500/20 to-transparent rounded-bl-[100px] transition-all duration-500 group-hover:w-24 group-hover:h-24"></div>
-                <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-amber-500/10 rounded-full blur-2xl"></div>
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="p-2.5 rounded-xl bg-amber-500/20 backdrop-blur-sm">
-                      <FileText className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600">
-                      +{allOrders.filter((o: any) => {
-                        const orderDate = new Date(o.createdAt);
-                        const weekAgo = new Date();
-                        weekAgo.setDate(weekAgo.getDate() - 7);
-                        return orderDate > weekAgo;
-                      }).length} за неделю
-                    </Badge>
-                  </div>
-                  <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider mb-1">Заказы</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-amber-400 bg-clip-text text-transparent">{allOrders.length}</p>
-                  <div className="mt-3 h-1 rounded-full bg-amber-500/10 overflow-hidden">
-                    <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-amber-600 to-amber-400"></div>
-                  </div>
-                </div>
-              </div>
+                  {/* Orders Card */}
+                  <Card className="group relative overflow-hidden border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-500">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-500/20 to-transparent rounded-bl-[100px]" />
+                    <CardContent className="p-6 relative">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg group-hover:scale-110 transition-transform">
+                          <ShoppingCart className="w-6 h-6 text-white" />
+                        </div>
+                        {pendingOrders > 0 && (
+                          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 animate-pulse">
+                            <Clock className="w-3 h-3 mr-1" />
+                            {pendingOrders}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Заказов</p>
+                      <p className="text-4xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
+                        {allOrders.length}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {allOrders.filter((o: any) => o.paymentStatus === 'paid' || o.paymentStatus === 'delivered').length} оплаченных
+                      </p>
+                    </CardContent>
+                  </Card>
 
-              {/* Revenue Card */}
-              <div className="group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/20 backdrop-blur-xl hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-500">
-                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-emerald-500/20 to-transparent rounded-bl-[100px] transition-all duration-500 group-hover:w-24 group-hover:h-24"></div>
-                <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-2xl"></div>
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="p-2.5 rounded-xl bg-emerald-500/20 backdrop-blur-sm">
-                      <BarChart3 className="w-5 h-5 text-emerald-500" />
-                    </div>
-                    <div className="text-xs text-emerald-500/80 font-medium">RUB</div>
-                  </div>
-                  <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider mb-1">Выручка</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-emerald-400 bg-clip-text text-transparent">
-                    {Number(totalRevenue).toLocaleString('ru-RU')} ₽
-                  </p>
-                  <div className="mt-3 h-1 rounded-full bg-emerald-500/10 overflow-hidden">
-                    <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"></div>
-                  </div>
+                  {/* Revenue Card */}
+                  <Card className="group relative overflow-hidden border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-500">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-500/20 to-transparent rounded-bl-[100px]" />
+                    <CardContent className="p-6 relative">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg group-hover:scale-110 transition-transform">
+                          <DollarSign className="w-6 h-6 text-white" />
+                        </div>
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+                          RUB
+                        </Badge>
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Выручка</p>
+                      <p className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+                        {Number(totalRevenue).toLocaleString('ru-RU')} ₽
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Всего за период
+                      </p>
+                    </CardContent>
+                  </Card>
                 </div>
-              </div>
-            </div>
 
-            {/* User Activity Chart - Modern Design */}
-            {userActivityByDay && userActivityByDay.length > 0 && (
-              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-slate-800/95 border border-white/10 shadow-2xl">
+                {/* User Activity Chart - Modern Design */}
+                {userActivityByDay && userActivityByDay.length > 0 && (
+                  <Card className="border-0 shadow-xl overflow-hidden">
+                    <div className="relative rounded-2xl bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-slate-800/95 border border-white/10">
                 {/* Decorative Elements */}
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500"></div>
                 <div className="absolute top-20 right-10 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -1166,35 +1347,39 @@ export default function Admin() {
                       </p>
                       <p className="text-xs text-slate-400 mt-1">входов</p>
                     </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </Card>
             )}
 
             {/* Recent Orders - Modern Design */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-card via-card to-card/80 border border-border/50 shadow-xl">
-              <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+            <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
               
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
+              <CardHeader>
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10">
-                      <FileText className="w-5 h-5 text-primary" />
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 shadow-lg">
+                      <ShoppingCart className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold">Последние заказы</h3>
-                      <p className="text-xs text-muted-foreground">Показаны 5 последних</p>
+                      <CardTitle className="text-lg">Последние заказы</CardTitle>
+                      <CardDescription>Показаны 5 последних</CardDescription>
                     </div>
                   </div>
                   <Button 
                     variant="outline" 
                     size="sm" 
                     onClick={() => setActiveTab("orders")}
-                    className="text-xs"
+                    className="bg-white/50 dark:bg-slate-800/50"
                   >
+                    <Eye className="w-4 h-4 mr-2" />
                     Все заказы
                   </Button>
                 </div>
+              </CardHeader>
+              <CardContent>
 
                 {allOrders.length > 0 ? (
                   <div className="space-y-3">
@@ -1259,28 +1444,34 @@ export default function Admin() {
                   </div>
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
-                    <FileText className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                    <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-30" />
                     <p>Заказов пока нет</p>
                   </div>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
               </div>
             )}
 
             {/* Products Section */}
             {activeTab === "products" && (
-              <div className="mt-4 sm:mt-6">
-            <Card>
-              <CardHeader className="p-4 sm:p-6">
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-                    <div>
-                      <CardTitle className="text-base sm:text-lg md:text-xl">Управление товарами</CardTitle>
-                      <CardDescription className="text-xs sm:text-sm">
-                        Всего товаров: {allProducts.length} | Показано: {products.length}
-                      </CardDescription>
-                    </div>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500" />
+                  <CardHeader>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 shadow-lg">
+                            <Package className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-xl">Управление товарами</CardTitle>
+                            <CardDescription>
+                              Всего: {allProducts.length} | Показано: {products.length} | Активных: {allProducts.filter((p: any) => p.isActive).length}
+                            </CardDescription>
+                          </div>
+                        </div>
                     <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                       {selectedProducts.size > 0 && (
                         <Button variant="destructive" onClick={() => deleteProducts.mutate(Array.from(selectedProducts))}>
@@ -1412,20 +1603,20 @@ export default function Admin() {
                       </DialogContent>
                     </Dialog>
                   </div>
-                  </div>
-                  {/* Search bar */}
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Поиск по названию, артикулу, категории..."
-                      value={productSearchTerm}
-                      onChange={(e) => setProductSearchTerm(e.target.value)}
-                      className="pl-10 w-full sm:w-80"
-                    />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6">
+                      </div>
+                      {/* Search bar */}
+                      <div className="relative flex-1 sm:flex-none">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Поиск по названию, артикулу, категории..."
+                          value={productSearchTerm}
+                          onChange={(e) => setProductSearchTerm(e.target.value)}
+                          className="pl-10 w-full sm:w-80 bg-muted/50 border-0"
+                        />
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
                 <div className="overflow-x-auto -mx-4 sm:mx-0">
                   <div className="inline-block min-w-full align-middle px-4 sm:px-0">
                     <Table>
@@ -1912,24 +2103,33 @@ export default function Admin() {
 
             {/* Users Section */}
             {activeTab === "users" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Управление пользователями</CardTitle>
-                    <CardDescription>Просмотр и управление пользователями</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      placeholder="Поиск по email, имени..."
-                      className="w-64"
-                      value={userSearchTerm}
-                      onChange={(e) => setUserSearchTerm(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </CardHeader>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500" />
+                  <CardHeader>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 shadow-lg">
+                          <Users className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-xl">Управление пользователями</CardTitle>
+                          <CardDescription>
+                            Всего: {allUsers.length} | Показано: {users.length}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <div className="relative flex-1 sm:flex-none">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Поиск по email, имени..."
+                          className="pl-10 w-full sm:w-64 bg-muted/50 border-0"
+                          value={userSearchTerm}
+                          onChange={(e) => setUserSearchTerm(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
@@ -2010,22 +2210,28 @@ export default function Admin() {
 
             {/* Admins Section */}
             {activeTab === "admins" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Управление администраторами</CardTitle>
-                    <CardDescription>Создание и управление административными аккаунтами</CardDescription>
-                  </div>
-                  {isSuperAdmin && (
-                    <Dialog open={showCreateAdmin} onOpenChange={setShowCreateAdmin}>
-                      <DialogTrigger asChild>
-                        <Button>
-                          <UserPlus className="w-4 h-4 mr-2" />
-                          Создать администратора
-                        </Button>
-                      </DialogTrigger>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500" />
+                  <CardHeader>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg">
+                          <Crown className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-xl">Управление администраторами</CardTitle>
+                          <CardDescription>Создание и управление административными аккаунтами</CardDescription>
+                        </div>
+                      </div>
+                      {isSuperAdmin && (
+                        <Dialog open={showCreateAdmin} onOpenChange={setShowCreateAdmin}>
+                          <DialogTrigger asChild>
+                            <Button className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600">
+                              <UserPlus className="w-4 h-4 mr-2" />
+                              Создать администратора
+                            </Button>
+                          </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Создать администратора</DialogTitle>
@@ -2119,24 +2325,33 @@ export default function Admin() {
 
             {/* Orders Section */}
             {activeTab === "orders" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Управление заказами</CardTitle>
-                    <CardDescription>Просмотр и управление заказами</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      placeholder="Поиск по ID, клиенту..."
-                      className="w-64"
-                      value={orderSearchTerm}
-                      onChange={(e) => setOrderSearchTerm(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </CardHeader>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+                  <CardHeader>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 shadow-lg">
+                          <ShoppingCart className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-xl">Управление заказами</CardTitle>
+                          <CardDescription>
+                            Всего: {allOrders.length} | Показано: {orders.length} | Ожидают: {pendingOrders}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <div className="relative flex-1 sm:flex-none">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Поиск по ID, клиенту..."
+                          className="pl-10 w-full sm:w-64 bg-muted/50 border-0"
+                          value={orderSearchTerm}
+                          onChange={(e) => setOrderSearchTerm(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
@@ -2285,12 +2500,20 @@ export default function Admin() {
 
             {/* Contacts Section */}
             {activeTab === "contacts" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Заявки с сайта</CardTitle>
-                <CardDescription>Просмотр и управление контактными заявками</CardDescription>
-              </CardHeader>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-pink-500 via-rose-500 to-red-500" />
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 shadow-lg">
+                        <Mail className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl">Заявки с сайта</CardTitle>
+                        <CardDescription>Просмотр и управление контактными заявками ({contactSubmissions.length})</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
@@ -2337,21 +2560,27 @@ export default function Admin() {
 
             {/* Promocodes Section */}
             {activeTab === "promocodes" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Управление промокодами</CardTitle>
-                    <CardDescription>Создание и управление промокодами</CardDescription>
-                  </div>
-                  <Dialog open={showCreatePromo} onOpenChange={setShowCreatePromo}>
-                    <DialogTrigger asChild>
-                      <Button>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Создать промокод
-                      </Button>
-                    </DialogTrigger>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-lime-500 via-green-500 to-emerald-500" />
+                  <CardHeader>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-lime-500 to-green-500 shadow-lg">
+                          <Tag className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-xl">Управление промокодами</CardTitle>
+                          <CardDescription>Создание и управление промокодами ({promoCodes.length})</CardDescription>
+                        </div>
+                      </div>
+                      <Dialog open={showCreatePromo} onOpenChange={setShowCreatePromo}>
+                        <DialogTrigger asChild>
+                          <Button className="bg-gradient-to-r from-lime-500 to-green-500 hover:from-lime-600 hover:to-green-600">
+                            <Plus className="w-4 h-4 mr-2" />
+                            Создать промокод
+                          </Button>
+                        </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>Создать промокод</DialogTitle>
@@ -2448,12 +2677,20 @@ export default function Admin() {
 
             {/* Content Section */}
             {activeTab === "content" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Управление контентом сайта</CardTitle>
-                <CardDescription>Редактирование текстов и описаний на сайте</CardDescription>
-              </CardHeader>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-slate-500 via-gray-500 to-zinc-500" />
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-gradient-to-br from-slate-500 to-gray-600 shadow-lg">
+                        <FileTextIcon className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl">Управление контентом сайта</CardTitle>
+                        <CardDescription>Редактирование текстов и описаний на сайте</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
@@ -2576,12 +2813,20 @@ export default function Admin() {
 
             {/* Site Contacts Section */}
             {activeTab === "site-contacts" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Контакты сайта</CardTitle>
-                <CardDescription>Управление контактной информацией (телефон, email, соцсети)</CardDescription>
-              </CardHeader>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500" />
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 shadow-lg">
+                        <Phone className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl">Контакты сайта</CardTitle>
+                        <CardDescription>Управление контактной информацией (телефон, email, соцсети)</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid md:grid-cols-4 gap-4">
                   <div>
@@ -2710,12 +2955,20 @@ export default function Admin() {
 
             {/* Compliance Section */}
             {activeTab === "compliance" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Настройки соответствия РКН</CardTitle>
-                <CardDescription>Управление Cookie баннером и политиками</CardDescription>
-              </CardHeader>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500" />
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-lg">
+                        <Cookie className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl">Настройки соответствия РКН</CardTitle>
+                        <CardDescription>Управление Cookie баннером и политиками</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox
@@ -2780,14 +3033,22 @@ export default function Admin() {
 
             {/* Privacy Section */}
             {activeTab === "privacy" && (
-              <div className="mt-6">
-                <Card>
-              <CardHeader>
-                <CardTitle>Редактирование Политики конфиденциальности</CardTitle>
-                <CardDescription>
-                  Заполните данные оператора персональных данных для соответствия требованиям 152-ФЗ
-                </CardDescription>
-              </CardHeader>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-rose-500 to-pink-500" />
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-gradient-to-br from-red-500 to-rose-500 shadow-lg">
+                        <Shield className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl">Редактирование Политики конфиденциальности</CardTitle>
+                        <CardDescription>
+                          Заполните данные оператора персональных данных для соответствия требованиям 152-ФЗ
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
               <CardContent className="space-y-6">
                 <Alert>
                   <AlertDescription>
@@ -2929,20 +3190,29 @@ export default function Admin() {
 
             {/* Notifications Section */}
             {activeTab === "notifications" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Отправка уведомлений</CardTitle>
-                    <CardDescription>Отправка уведомлений пользователям через сайт и email</CardDescription>
-                  </div>
-                  <Button onClick={() => setShowNotificationDialog(true)}>
-                    <Bell className="w-4 h-4 mr-2" />
-                    Отправить уведомление
-                  </Button>
-                </div>
-              </CardHeader>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-500 via-amber-500 to-orange-500" />
+                  <CardHeader>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-500 shadow-lg">
+                          <Bell className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-xl">Отправка уведомлений</CardTitle>
+                          <CardDescription>Отправка уведомлений пользователям через сайт и email</CardDescription>
+                        </div>
+                      </div>
+                      <Button 
+                        onClick={() => setShowNotificationDialog(true)}
+                        className="bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600"
+                      >
+                        <Bell className="w-4 h-4 mr-2" />
+                        Отправить уведомление
+                      </Button>
+                    </div>
+                  </CardHeader>
               <CardContent>
                 <Alert>
                   <AlertDescription>
@@ -2957,13 +3227,32 @@ export default function Admin() {
 
             {/* Settings Section */}
             {activeTab === "settings" && (
-              <div className="mt-6">
-            <div className="grid grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>SEO настройки</CardTitle>
-                  <CardDescription>Метаданные для поисковых систем</CardDescription>
-                </CardHeader>
+              <div className="space-y-6">
+                {/* Page Header */}
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-500 via-slate-500 to-zinc-500" />
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-gradient-to-br from-gray-500 to-slate-600 shadow-lg">
+                        <Settings className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold">Настройки сайта</h2>
+                        <p className="text-muted-foreground text-sm">SEO и контактная информация</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Search className="w-5 h-5 text-blue-500" />
+                        SEO настройки
+                      </CardTitle>
+                      <CardDescription>Метаданные для поисковых систем</CardDescription>
+                    </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
                     <Label>Заголовок сайта</Label>
@@ -3044,12 +3333,20 @@ export default function Admin() {
 
             {/* Database Section */}
             {activeTab === "database" && (
-              <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Управление базой данных</CardTitle>
-                <CardDescription>Выгрузка и управление базой данных</CardDescription>
-              </CardHeader>
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500" />
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 shadow-lg">
+                        <Database className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl">Управление базой данных</CardTitle>
+                        <CardDescription>Выгрузка и управление базой данных</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
               <CardContent className="space-y-4">
                 <Alert>
                   <AlertDescription>

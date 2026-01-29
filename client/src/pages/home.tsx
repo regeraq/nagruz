@@ -130,13 +130,21 @@ export default function Home() {
       .then(res => res.json())
       .then(data => {
         const arr = Array.isArray(data) ? data : (data.products || data.data || []);
+        console.log('[Products] Loaded products:', arr.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          hasImages: !!p.images,
+          imagesType: typeof p.images,
+          imagesLength: Array.isArray(p.images) ? p.images.length : (p.images ? 'string' : 0),
+          hasImageUrl: !!p.imageUrl
+        })));
         setProducts(arr);
       })
       .catch(err => console.error('Products error:', err))
       .finally(() => setIsLoadingProducts(false));
   }, []);
 
-  // Load images when device changes - robust loading with multiple fallback sources
+  // Load images when device changes - simple and reliable approach
   useEffect(() => {
     if (!selectedDevice) {
       setProductImages([]);
@@ -146,114 +154,122 @@ export default function Home() {
     
     setIsLoadingImages(true);
     
-    // Helper function to validate and extract images from different response formats
-    const extractImages = (data: any): string[] => {
+    // Helper to extract and validate images from any source
+    const extractValidImages = (imagesData: any): string[] => {
       let images: string[] = [];
       
-      // Try different response formats
-      if (data?.images && Array.isArray(data.images)) {
-        images = data.images;
-      } else if (Array.isArray(data)) {
-        // Direct array response
-        images = data;
-      } else if (data?.product?.images && Array.isArray(data.product.images)) {
-        images = data.product.images;
+      if (!imagesData) return [];
+      
+      // Handle string (JSON or single URL)
+      if (typeof imagesData === 'string') {
+        const trimmed = imagesData.trim();
+        if (trimmed.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            images = Array.isArray(parsed) ? parsed : [parsed];
+          } catch {
+            images = trimmed ? [trimmed] : [];
+          }
+        } else if (trimmed) {
+          images = [trimmed];
+        }
+      } else if (Array.isArray(imagesData)) {
+        images = imagesData;
       }
       
-      // Filter and validate images
+      // Filter valid URLs
       return images.filter((img: any) => {
         if (!img || typeof img !== 'string') return false;
-        const trimmed = img.trim();
-        return trimmed.length > 0 && 
-               (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/'));
-      });
+        const s = img.trim();
+        return s.length > 0 && (s.startsWith('http') || s.startsWith('data:') || s.startsWith('/'));
+      }).map((img: string) => img.trim());
     };
     
-    // Primary fetch: dedicated images endpoint (public, no auth required)
-    const fetchImages = async (): Promise<string[]> => {
+    // Try to get images from multiple sources
+    const loadImages = async () => {
+      let finalImages: string[] = [];
+      
+      // Source 1: Dedicated images endpoint
       try {
-        // Add timestamp to prevent caching issues
-        const timestamp = Date.now();
-        const res = await fetch(`/api/products/${selectedDevice}/images?_t=${timestamp}`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Cache-Control': 'no-cache',
-          },
-          // Don't include credentials for public endpoint to avoid CORS issues
-        });
-        
-        if (!res.ok) {
-          console.warn(`[Gallery] Images endpoint returned ${res.status}`);
-          throw new Error(`HTTP ${res.status}`);
+        const res = await fetch(`/api/products/${selectedDevice}/images?_t=${Date.now()}`);
+        if (res.ok) {
+          const data = await res.json();
+          console.log('[Gallery] API response:', data);
+          
+          if (data.images) {
+            finalImages = extractValidImages(data.images);
+          }
+          
+          if (finalImages.length > 0) {
+            console.log(`[Gallery] Got ${finalImages.length} images from API`);
+            return finalImages;
+          }
         }
-        
-        const data = await res.json();
-        const images = extractImages(data);
-        
-        if (images.length > 0) {
-          console.log(`[Gallery] Loaded ${images.length} images from dedicated endpoint`);
-          return images;
-        }
-        
-        throw new Error('No images in response');
       } catch (err) {
-        console.warn('[Gallery] Primary images fetch failed, trying fallback...', err);
-        throw err;
+        console.warn('[Gallery] API fetch error:', err);
       }
-    };
-    
-    // Fallback: get images from main products list (which we already have)
-    const getImagesFromProducts = (): string[] => {
+      
+      // Source 2: Current products state
       const product = products.find(p => p.id === selectedDevice);
       if (product) {
-        let images: string[] = [];
+        console.log('[Gallery] Trying product data:', { 
+          id: product.id, 
+          hasImages: !!product.images,
+          hasImageUrl: !!product.imageUrl,
+          imagesType: typeof product.images
+        });
         
-        // Parse images from product
-        if (product.images) {
-          if (Array.isArray(product.images)) {
-            images = product.images;
-          } else if (typeof product.images === 'string') {
-            try {
-              const parsed = JSON.parse(product.images);
-              images = Array.isArray(parsed) ? parsed : [parsed];
-            } catch {
-              if (product.images.trim()) {
-                images = [product.images.trim()];
-              }
+        // Get images array
+        finalImages = extractValidImages(product.images);
+        
+        // Add imageUrl if exists and not already in array
+        if (product.imageUrl) {
+          const mainImg = typeof product.imageUrl === 'string' ? product.imageUrl.trim() : '';
+          if (mainImg && (mainImg.startsWith('http') || mainImg.startsWith('data:') || mainImg.startsWith('/')) && !finalImages.includes(mainImg)) {
+            finalImages.unshift(mainImg);
+          }
+        }
+        
+        if (finalImages.length > 0) {
+          console.log(`[Gallery] Got ${finalImages.length} images from products state`);
+          return finalImages;
+        }
+      }
+      
+      // Source 3: Fetch single product directly
+      try {
+        const res = await fetch(`/api/products/${selectedDevice}?_t=${Date.now()}`);
+        if (res.ok) {
+          const product = await res.json();
+          console.log('[Gallery] Single product response:', product);
+          
+          finalImages = extractValidImages(product.images);
+          
+          if (product.imageUrl) {
+            const mainImg = typeof product.imageUrl === 'string' ? product.imageUrl.trim() : '';
+            if (mainImg && (mainImg.startsWith('http') || mainImg.startsWith('data:') || mainImg.startsWith('/')) && !finalImages.includes(mainImg)) {
+              finalImages.unshift(mainImg);
             }
           }
-        }
-        
-        // Add imageUrl if present
-        if (product.imageUrl && typeof product.imageUrl === 'string' && product.imageUrl.trim()) {
-          const mainImg = product.imageUrl.trim();
-          if (!images.includes(mainImg)) {
-            images.unshift(mainImg);
+          
+          if (finalImages.length > 0) {
+            console.log(`[Gallery] Got ${finalImages.length} images from single product API`);
+            return finalImages;
           }
         }
-        
-        // Filter valid URLs
-        return images.filter(img => {
-          if (!img || typeof img !== 'string') return false;
-          const trimmed = img.trim();
-          return trimmed.length > 0 && 
-                 (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('/'));
-        });
+      } catch (err) {
+        console.warn('[Gallery] Single product fetch error:', err);
       }
+      
+      console.log('[Gallery] No images found from any source');
       return [];
     };
     
-    // Try primary fetch, fallback to products data if it fails
-    fetchImages()
-      .then(images => {
-        setProductImages(images);
-      })
-      .catch(() => {
-        // Fallback: try to get images from products state
-        const fallbackImages = getImagesFromProducts();
-        console.log(`[Gallery] Using fallback images: ${fallbackImages.length} found`);
-        setProductImages(fallbackImages);
+    loadImages()
+      .then(images => setProductImages(images))
+      .catch(err => {
+        console.error('[Gallery] Fatal error:', err);
+        setProductImages([]);
       })
       .finally(() => setIsLoadingImages(false));
   }, [selectedDevice, products]);
@@ -1074,25 +1090,43 @@ export default function Home() {
                   return null;
                 }
                 
+                // Debug: log image being rendered
+                console.log(`[Gallery] Rendering image ${idx}: ${trimmedUrl.substring(0, 50)}...`);
+                
                 return (
                   <div
                     key={`${currentProduct?.id || 'product'}-image-${idx}`}
                     className="group relative overflow-hidden rounded-xl border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
                     data-testid={`gallery-image-${idx}`}
                   >
-                    <div className="bg-muted relative" style={{ minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div 
+                      className="bg-muted relative flex items-center justify-center"
+                      style={{ minHeight: '400px', maxHeight: '600px' }}
+                    >
                       <img
                         src={trimmedUrl}
                         alt={`${device.name} - Фото ${idx + 1}`}
-                        className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105 p-4"
-                        loading="lazy"
+                        className="w-auto h-auto object-contain transition-transform duration-300 group-hover:scale-105"
+                        style={{ 
+                          maxWidth: '100%', 
+                          maxHeight: '580px',
+                          minWidth: '200px',
+                          minHeight: '200px',
+                          padding: '16px'
+                        }}
+                        onLoad={(e) => {
+                          console.log(`[Gallery] Image ${idx} loaded successfully`);
+                          const img = e.target as HTMLImageElement;
+                          console.log(`[Gallery] Image dimensions: ${img.naturalWidth}x${img.naturalHeight}`);
+                        }}
                         onError={(e) => {
+                          console.error(`[Gallery] Image ${idx} failed to load`);
                           const target = e.target as HTMLImageElement;
                           target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
                           target.onerror = null;
                         }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                     </div>
                   </div>
                 );

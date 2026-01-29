@@ -778,6 +778,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DEBUG: Diagnostic endpoint to check raw product data in database
+  app.get("/api/debug/product/:id", rateLimiters.general, async (req, res) => {
+    try {
+      const product = await storage.getProduct(req.params.id);
+      if (!product) {
+        res.json({ error: "Product not found", productId: req.params.id });
+        return;
+      }
+      
+      // Return raw data as stored in DB
+      res.json({
+        productId: product.id,
+        name: product.name,
+        isActive: product.isActive,
+        imageUrl: product.imageUrl,
+        imageUrlType: typeof product.imageUrl,
+        imageUrlLength: product.imageUrl ? String(product.imageUrl).length : 0,
+        images: product.images,
+        imagesType: typeof product.images,
+        imagesLength: product.images ? String(product.images).length : 0,
+        // Try to parse images
+        parsedImages: (() => {
+          if (!product.images) return [];
+          if (typeof product.images === 'string') {
+            try {
+              return JSON.parse(product.images);
+            } catch {
+              return [product.images];
+            }
+          }
+          return product.images;
+        })()
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // PUBLIC: Get product images (no auth required) - for gallery display
   // IMPORTANT: This route MUST be defined BEFORE /api/products/:id to avoid route conflicts
   // This endpoint is specifically designed for anonymous/public access to product images
