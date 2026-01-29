@@ -72,6 +72,8 @@ export default function Profile() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   
   // Notification settings
   const [notifyOrders, setNotifyOrders] = useState(true);
@@ -357,6 +359,13 @@ export default function Profile() {
         description: "Товар добавлен в вашу коллекцию",
       });
     },
+    onError: () => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось добавить товар в избранное",
+        variant: "destructive",
+      });
+    },
   });
 
   const removeFavorite = useMutation({
@@ -376,6 +385,13 @@ export default function Profile() {
       toast({
         title: "Удалено из избранного",
         description: "Товар удален из коллекции",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить товар из избранного",
+        variant: "destructive",
       });
     },
   });
@@ -399,6 +415,13 @@ export default function Profile() {
         description: "Уведомление удалено",
       });
     },
+    onError: () => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить уведомление",
+        variant: "destructive",
+      });
+    },
   });
 
   const clearNotifications = useMutation({
@@ -420,6 +443,13 @@ export default function Profile() {
         description: "Все уведомления удалены",
       });
     },
+    onError: () => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось очистить уведомления",
+        variant: "destructive",
+      });
+    },
   });
 
   const markNotificationRead = useMutation({
@@ -436,6 +466,9 @@ export default function Profile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+    onError: () => {
+      // Silent fail - not critical
     },
   });
 
@@ -474,6 +507,146 @@ export default function Profile() {
       });
     },
   });
+
+  const deleteAccount = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/auth/delete-account", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Ошибка при удалении аккаунта");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      queryClient.clear();
+      setLocation("/");
+      toast({
+        title: "Аккаунт удалён",
+        description: "Ваш аккаунт был успешно удалён",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Export user data as JSON
+  const handleExportData = () => {
+    if (!userData) return;
+    
+    const exportData = {
+      profile: {
+        id: userData.id,
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        phone: userData.phone,
+        role: userData.role,
+        isEmailVerified: userData.isEmailVerified,
+        isPhoneVerified: userData.isPhoneVerified,
+        createdAt: userData.createdAt,
+      },
+      orders: orders.map((o: any) => ({
+        id: o.id,
+        productName: o.productName,
+        quantity: o.quantity,
+        totalAmount: o.totalAmount,
+        finalAmount: o.finalAmount,
+        paymentStatus: o.paymentStatus,
+        createdAt: o.createdAt,
+      })),
+      favorites: favorites.map((f: any) => ({
+        productId: f.productId,
+        productName: f.product?.name,
+        addedAt: f.createdAt,
+      })),
+      exportedAt: new Date().toISOString(),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `user-data-${userData.id}-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Данные экспортированы",
+      description: "Файл с данными скачан",
+    });
+  };
+
+  // Export orders as CSV
+  const handleExportOrdersCSV = () => {
+    if (!orders.length) {
+      toast({
+        title: "Нет данных",
+        description: "У вас пока нет заказов для экспорта",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const headers = ["ID заказа", "Товар", "Количество", "Сумма", "Статус", "Дата"];
+    const rows = orders.map((o: any) => [
+      o.id,
+      o.productName || "Товар",
+      o.quantity,
+      `${parseFloat(o.finalAmount).toLocaleString("ru-RU")} ₽`,
+      o.paymentStatus,
+      format(new Date(o.createdAt), "dd.MM.yyyy HH:mm"),
+    ]);
+
+    const csvContent = [
+      headers.join(";"),
+      ...rows.map(row => row.join(";")),
+    ].join("\n");
+
+    // Add BOM for proper UTF-8 encoding in Excel
+    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `orders-${userData?.id}-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "История экспортирована",
+      description: "CSV файл с заказами скачан",
+    });
+  };
+
+  const handleDeleteAccount = () => {
+    if (deleteConfirmText.toLowerCase() !== "удалить") {
+      toast({
+        title: "Ошибка",
+        description: "Введите 'удалить' для подтверждения",
+        variant: "destructive",
+      });
+      return;
+    }
+    deleteAccount.mutate();
+  };
 
   const onSubmit = (data: ProfileForm) => {
     updateProfile.mutate(data);
@@ -1625,7 +1798,11 @@ export default function Profile() {
                     <CardDescription>Экспорт и управление данными</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <Button variant="outline" className="w-full justify-start h-14">
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-start h-14"
+                      onClick={handleExportData}
+                    >
                       <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mr-3">
                         <Download className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       </div>
@@ -1635,7 +1812,11 @@ export default function Profile() {
                       </div>
                     </Button>
 
-                    <Button variant="outline" className="w-full justify-start h-14">
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-start h-14"
+                      onClick={handleExportOrdersCSV}
+                    >
                       <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mr-3">
                         <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                       </div>
@@ -1647,7 +1828,11 @@ export default function Profile() {
 
                     <Separator />
 
-                    <Button variant="outline" className="w-full justify-start h-14 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-300">
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-start h-14 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-300"
+                      onClick={() => setShowDeleteAccountDialog(true)}
+                    >
                       <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center mr-3">
                         <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
                       </div>
@@ -1852,6 +2037,62 @@ export default function Profile() {
               className="bg-gradient-to-r from-emerald-600 to-teal-600"
             >
               {changePassword.isPending ? "Изменение..." : "Изменить пароль"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Account Dialog */}
+      <Dialog open={showDeleteAccountDialog} onOpenChange={setShowDeleteAccountDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              Удаление аккаунта
+            </DialogTitle>
+            <DialogDescription>
+              Это действие необратимо. Все ваши данные, заказы и избранное будут удалены навсегда.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                После удаления аккаунта восстановить данные будет невозможно. Убедитесь, что вы скачали все необходимые данные.
+              </AlertDescription>
+            </Alert>
+
+            <div className="space-y-2">
+              <Label htmlFor="delete-confirm">
+                Для подтверждения введите слово <strong className="text-red-600">удалить</strong>
+              </Label>
+              <Input
+                id="delete-confirm"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="удалить"
+                className="border-red-200 focus:ring-red-500"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteAccountDialog(false);
+                setDeleteConfirmText("");
+              }}
+            >
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAccount}
+              disabled={deleteAccount.isPending || deleteConfirmText.toLowerCase() !== "удалить"}
+            >
+              {deleteAccount.isPending ? "Удаление..." : "Удалить аккаунт"}
             </Button>
           </DialogFooter>
         </DialogContent>

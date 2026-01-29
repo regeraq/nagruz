@@ -120,7 +120,9 @@ export class DrizzleStorage implements IStorage {
   }
 
   async getAllNotifications(userId: string) {
-    return await db.select().from(notifications).where(eq(notifications.userId, userId));
+    return await db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
   }
 
   async getNotificationById(id: string) {
@@ -320,7 +322,9 @@ export class DrizzleStorage implements IStorage {
   }
 
   async getUserOrders(userId: string) {
-    return await db.select().from(orders).where(eq(orders.userId, userId));
+    return await db.select().from(orders)
+      .where(eq(orders.userId, userId))
+      .orderBy(desc(orders.createdAt));
   }
 
   async getAllOrders() {
@@ -328,6 +332,20 @@ export class DrizzleStorage implements IStorage {
   }
 
   async addToFavorites(userId: string, productId: string) {
+    // Check if product exists
+    const product = await this.getProduct(productId);
+    if (!product) {
+      return null;
+    }
+    
+    // Check if already in favorites to prevent duplicates
+    const existing = await db.select().from(favorites)
+      .where(and(eq(favorites.userId, userId), eq(favorites.productId, productId)));
+    
+    if (existing.length > 0) {
+      return existing[0]; // Return existing favorite instead of creating duplicate
+    }
+    
     const result = await db.insert(favorites).values({
       id: undefined,
       userId,

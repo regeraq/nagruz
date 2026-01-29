@@ -62,7 +62,6 @@ export default function Admin() {
   
   // Site contacts state
   const [newContact, setNewContact] = useState({ type: "", value: "", label: "", order: 0 });
-  const [editingContactId, setEditingContactId] = useState<string | null>(null);
   
   // Cookie settings state
   const [cookieSettings, setCookieSettings] = useState({ enabled: true, message: "", acceptButtonText: "", declineButtonText: "" });
@@ -96,6 +95,10 @@ export default function Admin() {
     type: "info",
     link: "",
   });
+  // State for create admin form
+  const [newAdminRole, setNewAdminRole] = useState("admin");
+  // State for editing site contact
+  const [editingContact, setEditingContact] = useState<{ id: string; type: string; value: string; label: string; order: number } | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -365,13 +368,10 @@ export default function Admin() {
       const res = await apiRequest("POST", "/api/admin/products", data);
       return res.json();
     },
-    onSuccess: async () => {
-      // Invalidate and refetch all product queries to ensure fresh data everywhere
-      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      // Force refetch to get fresh data from server (bypasses client cache)
-      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/admin/products"] });
+    onSuccess: () => {
+      // Invalidate queries without await to make UI responsive immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
       setShowCreateProduct(false);
       toast({ title: "Товар создан" });
     },
@@ -386,13 +386,10 @@ export default function Admin() {
       const res = await apiRequest("DELETE", "/api/admin/products", { ids });
       return res.json();
     },
-    onSuccess: async () => {
-      // Invalidate and refetch all product queries to ensure fresh data everywhere
-      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      // Force refetch to get fresh data from server (bypasses client cache)
-      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/admin/products"] });
+    onSuccess: () => {
+      // Invalidate queries without await to make UI responsive immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
       setSelectedProducts(new Set());
       toast({ title: "Товары удалены" });
     },
@@ -411,6 +408,9 @@ export default function Admin() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Роль обновлена" });
     },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось обновить роль", variant: "destructive" });
+    },
   });
 
   // Block user
@@ -422,6 +422,9 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Статус пользователя обновлен" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось изменить статус пользователя", variant: "destructive" });
     },
   });
 
@@ -435,6 +438,9 @@ export default function Admin() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Пользователь удален" });
     },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось удалить пользователя", variant: "destructive" });
+    },
   });
 
   // Create admin
@@ -446,7 +452,11 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setShowCreateAdmin(false);
+      setNewAdminRole("admin"); // Reset role to default
       toast({ title: "Администратор создан" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось создать администратора", variant: "destructive" });
     },
   });
 
@@ -460,6 +470,9 @@ export default function Admin() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
       toast({ title: "Статус заказа обновлен" });
     },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось обновить статус заказа", variant: "destructive" });
+    },
   });
 
   // Delete contact
@@ -471,6 +484,9 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
       toast({ title: "Заявка удалена" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось удалить заявку", variant: "destructive" });
     },
   });
 
@@ -485,6 +501,9 @@ export default function Admin() {
       setShowCreatePromo(false);
       toast({ title: "Промокод создан" });
     },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось создать промокод", variant: "destructive" });
+    },
   });
 
   // Delete promo code
@@ -497,6 +516,9 @@ export default function Admin() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/promocodes"] });
       toast({ title: "Промокод удален" });
     },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось удалить промокод", variant: "destructive" });
+    },
   });
 
   // Toggle product active status
@@ -505,12 +527,14 @@ export default function Admin() {
       const res = await apiRequest("PATCH", `/api/admin/products/${id}`, { isActive });
       return res.json();
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      // Force refetch to update device lists everywhere
-      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+    onSuccess: () => {
+      // Invalidate queries without await to make UI responsive immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({ title: "Статус товара обновлен" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось обновить статус", variant: "destructive" });
     },
   });
 
@@ -520,11 +544,10 @@ export default function Admin() {
       const res = await apiRequest("PATCH", `/api/admin/products/${id}`, { price, stock });
       return res.json();
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      // Force refetch to update data everywhere
-      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+    onSuccess: () => {
+      // Invalidate queries without await to make UI responsive immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setEditingProductId(null);
       toast({ title: "Товар обновлен" });
     },
@@ -533,7 +556,7 @@ export default function Admin() {
     },
   });
 
-  // Toggle product active status
+  // Toggle promo code active status
   const updatePromoCodeStatus = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: number }) => {
       const res = await apiRequest("PATCH", `/api/admin/promocodes/${id}`, { isActive });
@@ -542,6 +565,9 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/promocodes"] });
       toast({ title: "Статус промокода обновлен" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Ошибка", description: error.message || "Не удалось обновить статус промокода", variant: "destructive" });
     },
   });
 
@@ -606,12 +632,11 @@ export default function Admin() {
       });
       return res.json();
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      // Force refetch to update gallery images everywhere (including for non-authenticated users)
-      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+    onSuccess: () => {
+      // Invalidate queries without await to make UI responsive immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setNewImageUrl("");
       toast({ title: "Фотография добавлена" });
     },
@@ -629,12 +654,11 @@ export default function Admin() {
       });
       return res.json();
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      // Force refetch to update gallery images everywhere
-      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+    onSuccess: () => {
+      // Invalidate queries without await to make UI responsive immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products", selectedProductForImages, "images"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({ title: "Фотография удалена" });
     },
     onError: (error: any) => {
@@ -674,11 +698,10 @@ export default function Admin() {
       });
       return res.json();
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      // Force refetch to update data everywhere
-      await queryClient.refetchQueries({ queryKey: ["/api/products"] });
+    onSuccess: () => {
+      // Invalidate queries without await to make UI responsive immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setShowEditProduct(false);
       setEditingFullProduct(null);
       setEditProductImages([]);
@@ -2243,7 +2266,7 @@ export default function Admin() {
                             createAdmin.mutate({
                               email: formData.get("email"),
                               password: formData.get("password"),
-                              role: formData.get("role"),
+                              role: newAdminRole,
                               firstName: formData.get("firstName"),
                               lastName: formData.get("lastName"),
                             });
@@ -2260,7 +2283,7 @@ export default function Admin() {
                             </div>
                             <div>
                               <Label>Роль</Label>
-                              <Select name="role" defaultValue="admin">
+                              <Select value={newAdminRole} onValueChange={setNewAdminRole}>
                                 <SelectTrigger>
                                   <SelectValue />
                                 </SelectTrigger>
@@ -2916,7 +2939,13 @@ export default function Admin() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setEditingContactId(contact.id)}
+                                onClick={() => setEditingContact({
+                                  id: contact.id,
+                                  type: contact.type,
+                                  value: contact.value,
+                                  label: contact.label || "",
+                                  order: contact.order || 0
+                                })}
                               >
                                 <Edit2 className="w-4 h-4" />
                               </Button>
@@ -3496,6 +3525,91 @@ export default function Admin() {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog for editing site contact */}
+      <Dialog open={!!editingContact} onOpenChange={(open) => !open && setEditingContact(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Редактирование контакта</DialogTitle>
+            <DialogDescription>Измените информацию о контакте</DialogDescription>
+          </DialogHeader>
+          {editingContact && (
+            <div className="space-y-4">
+              <div>
+                <Label>Тип</Label>
+                <Select
+                  value={editingContact.type}
+                  onValueChange={(value) => setEditingContact({ ...editingContact, type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Выберите тип" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="phone">Телефон</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="telegram">Telegram</SelectItem>
+                    <SelectItem value="address">Адрес</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Значение</Label>
+                <Input
+                  value={editingContact.value}
+                  onChange={(e) => setEditingContact({ ...editingContact, value: e.target.value })}
+                  placeholder="+7 (999) 123-45-67"
+                />
+              </div>
+              <div>
+                <Label>Подпись</Label>
+                <Input
+                  value={editingContact.label}
+                  onChange={(e) => setEditingContact({ ...editingContact, label: e.target.value })}
+                  placeholder="Основной телефон"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingContact(null)}>
+              Отмена
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!editingContact) return;
+                if (!editingContact.type || !editingContact.value) {
+                  toast({ title: "Ошибка", description: "Заполните тип и значение", variant: "destructive" });
+                  return;
+                }
+                try {
+                  const token = localStorage.getItem("accessToken");
+                  const res = await fetch(`/api/admin/site-contacts/${editingContact.id}`, {
+                    method: "PUT",
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      type: editingContact.type,
+                      value: editingContact.value,
+                      label: editingContact.label,
+                      order: editingContact.order,
+                    }),
+                  });
+                  if (!res.ok) throw new Error("Не удалось обновить контакт");
+                  toast({ title: "Успешно", description: "Контакт обновлен" });
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/site-contacts"] });
+                  setEditingContact(null);
+                } catch (error: any) {
+                  toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+                }
+              }}
+            >
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog for sending notifications */}
       <Dialog open={showNotificationDialog} onOpenChange={setShowNotificationDialog}>
         <DialogContent>
@@ -3602,3 +3716,4 @@ export default function Admin() {
     </div>
   );
 }
+

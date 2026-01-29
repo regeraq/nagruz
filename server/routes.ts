@@ -1231,10 +1231,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const orders = await storage.getUserOrders(payload.userId);
       const ordersWithProducts = await Promise.all(
-        orders.map(async (o: any) => ({
-          ...o,
-          product: await storage.getProduct(o.productId),
-        }))
+        orders.map(async (o: any) => {
+          const product = await storage.getProduct(o.productId);
+          return {
+            ...o,
+            product,
+            productName: product?.name || "Товар удалён",
+            productPrice: o.totalAmount && o.quantity ? (parseFloat(o.totalAmount) / o.quantity).toFixed(2) : product?.price || "0",
+          };
+        })
       );
 
       res.json(ordersWithProducts);
@@ -1552,7 +1557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Profile update endpoint
-  app.patch("/api/auth/profile", async (req, res) => {
+  app.patch("/api/auth/profile", rateLimiters.general, async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
       if (!token) {
@@ -1816,7 +1821,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const favorites = await storage.getUserFavorites(payload.userId);
-      res.json(favorites);
+      
+      // Load product data for each favorite
+      const favoritesWithProducts = await Promise.all(
+        favorites.map(async (fav: any) => ({
+          ...fav,
+          product: await storage.getProduct(fav.productId),
+        }))
+      );
+      
+      res.json(favoritesWithProducts);
     } catch (error) {
       console.error("Get favorites error:", error);
       res.status(500).json({ success: false, message: "Failed to get favorites" });
@@ -3241,7 +3255,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // USER: Change Password
-  app.post("/api/auth/change-password", async (req, res) => {
+  app.post("/api/auth/change-password", rateLimiters.auth, async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
       if (!token) {
@@ -3286,6 +3300,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Change password error:", error);
       res.status(500).json({ success: false, message: "Failed to change password" });
+    }
+  });
+
+  // USER: Delete own account
+  app.delete("/api/auth/delete-account", rateLimiters.auth, async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+
+      // SECURITY: Prevent admin from deleting themselves
+      if (user.role === "admin" || user.role === "superadmin") {
+        res.status(403).json({ success: false, message: "Admin accounts cannot be self-deleted" });
+        return;
+      }
+
+      // Delete user (cascade will handle related records due to schema definition)
+      await storage.deleteUser(payload.userId);
+
+      res.json({ success: true, message: "Account deleted successfully" });
+    } catch (error) {
+      console.error("Delete account error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete account" });
     }
   });
 

@@ -23,6 +23,7 @@ import { insertContactSubmissionSchema, type InsertContactSubmission, type Produ
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const navLinks = [
   { label: "Главная", id: "hero" },
@@ -116,6 +117,8 @@ export default function Home() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [consentPersonalData, setConsentPersonalData] = useState(false);
+  const [consentDataProcessing, setConsentDataProcessing] = useState(false);
 
   // === PRODUCTS AND IMAGES STATE ===
   const [products, setProducts] = useState<Product[]>([]);
@@ -405,6 +408,8 @@ export default function Home() {
       queueMicrotask(() => {
         form.reset();
         setSelectedFile(null);
+        setConsentPersonalData(false);
+        setConsentDataProcessing(false);
       });
     },
     onError: (error: any) => {
@@ -453,6 +458,14 @@ export default function Home() {
   };
 
   const onSubmit = (data: InsertContactSubmission) => {
+    if (!consentPersonalData || !consentDataProcessing) {
+      toast({
+        title: "Ошибка",
+        description: "Необходимо дать согласие на обработку персональных данных",
+        variant: "destructive",
+      });
+      return;
+    }
     contactMutation.mutate(data);
   };
 
@@ -1368,11 +1381,45 @@ export default function Home() {
                       )}
                     </div>
 
+                    <div className="space-y-3 pt-2 border-t border-border">
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          id="consent-personal-data-home"
+                          checked={consentPersonalData}
+                          onCheckedChange={(checked) => setConsentPersonalData(checked === true)}
+                          className="mt-1"
+                          data-testid="checkbox-consent-personal-data"
+                        />
+                        <Label htmlFor="consent-personal-data-home" className="text-sm leading-relaxed cursor-pointer">
+                          Я даю согласие на обработку персональных данных *
+                        </Label>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          id="consent-data-processing-home"
+                          checked={consentDataProcessing}
+                          onCheckedChange={(checked) => setConsentDataProcessing(checked === true)}
+                          className="mt-1"
+                          data-testid="checkbox-consent-data-processing"
+                        />
+                        <Label htmlFor="consent-data-processing-home" className="text-sm leading-relaxed cursor-pointer">
+                          Я принимаю условия{" "}
+                          <a href="/data-processing-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                            Политики обработки персональных данных
+                          </a>{" "}
+                          и{" "}
+                          <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                            Политики конфиденциальности
+                          </a> *
+                        </Label>
+                      </div>
+                    </div>
+
                     <Button 
                       type="submit" 
                       className="w-full h-12 text-base"
                       data-testid="button-submit-contact"
-                      disabled={contactMutation.isPending}
+                      disabled={contactMutation.isPending || !consentPersonalData || !consentDataProcessing}
                     >
                       {contactMutation.isPending ? (
                         <>

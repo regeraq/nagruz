@@ -124,6 +124,13 @@ export const rateLimiters = {
     message: 'Слишком много запросов на проверку промокода.',
   }),
 
+  // Auth operations (password change, account deletion): 5 requests per minute
+  auth: createRateLimiter({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5,
+    message: 'Слишком много попыток. Пожалуйста, подождите минуту.',
+  }),
+
   // General API: 100 requests per minute
   general: createRateLimiter({
     windowMs: 60 * 1000, // 1 minute
