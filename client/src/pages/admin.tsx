@@ -2626,10 +2626,37 @@ export default function Admin() {
                               const details = typeof selectedOrderForDetails.paymentDetails === 'string' 
                                 ? JSON.parse(selectedOrderForDetails.paymentDetails) 
                                 : selectedOrderForDetails.paymentDetails;
+                              
+                              // Если это объект, отображаем как список ключ-значение
+                              if (typeof details === 'object' && details !== null) {
+                                const entries = Object.entries(details);
+                                if (entries.length > 0) {
+                                  return (
+                                    <div className="space-y-2">
+                                      {entries.map(([key, value]) => (
+                                        <div key={key} className="flex items-start gap-2">
+                                          <span className="text-sm font-medium text-muted-foreground min-w-[120px]">
+                                            {key === 'method' ? 'Способ оплаты' : 
+                                             key === 'card' ? 'Карта' :
+                                             key === 'transaction_id' ? 'ID транзакции' :
+                                             key === 'status' ? 'Статус' :
+                                             key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}:
+                                          </span>
+                                          <span className="text-sm font-medium flex-1">
+                                            {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                }
+                              }
+                              
+                              // Если не объект или пустой, показываем как есть
                               return (
-                                <pre className="text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                                  {JSON.stringify(details, null, 2)}
-                                </pre>
+                                <p className="text-sm break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                                  {typeof details === 'string' ? details : JSON.stringify(details, null, 2)}
+                                </p>
                               );
                             } catch {
                               return (
