@@ -3646,6 +3646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ADMIN: Get Database Size Information
   app.get("/api/admin/database/size", async (req, res) => {
+    let client: any = null;
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
       if (!token) {
@@ -3665,115 +3666,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const client = await pool.connect();
-      try {
-        // Get database name from connection string
-        const dbName = process.env.DATABASE_URL?.split('/').pop()?.split('?')[0] || 'loaddevice_db';
-        
-        // Get total database size
-        const dbSizeResult = await client.query(`
-          SELECT 
-            pg_size_pretty(pg_database_size($1)) as size,
-            pg_database_size($1) as size_bytes
-        `, [dbName]);
+      // Check if pool is available
+      if (!pool) {
+        res.status(500).json({
+          success: false,
+          message: "Database connection pool is not available",
+        });
+        return;
+      }
 
-        // Get size of each table
-        const tablesSizeResult = await client.query(`
+      client = await pool.connect();
+      
+      // Get database name from connection string
+      const dbName = process.env.DATABASE_URL?.split('/').pop()?.split('?')[0] || 'loaddevice_db';
+      
+      // Get total database size
+      const dbSizeResult = await client.query(`
+        SELECT 
+          pg_size_pretty(pg_database_size($1)) as size,
+          pg_database_size($1) as size_bytes
+      `, [dbName]);
+
+      if (!dbSizeResult.rows || dbSizeResult.rows.length === 0) {
+        throw new Error("Failed to get database size");
+      }
+
+      // Get size of each table
+      const tablesSizeResult = await client.query(`
+        SELECT 
+          schemaname,
+          tablename,
+          pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size,
+          pg_total_relation_size(schemaname||'.'||tablename) AS size_bytes,
+          pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
+          pg_relation_size(schemaname||'.'||tablename) AS table_size_bytes,
+          pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size,
+          (pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size_bytes
+        FROM pg_tables
+        WHERE schemaname = 'public'
+        ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+      `);
+
+      // Get total size of all tables
+      const totalTablesSizeResult = await client.query(`
+        SELECT 
+          pg_size_pretty(SUM(pg_total_relation_size(schemaname||'.'||tablename))) AS total_size,
+          SUM(pg_total_relation_size(schemaname||'.'||tablename)) AS total_size_bytes
+        FROM pg_tables
+        WHERE schemaname = 'public';
+      `);
+
+      // Get indexes size
+      const indexesSizeResult = await client.query(`
+        SELECT 
+          pg_size_pretty(SUM(pg_relation_size(indexrelid))) AS total_indexes_size,
+          SUM(pg_relation_size(indexrelid)) AS total_indexes_size_bytes
+        FROM pg_indexes
+        WHERE schemaname = 'public';
+      `);
+
+      // Get number of rows per table
+      const tablesRowsResult = await client.query(`
+        SELECT 
+          schemaname,
+          tablename,
+          (xpath('/row/cnt/text()', xml_count))[1]::text::int AS row_count
+        FROM (
           SELECT 
             schemaname,
             tablename,
-            pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size,
-            pg_total_relation_size(schemaname||'.'||tablename) AS size_bytes,
-            pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
-            pg_relation_size(schemaname||'.'||tablename) AS table_size_bytes,
-            pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size,
-            (pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size_bytes
+            query_to_xml(format('select count(*) as cnt from %I.%I', schemaname, tablename), false, true, '') AS xml_count
           FROM pg_tables
           WHERE schemaname = 'public'
-          ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
-        `);
+        ) t
+        ORDER BY tablename;
+      `);
 
-        // Get total size of all tables
-        const totalTablesSizeResult = await client.query(`
-          SELECT 
-            pg_size_pretty(SUM(pg_total_relation_size(schemaname||'.'||tablename))) AS total_size,
-            SUM(pg_total_relation_size(schemaname||'.'||tablename)) AS total_size_bytes
-          FROM pg_tables
-          WHERE schemaname = 'public';
-        `);
+      // Combine table sizes with row counts
+      const tablesWithRows = (tablesSizeResult.rows || []).map((table: any) => {
+        const rowCount = (tablesRowsResult.rows || []).find((r: any) => r.tablename === table.tablename)?.row_count || 0;
+        return {
+          ...table,
+          row_count: rowCount,
+        };
+      });
 
-        // Get indexes size
-        const indexesSizeResult = await client.query(`
-          SELECT 
-            pg_size_pretty(SUM(pg_relation_size(indexrelid))) AS total_indexes_size,
-            SUM(pg_relation_size(indexrelid)) AS total_indexes_size_bytes
-          FROM pg_indexes
-          WHERE schemaname = 'public';
-        `);
-
-        // Get number of rows per table
-        const tablesRowsResult = await client.query(`
-          SELECT 
-            schemaname,
-            tablename,
-            (xpath('/row/cnt/text()', xml_count))[1]::text::int AS row_count
-          FROM (
-            SELECT 
-              schemaname,
-              tablename,
-              query_to_xml(format('select count(*) as cnt from %I.%I', schemaname, tablename), false, true, '') AS xml_count
-            FROM pg_tables
-            WHERE schemaname = 'public'
-          ) t
-          ORDER BY tablename;
-        `);
-
-        // Combine table sizes with row counts
-        const tablesWithRows = tablesSizeResult.rows.map((table: any) => {
-          const rowCount = tablesRowsResult.rows.find((r: any) => r.tablename === table.tablename)?.row_count || 0;
-          return {
-            ...table,
-            row_count: rowCount,
-          };
-        });
-
-        res.json({
-          success: true,
-          database: {
-            name: dbName,
-            total_size: dbSizeResult.rows[0].size,
-            total_size_bytes: parseInt(dbSizeResult.rows[0].size_bytes),
-          },
-          tables: {
-            total_size: totalTablesSizeResult.rows[0].total_size,
-            total_size_bytes: parseInt(totalTablesSizeResult.rows[0].total_size_bytes || '0'),
-            count: tablesWithRows.length,
-            list: tablesWithRows.map((table: any) => ({
-              name: table.tablename,
-              total_size: table.size,
-              total_size_bytes: parseInt(table.size_bytes),
-              table_size: table.table_size,
-              table_size_bytes: parseInt(table.table_size_bytes),
-              indexes_size: table.indexes_size,
-              indexes_size_bytes: parseInt(table.indexes_size_bytes),
-              row_count: table.row_count,
-            })),
-          },
-          indexes: {
-            total_size: indexesSizeResult.rows[0].total_indexes_size || '0 bytes',
-            total_size_bytes: parseInt(indexesSizeResult.rows[0].total_indexes_size_bytes || '0'),
-          },
-        });
-      } finally {
-        client.release();
-      }
+      res.json({
+        success: true,
+        database: {
+          name: dbName,
+          total_size: dbSizeResult.rows[0]?.size || '0 bytes',
+          total_size_bytes: parseInt(dbSizeResult.rows[0]?.size_bytes || '0'),
+        },
+        tables: {
+          total_size: totalTablesSizeResult.rows[0]?.total_size || '0 bytes',
+          total_size_bytes: parseInt(totalTablesSizeResult.rows[0]?.total_size_bytes || '0'),
+          count: tablesWithRows.length,
+          list: tablesWithRows.map((table: any) => ({
+            name: table.tablename,
+            total_size: table.size,
+            total_size_bytes: parseInt(table.size_bytes || '0'),
+            table_size: table.table_size,
+            table_size_bytes: parseInt(table.table_size_bytes || '0'),
+            indexes_size: table.indexes_size,
+            indexes_size_bytes: parseInt(table.indexes_size_bytes || '0'),
+            row_count: table.row_count || 0,
+          })),
+        },
+        indexes: {
+          total_size: indexesSizeResult.rows[0]?.total_indexes_size || '0 bytes',
+          total_size_bytes: parseInt(indexesSizeResult.rows[0]?.total_indexes_size_bytes || '0'),
+        },
+      });
     } catch (error: any) {
       console.error("Error getting database size:", error);
       res.status(500).json({
         success: false,
         message: "Ошибка при получении информации о размере базы данных",
-        error: error.message,
+        error: error.message || "Unknown error",
       });
+    } finally {
+      if (client) {
+        try {
+          client.release();
+        } catch (releaseError) {
+          console.error("Error releasing database client:", releaseError);
+        }
+      }
     }
   });
 

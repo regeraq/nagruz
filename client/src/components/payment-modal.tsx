@@ -64,6 +64,8 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const [validatedPromoCode, setValidatedPromoCode] = useState<{ code: string; discountPercent: number } | null>(null);
   const [addToFavorites, setAddToFavorites] = useState(false);
   const [isInFavorites, setIsInFavorites] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [isAuthError, setIsAuthError] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -136,6 +138,8 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       setValidatedPromoCode(null);
       setCurrentStep("product");
       setAddToFavorites(false);
+      setErrorMessage("");
+      setIsAuthError(false);
       
       if (isLoggedIn && user) {
         setCustomerName(`${user.firstName || ""} ${user.lastName || ""}`.trim());
@@ -260,6 +264,15 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
           errorMessage = parsed.message || errorMessage;
         } catch (e) {}
       }
+      
+      // Check if it's an authentication error
+      const isAuth = errorMessage.includes("авторизоваться") || 
+                     errorMessage.includes("авторизован") ||
+                     errorMessage.includes("401") ||
+                     errorMessage.includes("Not authenticated");
+      
+      setIsAuthError(isAuth);
+      setErrorMessage(errorMessage);
       
       toast({
         title: "Ошибка оформления",
@@ -868,17 +881,44 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                     <AlertCircle className="w-12 h-12 text-white" />
                   </div>
                   <h3 className="text-2xl font-bold mb-2 text-red-600">Ошибка оформления</h3>
-                  <p className="text-muted-foreground mb-6">
-                    Попробуйте ещё раз или свяжитесь с нами
-                  </p>
-                  <div className="flex gap-3 justify-center">
-                    <Button variant="outline" onClick={() => setPaymentStatus("idle")}>
-                      Попробовать снова
-                    </Button>
-                    <Button onClick={onClose}>
-                      Закрыть
-                    </Button>
-                  </div>
+                  {isAuthError ? (
+                    <>
+                      <p className="text-muted-foreground mb-2">
+                        Для оформления заказа необходимо зарегистрироваться
+                      </p>
+                      <p className="text-sm text-muted-foreground mb-6">
+                        Создайте аккаунт, чтобы продолжить покупку
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <Button 
+                          onClick={() => {
+                            onClose();
+                            window.location.href = '/register';
+                          }}
+                          className="bg-gradient-to-r from-blue-600 to-indigo-600"
+                        >
+                          Зарегистрироваться
+                        </Button>
+                        <Button variant="outline" onClick={onClose}>
+                          Закрыть
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-muted-foreground mb-6">
+                        {errorMessage || "Попробуйте ещё раз или свяжитесь с нами"}
+                      </p>
+                      <div className="flex gap-3 justify-center">
+                        <Button variant="outline" onClick={() => setPaymentStatus("idle")}>
+                          Попробовать снова
+                        </Button>
+                        <Button onClick={onClose}>
+                          Закрыть
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <>
