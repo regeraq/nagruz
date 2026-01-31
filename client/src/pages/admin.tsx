@@ -2550,51 +2550,55 @@ export default function Admin() {
                   </DialogDescription>
                 </DialogHeader>
                 {selectedOrderForDetails && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-muted-foreground">Клиент</Label>
-                        <p className="font-medium">{selectedOrderForDetails.customerName || "—"}</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Email</Label>
-                        <p className="font-medium">{selectedOrderForDetails.customerEmail || "—"}</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Телефон</Label>
-                        <p className="font-medium">{selectedOrderForDetails.customerPhone || "—"}</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Товар</Label>
-                        <p className="font-medium">{selectedOrderForDetails.productId}</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Количество</Label>
-                        <p className="font-medium">{selectedOrderForDetails.quantity} шт.</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Способ оплаты</Label>
-                        <p className="font-medium">{selectedOrderForDetails.paymentMethod || "—"}</p>
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3">Информация о клиенте</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm text-muted-foreground mb-1 block">Клиент</Label>
+                          <p className="font-medium">{selectedOrderForDetails.customerName || "—"}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground mb-1 block">Email</Label>
+                          <p className="font-medium break-words" style={{ wordBreak: 'break-word' }}>{selectedOrderForDetails.customerEmail || "—"}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground mb-1 block">Телефон</Label>
+                          <p className="font-medium">{selectedOrderForDetails.customerPhone || "—"}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground mb-1 block">Товар</Label>
+                          <p className="font-medium">{selectedOrderForDetails.productId}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground mb-1 block">Количество</Label>
+                          <p className="font-medium">{selectedOrderForDetails.quantity} шт.</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground mb-1 block">Способ оплаты</Label>
+                          <p className="font-medium">{selectedOrderForDetails.paymentMethod || "—"}</p>
+                        </div>
                       </div>
                     </div>
                     <div className="border-t pt-4">
+                      <h3 className="text-lg font-semibold mb-3">Финансовая информация</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-muted-foreground">Сумма заказа</Label>
+                          <Label className="text-sm text-muted-foreground mb-1 block">Сумма заказа</Label>
                           <p className="font-medium">{selectedOrderForDetails.totalAmount} ₽</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Скидка</Label>
-                          <p className="font-medium">{selectedOrderForDetails.discountAmount || 0} ₽</p>
+                          <Label className="text-sm text-muted-foreground mb-1 block">Скидка</Label>
+                          <p className="font-medium text-destructive">{selectedOrderForDetails.discountAmount || 0} ₽</p>
                         </div>
                         {selectedOrderForDetails.promoCode && (
                           <div>
-                            <Label className="text-muted-foreground">Промокод</Label>
-                            <p className="font-medium">{selectedOrderForDetails.promoCode}</p>
+                            <Label className="text-sm text-muted-foreground mb-1 block">Промокод</Label>
+                            <Badge variant="outline" className="font-medium">{selectedOrderForDetails.promoCode}</Badge>
                           </div>
                         )}
                         <div>
-                          <Label className="text-muted-foreground">Итого к оплате</Label>
+                          <Label className="text-sm text-muted-foreground mb-1 block">Итого к оплате</Label>
                           <p className="font-bold text-lg text-primary">{selectedOrderForDetails.finalAmount} ₽</p>
                         </div>
                       </div>
@@ -2602,21 +2606,40 @@ export default function Admin() {
                     <div className="border-t pt-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-muted-foreground">Статус</Label>
+                          <Label className="text-muted-foreground mb-2 block">Статус</Label>
                           <Badge variant={selectedOrderForDetails.paymentStatus === 'paid' || selectedOrderForDetails.paymentStatus === 'delivered' ? 'default' : 'secondary'}>
                             {selectedOrderForDetails.paymentStatus}
                           </Badge>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Дата создания</Label>
+                          <Label className="text-muted-foreground mb-2 block">Дата создания</Label>
                           <p className="font-medium">{format(new Date(selectedOrderForDetails.createdAt), "dd.MM.yyyy HH:mm", { locale: ru })}</p>
                         </div>
                       </div>
                     </div>
                     {selectedOrderForDetails.paymentDetails && (
                       <div className="border-t pt-4">
-                        <Label className="text-muted-foreground">Детали оплаты</Label>
-                        <p className="font-medium text-sm">{selectedOrderForDetails.paymentDetails}</p>
+                        <Label className="text-muted-foreground mb-2 block">Детали оплаты</Label>
+                        <div className="p-3 bg-muted rounded-md border border-border/50">
+                          {(() => {
+                            try {
+                              const details = typeof selectedOrderForDetails.paymentDetails === 'string' 
+                                ? JSON.parse(selectedOrderForDetails.paymentDetails) 
+                                : selectedOrderForDetails.paymentDetails;
+                              return (
+                                <pre className="text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                                  {JSON.stringify(details, null, 2)}
+                                </pre>
+                              );
+                            } catch {
+                              return (
+                                <p className="text-sm break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                                  {selectedOrderForDetails.paymentDetails}
+                                </p>
+                              );
+                            }
+                          })()}
+                        </div>
                       </div>
                     )}
                   </div>
