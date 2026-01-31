@@ -853,7 +853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cacheKey = 'products-active';
       // Check for cache-busting parameter
       const cacheBust = req.query._t || req.query.timestamp;
-      let products = cacheBust ? null : cache.get(cacheKey);
+      let products: any[] | null = cacheBust ? null : (cache.get(cacheKey) as any[] | undefined) || null;
       
       if (!products) {
         console.log(`📦 [GET /api/products] Cache miss${cacheBust ? ' (cache bust)' : ''}, fetching from DB`);
@@ -945,11 +945,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error(`❌ [GET /api/products] No products in database! Run initAdmin to create default products.`);
         }
         
-        if (!cacheBust) {
+        if (!cacheBust && products) {
           cache.set(cacheKey, products, CACHE_TTL.PRODUCTS);
         }
       } else {
-        console.log(`⚡ [GET /api/products] Using cached products (${products.length} items)`);
+        console.log(`⚡ [GET /api/products] Using cached products (${products?.length || 0} items)`);
       }
       
       // Ensure products is always an array before sending
@@ -1710,7 +1710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0] || 
                       req.socket.remoteAddress || 
                       'unknown';
-      const userAgent = req.headers['user-agent'] || null;
+      const userAgent = req.headers['user-agent'] || undefined;
       
       try {
         await storage.createPersonalDataConsent({
@@ -1780,8 +1780,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log successful user lookup (for debugging)
       console.log(`[Login] User found: ${email}, isBlocked: ${user.isBlocked}, role: ${user.role}`);
 
-      const passwordHash = user.passwordHash || user.password;
-      const isPasswordValid = await verifyPassword(password, passwordHash);
+      if (!user.passwordHash) {
+        res.status(401).json({
+          success: false,
+          message: "Неверный email или пароль",
+        });
+        return;
+      }
+
+      const isPasswordValid = await verifyPassword(password, user.passwordHash);
       if (!isPasswordValid) {
         // SECURITY: Record failed login attempt
         await recordLoginAttempt(email, ipAddress, false);
@@ -3668,6 +3675,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if pool is available
       if (!pool) {
+        console.error("[Database Size] Pool is not available");
         res.status(500).json({
           success: false,
           message: "Database connection pool is not available",
@@ -3676,110 +3684,170 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       client = await pool.connect();
+      console.log("[Database Size] Connected to database");
       
       // Get database name from connection string
       const dbName = process.env.DATABASE_URL?.split('/').pop()?.split('?')[0] || 'loaddevice_db';
+      console.log("[Database Size] Database name:", dbName);
       
       // Get total database size
-      const dbSizeResult = await client.query(`
-        SELECT 
-          pg_size_pretty(pg_database_size($1)) as size,
-          pg_database_size($1) as size_bytes
-      `, [dbName]);
+      let dbSizeResult;
+      try {
+        dbSizeResult = await client.query(`
+          SELECT 
+            pg_size_pretty(pg_database_size($1)) as size,
+            pg_database_size($1) as size_bytes
+        `, [dbName]);
+        console.log("[Database Size] Database size query completed");
+      } catch (error: any) {
+        console.error("[Database Size] Error getting database size:", error);
+        throw new Error(`Failed to get database size: ${error.message}`);
+      }
 
       if (!dbSizeResult.rows || dbSizeResult.rows.length === 0) {
-        throw new Error("Failed to get database size");
+        throw new Error("Failed to get database size: empty result");
       }
 
       // Get size of each table
-      const tablesSizeResult = await client.query(`
-        SELECT 
-          schemaname,
-          tablename,
-          pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size,
-          pg_total_relation_size(schemaname||'.'||tablename) AS size_bytes,
-          pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
-          pg_relation_size(schemaname||'.'||tablename) AS table_size_bytes,
-          pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size,
-          (pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size_bytes
-        FROM pg_tables
-        WHERE schemaname = 'public'
-        ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
-      `);
-
-      // Get total size of all tables
-      const totalTablesSizeResult = await client.query(`
-        SELECT 
-          pg_size_pretty(SUM(pg_total_relation_size(schemaname||'.'||tablename))) AS total_size,
-          SUM(pg_total_relation_size(schemaname||'.'||tablename)) AS total_size_bytes
-        FROM pg_tables
-        WHERE schemaname = 'public';
-      `);
-
-      // Get indexes size
-      const indexesSizeResult = await client.query(`
-        SELECT 
-          pg_size_pretty(SUM(pg_relation_size(indexrelid))) AS total_indexes_size,
-          SUM(pg_relation_size(indexrelid)) AS total_indexes_size_bytes
-        FROM pg_indexes
-        WHERE schemaname = 'public';
-      `);
-
-      // Get number of rows per table
-      const tablesRowsResult = await client.query(`
-        SELECT 
-          schemaname,
-          tablename,
-          (xpath('/row/cnt/text()', xml_count))[1]::text::int AS row_count
-        FROM (
+      let tablesSizeResult;
+      try {
+        tablesSizeResult = await client.query(`
           SELECT 
             schemaname,
             tablename,
-            query_to_xml(format('select count(*) as cnt from %I.%I', schemaname, tablename), false, true, '') AS xml_count
+            pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size,
+            pg_total_relation_size(schemaname||'.'||tablename) AS size_bytes,
+            pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
+            pg_relation_size(schemaname||'.'||tablename) AS table_size_bytes,
+            pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size,
+            (pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size_bytes
           FROM pg_tables
           WHERE schemaname = 'public'
-        ) t
-        ORDER BY tablename;
-      `);
+          ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+        `);
+        console.log("[Database Size] Tables size query completed, found", tablesSizeResult.rows?.length || 0, "tables");
+      } catch (error: any) {
+        console.error("[Database Size] Error getting tables size:", error);
+        // Continue with empty tables if this fails
+        tablesSizeResult = { rows: [] };
+      }
+
+      // Get total size of all tables
+      let totalTablesSizeResult;
+      try {
+        totalTablesSizeResult = await client.query(`
+          SELECT 
+            pg_size_pretty(SUM(pg_total_relation_size(schemaname||'.'||tablename))) AS total_size,
+            SUM(pg_total_relation_size(schemaname||'.'||tablename)) AS total_size_bytes
+          FROM pg_tables
+          WHERE schemaname = 'public';
+        `);
+        console.log("[Database Size] Total tables size query completed");
+      } catch (error: any) {
+        console.error("[Database Size] Error getting total tables size:", error);
+        // Use default values if this fails
+        totalTablesSizeResult = { rows: [{ total_size: '0 bytes', total_size_bytes: 0 }] };
+      }
+
+      // Get indexes size
+      let indexesSizeResult;
+      try {
+        indexesSizeResult = await client.query(`
+          SELECT 
+            pg_size_pretty(COALESCE(SUM(pg_relation_size(indexrelid)), 0)) AS total_indexes_size,
+            COALESCE(SUM(pg_relation_size(indexrelid)), 0) AS total_indexes_size_bytes
+          FROM pg_indexes
+          WHERE schemaname = 'public';
+        `);
+        console.log("[Database Size] Indexes size query completed");
+      } catch (error: any) {
+        console.error("[Database Size] Error getting indexes size:", error);
+        // Use default values if this fails
+        indexesSizeResult = { rows: [{ total_indexes_size: '0 bytes', total_indexes_size_bytes: 0 }] };
+      }
+
+      // Get number of rows per table - simplified to avoid query_to_xml issues
+      let tablesRowsResult = { rows: [] };
+      try {
+        // Use a simpler approach: get row counts using information_schema (safer)
+        const tableNames = (tablesSizeResult.rows || []).map((t: any) => t.tablename);
+        if (tableNames.length > 0) {
+          // Use information_schema for row counts (approximate but safer)
+          const rowCountQuery = `
+            SELECT 
+              schemaname,
+              tablename,
+              n_live_tup as row_count
+            FROM pg_stat_user_tables
+            WHERE schemaname = 'public'
+            ORDER BY tablename;
+          `;
+          
+          try {
+            const rowCountResult = await client.query(rowCountQuery);
+            tablesRowsResult.rows = (rowCountResult.rows || []).map((r: any) => ({
+              tablename: r.tablename,
+              row_count: parseInt(String(r.row_count || '0')),
+            }));
+            console.log("[Database Size] Row counts query completed using pg_stat_user_tables");
+          } catch (statError: any) {
+            console.warn("[Database Size] pg_stat_user_tables not available, using fallback:", statError.message);
+            // Fallback: set row_count to 0 for all tables
+            tablesRowsResult.rows = tableNames.map((tableName: string) => ({
+              tablename: tableName,
+              row_count: 0,
+            }));
+          }
+        }
+      } catch (error: any) {
+        console.error("[Database Size] Error getting row counts:", error);
+        // Continue with empty row counts if this fails
+        tablesRowsResult = { rows: [] };
+      }
 
       // Combine table sizes with row counts
       const tablesWithRows = (tablesSizeResult.rows || []).map((table: any) => {
-        const rowCount = (tablesRowsResult.rows || []).find((r: any) => r.tablename === table.tablename)?.row_count || 0;
+        const rowCountRow = (tablesRowsResult.rows || []).find((r: any) => r.tablename === table.tablename);
+        const rowCount = rowCountRow ? (rowCountRow as any).row_count || 0 : 0;
         return {
           ...table,
           row_count: rowCount,
         };
       });
 
-      res.json({
+      const response = {
         success: true,
         database: {
           name: dbName,
           total_size: dbSizeResult.rows[0]?.size || '0 bytes',
-          total_size_bytes: parseInt(dbSizeResult.rows[0]?.size_bytes || '0'),
+          total_size_bytes: parseInt(String(dbSizeResult.rows[0]?.size_bytes || '0')),
         },
         tables: {
           total_size: totalTablesSizeResult.rows[0]?.total_size || '0 bytes',
-          total_size_bytes: parseInt(totalTablesSizeResult.rows[0]?.total_size_bytes || '0'),
+          total_size_bytes: parseInt(String(totalTablesSizeResult.rows[0]?.total_size_bytes || '0')),
           count: tablesWithRows.length,
           list: tablesWithRows.map((table: any) => ({
             name: table.tablename,
-            total_size: table.size,
-            total_size_bytes: parseInt(table.size_bytes || '0'),
-            table_size: table.table_size,
-            table_size_bytes: parseInt(table.table_size_bytes || '0'),
-            indexes_size: table.indexes_size,
-            indexes_size_bytes: parseInt(table.indexes_size_bytes || '0'),
+            total_size: table.size || '0 bytes',
+            total_size_bytes: parseInt(String(table.size_bytes || '0')),
+            table_size: table.table_size || '0 bytes',
+            table_size_bytes: parseInt(String(table.table_size_bytes || '0')),
+            indexes_size: table.indexes_size || '0 bytes',
+            indexes_size_bytes: parseInt(String(table.indexes_size_bytes || '0')),
             row_count: table.row_count || 0,
           })),
         },
         indexes: {
           total_size: indexesSizeResult.rows[0]?.total_indexes_size || '0 bytes',
-          total_size_bytes: parseInt(indexesSizeResult.rows[0]?.total_indexes_size_bytes || '0'),
+          total_size_bytes: parseInt(String(indexesSizeResult.rows[0]?.total_indexes_size_bytes || '0')),
         },
-      });
+      };
+
+      console.log("[Database Size] Successfully retrieved database size information");
+      res.json(response);
     } catch (error: any) {
-      console.error("Error getting database size:", error);
+      console.error("[Database Size] Error getting database size:", error);
+      console.error("[Database Size] Error stack:", error.stack);
       res.status(500).json({
         success: false,
         message: "Ошибка при получении информации о размере базы данных",
@@ -3789,8 +3857,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (client) {
         try {
           client.release();
+          console.log("[Database Size] Database client released");
         } catch (releaseError) {
-          console.error("Error releasing database client:", releaseError);
+          console.error("[Database Size] Error releasing database client:", releaseError);
         }
       }
     }
@@ -3934,7 +4003,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const isValid = await verifyPassword(currentPassword, user.passwordHash || user.password);
+      if (!user.passwordHash) {
+        res.status(400).json({ success: false, message: "User password hash not found" });
+        return;
+      }
+
+      const isValid = await verifyPassword(currentPassword, user.passwordHash);
       if (!isValid) {
         res.status(400).json({ success: false, message: "Current password is incorrect" });
         return;
