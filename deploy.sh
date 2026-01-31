@@ -59,7 +59,13 @@ npm run build
 
 # Применение миграций БД (если есть)
 echo "🗄️  Applying database migrations..."
-npm run db:push || echo "⚠️  No migrations to apply or migration failed (continuing...)"
+if npm run db:push; then
+    echo "✅ Database migrations applied successfully"
+else
+    echo "⚠️  Migration failed or no changes needed"
+    echo "   Check DATABASE_URL in .env file"
+    echo "   Continuing deployment..."
+fi
 
 # Перезапуск приложения через PM2
 echo "🔄 Restarting application..."

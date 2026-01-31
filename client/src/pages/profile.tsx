@@ -145,6 +145,23 @@ export default function Profile() {
     enabled: !!userData,
   });
 
+  const { data: commercialProposalsData } = useQuery({
+    queryKey: ["/api/auth/commercial-proposals"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) return { success: false, proposals: [] };
+      const res = await fetch("/api/auth/commercial-proposals", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) return { success: false, proposals: [] };
+      return res.json();
+    },
+    enabled: !!userData,
+  });
+
+  const commercialProposals = commercialProposalsData?.proposals || [];
+
   // Calculate profile completion percentage
   const profileCompletion = useMemo(() => {
     if (!userData) return 0;
@@ -987,6 +1004,7 @@ export default function Profile() {
                     { value: "overview", icon: User, label: "Профиль", shortLabel: "Профиль" },
                     { value: "orders", icon: Package, label: "Заказы", shortLabel: "Заказы", badge: orders.length },
                     { value: "favorites", icon: Heart, label: "Избранное", shortLabel: "Избр.", badge: favorites.length },
+                    { value: "proposals", icon: FileText, label: "Коммерческие предложения", shortLabel: "КП", badge: commercialProposals.length },
                     { value: "notifications", icon: Bell, label: "Уведомления", shortLabel: "Увед.", badge: unreadNotifications },
                     { value: "security", icon: Shield, label: "Безопасность", shortLabel: "Защита" },
                     { value: "settings", icon: Settings, label: "Настройки", shortLabel: "Настр." },
@@ -1500,6 +1518,115 @@ export default function Profile() {
                                 </Button>
                               </div>
                             </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Commercial Proposals Tab */}
+            <TabsContent value="proposals" className="mt-0">
+              <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+                <CardHeader>
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center">
+                      <FileText className="w-4 h-4 text-white" />
+                    </div>
+                    Коммерческие предложения
+                  </CardTitle>
+                  <CardDescription>Ваши отправленные коммерческие предложения и прикрепленные файлы</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {commercialProposals.length === 0 ? (
+                    <div className="text-center py-16">
+                      <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 flex items-center justify-center">
+                        <FileText className="w-10 h-10 text-purple-500" />
+                      </div>
+                      <h3 className="text-xl font-semibold mb-2">Нет коммерческих предложений</h3>
+                      <p className="text-muted-foreground mb-6">Отправьте коммерческое предложение через форму на главной странице</p>
+                      <Button onClick={() => setLocation("/#contact")} className="bg-gradient-to-r from-purple-600 to-indigo-600">
+                        Отправить предложение
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {commercialProposals.map((proposal: any) => (
+                        <Card key={proposal.id} className="border hover:shadow-lg transition-all duration-300">
+                          <CardContent className="p-6">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                              <div>
+                                <p className="font-semibold text-lg mb-1">Предложение #{proposal.id.slice(0, 8)}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {format(new Date(proposal.createdAt), "d MMMM yyyy, HH:mm", { locale: ru })}
+                                </p>
+                              </div>
+                              <Badge variant="secondary" className="text-sm">
+                                {proposal.files?.length || 0} файл(ов)
+                              </Badge>
+                            </div>
+                            
+                            <div className="space-y-3 mb-4">
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Компания</Label>
+                                <p className="font-medium">{proposal.company}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Сообщение</Label>
+                                <p className="text-sm mt-1 p-3 bg-muted rounded-md whitespace-pre-wrap">{proposal.message}</p>
+                              </div>
+                            </div>
+
+                            {proposal.files && proposal.files.length > 0 && (
+                              <div>
+                                <Label className="text-xs text-muted-foreground mb-2 block">Прикрепленные файлы</Label>
+                                <div className="space-y-2">
+                                  {proposal.files.map((file: any) => (
+                                    <div key={file.id} className="flex items-center justify-between p-3 border rounded-md">
+                                      <div className="flex items-center gap-3">
+                                        <FileText className="w-5 h-5 text-muted-foreground" />
+                                        <div>
+                                          <p className="font-medium text-sm">{file.fileName}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {(file.fileSize / 1024).toFixed(2)} KB • {format(new Date(file.uploadedAt), "dd.MM.yyyy HH:mm", { locale: ru })}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={async () => {
+                                          try {
+                                            const token = localStorage.getItem("accessToken");
+                                            const res = await fetch(`/api/files/${file.id}/download`, {
+                                              headers: { Authorization: `Bearer ${token}` },
+                                            });
+                                            if (!res.ok) throw new Error("Failed to download file");
+                                            const blob = await res.blob();
+                                            const url = window.URL.createObjectURL(blob);
+                                            const a = document.createElement("a");
+                                            a.href = url;
+                                            a.download = file.fileName;
+                                            document.body.appendChild(a);
+                                            a.click();
+                                            window.URL.revokeObjectURL(url);
+                                            document.body.removeChild(a);
+                                            toast({ title: "Успешно", description: "Файл скачан" });
+                                          } catch (error) {
+                                            toast({ title: "Ошибка", description: "Не удалось скачать файл", variant: "destructive" });
+                                          }
+                                        }}
+                                      >
+                                        <Download className="w-4 h-4 mr-2" />
+                                        Скачать
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </CardContent>
                         </Card>
                       ))}

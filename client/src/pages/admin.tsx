@@ -101,6 +101,10 @@ export default function Admin() {
   const [newAdminRole, setNewAdminRole] = useState("admin");
   // State for editing site contact
   const [editingContact, setEditingContact] = useState<{ id: string; type: string; value: string; label: string; order: number } | null>(null);
+  // State for viewing contact submission details
+  const [selectedContact, setSelectedContact] = useState<any>(null);
+  const [contactFiles, setContactFiles] = useState<any[]>([]);
+  const [loadingContactDetails, setLoadingContactDetails] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -2633,6 +2637,7 @@ export default function Admin() {
                       <TableHead>Телефон</TableHead>
                       <TableHead>Компания</TableHead>
                       <TableHead>Сообщение</TableHead>
+                      <TableHead>Файлы</TableHead>
                       <TableHead>Дата</TableHead>
                       <TableHead>Действия</TableHead>
                     </TableRow>
@@ -2645,19 +2650,52 @@ export default function Admin() {
                         <TableCell>{contact.phone}</TableCell>
                         <TableCell>{contact.company}</TableCell>
                         <TableCell className="max-w-xs truncate">{contact.message}</TableCell>
+                        <TableCell>
+                          {contact.fileCount > 0 ? (
+                            <Badge variant="secondary">{contact.fileCount} файл(ов)</Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">Нет файлов</span>
+                          )}
+                        </TableCell>
                         <TableCell>{format(new Date(contact.createdAt), "dd.MM.yyyy", { locale: ru })}</TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => {
-                              if (confirm("Удалить заявку?")) {
-                                deleteContact.mutate(contact.id);
-                              }
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => {
+                                setLoadingContactDetails(true);
+                                try {
+                                  const token = localStorage.getItem("accessToken");
+                                  const res = await fetch(`/api/admin/contacts/${contact.id}`, {
+                                    headers: { Authorization: `Bearer ${token}` },
+                                  });
+                                  if (!res.ok) throw new Error("Failed to fetch contact details");
+                                  const data = await res.json();
+                                  setSelectedContact(data.proposal);
+                                  setContactFiles(data.files || []);
+                                } catch (error) {
+                                  toast({ title: "Ошибка", description: "Не удалось загрузить детали заявки", variant: "destructive" });
+                                } finally {
+                                  setLoadingContactDetails(false);
+                                }
+                              }}
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Просмотр
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => {
+                                if (confirm("Удалить заявку?")) {
+                                  deleteContact.mutate(contact.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -2665,6 +2703,111 @@ export default function Admin() {
                 </Table>
               </CardContent>
             </Card>
+
+            {/* Contact Details Dialog */}
+            <Dialog open={!!selectedContact} onOpenChange={(open) => !open && setSelectedContact(null)}>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Детали коммерческого предложения</DialogTitle>
+                  <DialogDescription>
+                    ID: {selectedContact?.id}
+                  </DialogDescription>
+                </DialogHeader>
+                {selectedContact && (
+                  <div className="space-y-6">
+                    {/* Contact Information */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3">Контактная информация</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm text-muted-foreground">Имя</Label>
+                          <p className="font-medium">{selectedContact.name}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground">Email</Label>
+                          <p className="font-medium">{selectedContact.email}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground">Телефон</Label>
+                          <p className="font-medium">{selectedContact.phone}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground">Компания</Label>
+                          <p className="font-medium">{selectedContact.company}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Message */}
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Сообщение</Label>
+                      <p className="mt-2 p-3 bg-muted rounded-md whitespace-pre-wrap">{selectedContact.message}</p>
+                    </div>
+
+                    {/* Files */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3">Прикрепленные файлы ({contactFiles.length})</h3>
+                      {contactFiles.length > 0 ? (
+                        <div className="space-y-2">
+                          {contactFiles.map((file: any) => (
+                            <div key={file.id} className="flex items-center justify-between p-3 border rounded-md">
+                              <div className="flex items-center gap-3">
+                                <FileTextIcon className="w-5 h-5 text-muted-foreground" />
+                                <div>
+                                  <p className="font-medium">{file.fileName}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {(file.fileSize / 1024).toFixed(2)} KB • {format(new Date(file.uploadedAt), "dd.MM.yyyy HH:mm", { locale: ru })}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  try {
+                                    const token = localStorage.getItem("accessToken");
+                                    const res = await fetch(`/api/files/${file.id}/download`, {
+                                      headers: { Authorization: `Bearer ${token}` },
+                                    });
+                                    if (!res.ok) throw new Error("Failed to download file");
+                                    const blob = await res.blob();
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement("a");
+                                    a.href = url;
+                                    a.download = file.fileName;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    window.URL.revokeObjectURL(url);
+                                    document.body.removeChild(a);
+                                    toast({ title: "Успешно", description: "Файл скачан" });
+                                  } catch (error) {
+                                    toast({ title: "Ошибка", description: "Не удалось скачать файл", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                <Download className="w-4 h-4 mr-2" />
+                                Скачать
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground text-sm">Файлы не прикреплены</p>
+                      )}
+                    </div>
+
+                    {/* Date */}
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Дата создания</Label>
+                      <p className="font-medium">{format(new Date(selectedContact.createdAt), "dd.MM.yyyy HH:mm", { locale: ru })}</p>
+                    </div>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setSelectedContact(null)}>Закрыть</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
               </div>
             )}
 

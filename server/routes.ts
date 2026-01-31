@@ -19,6 +19,10 @@ import { cache, CACHE_TTL } from "./cache";
 import { csrfProtection } from "./csrf";
 import { bruteForceProtection, recordLoginAttempt, checkBruteForce } from "./middleware/bruteForce";
 
+// Import new API routes
+import commercialFilesRouter from "./api/commercial/files";
+import fileDownloadRouter from "./api/files/download";
+
 // SECURITY: API keys must be in environment variables, no hardcoded fallbacks
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const OWNER_EMAIL = process.env.OWNER_EMAIL || "rostext@gmail.com";
@@ -360,7 +364,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      const submission = await storage.createContactSubmission(validatedData);
+      // Create submission without file data (we'll save files separately)
+      const submissionData = {
+        ...validatedData,
+        fileName: null, // Don't save in old fields
+        fileData: null, // Don't save in old fields
+      };
+      const submission = await storage.createContactSubmission(submissionData);
+      
+      // Save file to new table if provided
+      if (isFileUploadEnabled && validatedData.fileData && validatedData.fileName) {
+        try {
+          const { fileService } = await import("./services/files");
+          const { logger } = await import("./services/logger");
+          
+          const dataUrlMatch = validatedData.fileData.match(/^data:([^;]+);base64,(.+)$/);
+          const base64Data = dataUrlMatch ? dataUrlMatch[2] : validatedData.fileData;
+          const mimeType = dataUrlMatch ? dataUrlMatch[1] : "application/octet-stream";
+          const fileSizeBytes = calculateBase64Size(validatedData.fileData);
+          
+          await fileService.createFile(
+            submission.id,
+            userId,
+            validatedData.fileName,
+            mimeType,
+            fileSizeBytes,
+            validatedData.fileData // Store full data URL for now
+          );
+          
+          logger.logFileOperation("upload", {
+            proposalId: submission.id,
+            fileName: validatedData.fileName,
+            fileSize: fileSizeBytes,
+            mimeType,
+          }, userId);
+          
+          console.log(`📎 [Contact] File saved to new table: ${validatedData.fileName} for proposal ${submission.id}`);
+        } catch (fileError) {
+          console.error("❌ [Contact] Error saving file to new table:", fileError);
+          // Continue - submission is already created
+        }
+      }
       
       // FIXED: XSS protection - escape all user input with beautiful HTML template
       const ownerEmailHtml = `
@@ -1672,6 +1716,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true, message: "Logged out" });
   });
 
+  // Get user's commercial proposals
+  app.get("/api/auth/commercial-proposals", rateLimiters.general, async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const userId = payload.userId;
+      
+      // Security: Limit number of proposals to prevent DoS
+      const MAX_PROPOSALS = 100;
+      
+      // Get all contact submissions where user has files
+      const { fileService } = await import("./services/files");
+      const { commercialProposalFiles } = await import("@shared/schema");
+      const { db } = await import("./db");
+      const { eq } = await import("drizzle-orm");
+      
+      // Get all files for this user (limit to prevent DoS)
+      const userFiles = await db
+        .select()
+        .from(commercialProposalFiles)
+        .where(eq(commercialProposalFiles.userId, userId))
+        .limit(MAX_PROPOSALS * 10); // Allow up to 10 files per proposal
+      
+      // Get unique proposal IDs
+      const proposalIds = [...new Set(userFiles.map(f => f.proposalId))].slice(0, MAX_PROPOSALS);
+      
+      // Get proposals with files
+      const { commercialProposalService } = await import("./services/commercial");
+      const proposals = await Promise.all(
+        proposalIds.map(async (proposalId) => {
+          const { proposal, files } = await commercialProposalService.getProposalWithFiles(proposalId);
+          if (!proposal) return null;
+          
+          // Security: Only return files owned by this user
+          const userFiles = files.filter(f => f.userId === userId);
+          
+          return {
+            ...proposal,
+            files: userFiles.map(f => ({
+              id: f.id,
+              fileName: f.fileName,
+              mimeType: f.mimeType,
+              fileSize: f.fileSize,
+              uploadedAt: f.uploadedAt,
+            })),
+          };
+        })
+      );
+
+      res.json({
+        success: true,
+        proposals: proposals.filter(p => p !== null),
+      });
+    } catch (error) {
+      console.error("Error fetching commercial proposals:", error);
+      res.status(500).json({ success: false, message: "Failed to fetch proposals" });
+    }
+  });
+
   // Profile update endpoint
   app.patch("/api/auth/profile", rateLimiters.general, async (req, res) => {
     try {
@@ -2716,10 +2829,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const contacts = await storage.getContactSubmissions();
-      res.json({ success: true, contacts });
+      
+      // Get file counts for each contact
+      const { commercialProposalService } = await import("./services/commercial");
+      const contactsWithFiles = await Promise.all(
+        contacts.map(async (contact) => {
+          const { files } = await commercialProposalService.getProposalWithFiles(contact.id);
+          return {
+            ...contact,
+            fileCount: files.length,
+          };
+        })
+      );
+
+      res.json({ success: true, contacts: contactsWithFiles });
     } catch (error) {
       console.error("Get contacts error:", error);
       res.status(500).json({ success: false, message: "Failed to get contacts" });
+    }
+  });
+
+  // ADMIN: Get Contact Submission with Files
+  app.get("/api/admin/contacts/:id", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const { commercialProposalService } = await import("./services/commercial");
+      const { proposal, files } = await commercialProposalService.getProposalWithFiles(req.params.id);
+
+      if (!proposal) {
+        res.status(404).json({ success: false, message: "Contact submission not found" });
+        return;
+      }
+
+      res.json({
+        success: true,
+        proposal,
+        files: files.map((file) => ({
+          id: file.id,
+          fileName: file.fileName,
+          mimeType: file.mimeType,
+          fileSize: file.fileSize,
+          uploadedAt: file.uploadedAt,
+        })),
+      });
+    } catch (error) {
+      console.error("Get contact error:", error);
+      res.status(500).json({ success: false, message: "Failed to get contact" });
     }
   });
 
@@ -3829,6 +4001,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ success: false, message: "Failed to send notification" });
     }
   });
+
+  // Register new API routes for files
+  app.use("/api/commercial", commercialFilesRouter);
+  app.use("/api/files", fileDownloadRouter);
 
   // Register auth routes
   const httpServer = createServer(app);

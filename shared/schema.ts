@@ -351,7 +351,50 @@ export const usersRelations = relations(users, ({ many }) => ({
   notifications: many(notifications),
 }));
 
+// Commercial proposal files table (for multiple files per proposal)
+export const commercialProposalFiles = pgTable("commercial_proposal_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  proposalId: varchar("proposal_id").notNull().references(() => contactSubmissions.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  fileSize: integer("file_size").notNull(), // Size in bytes
+  filePath: text("file_path").notNull(), // Path to file on disk or base64 data
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCommercialProposalFileSchema = createInsertSchema(commercialProposalFiles).omit({
+  id: true,
+  createdAt: true,
+  uploadedAt: true,
+}).extend({
+  fileName: z.string().min(1, "Имя файла обязательно"),
+  mimeType: z.string().min(1, "MIME-тип обязателен"),
+  fileSize: z.number().int().min(1, "Размер файла должен быть больше 0"),
+  filePath: z.string().min(1, "Путь к файлу обязателен"),
+});
+
+export type InsertCommercialProposalFile = z.infer<typeof insertCommercialProposalFileSchema>;
+export type CommercialProposalFile = typeof commercialProposalFiles.$inferSelect;
+
+// Relations
 export const productsRelations = relations(products, ({ many }) => ({
   orders: many(orders),
   favorites: many(favorites),
+}));
+
+export const contactSubmissionsRelations = relations(contactSubmissions, ({ many }) => ({
+  files: many(commercialProposalFiles),
+}));
+
+export const commercialProposalFilesRelations = relations(commercialProposalFiles, ({ one }) => ({
+  proposal: one(contactSubmissions, {
+    fields: [commercialProposalFiles.proposalId],
+    references: [contactSubmissions.id],
+  }),
+  user: one(users, {
+    fields: [commercialProposalFiles.userId],
+    references: [users.id],
+  }),
 }));

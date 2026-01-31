@@ -5,7 +5,7 @@ import { storage } from "../storage";
 export interface AuthRequest extends Request {
   user?: {
     id: string;
-    userId?: string; // Alias for compatibility
+    userId: string; // Alias for id for compatibility
     email: string;
     role: string;
   };
@@ -21,7 +21,8 @@ export interface ErrorResponse {
 }
 
 /**
- * Middleware to verify JWT token and attach user to request
+ * Centralized JWT authentication middleware
+ * Verifies JWT token and attaches user to request
  */
 export async function authenticate(
   req: AuthRequest,
@@ -83,14 +84,6 @@ export async function authenticate(
 }
 
 /**
- * Middleware to check if user has required role
- * Alias for authorize for compatibility
- */
-export function authorize(...allowedRoles: string[]) {
-  return requireRole(...allowedRoles);
-}
-
-/**
  * Role-based access control middleware
  * Usage: requireRole(["admin", "superadmin"])
  */
@@ -119,17 +112,8 @@ export function requireRole(...allowedRoles: string[]) {
 }
 
 /**
- * Admin-only access (admin or superadmin)
- */
-export const requireAdmin = requireRole("admin", "superadmin");
-
-/**
- * Superadmin-only access
- */
-export const requireSuperAdmin = requireRole("superadmin");
-
-/**
  * Optional authentication - doesn't fail if no token
+ * Useful for endpoints that work both authenticated and unauthenticated
  */
 export async function optionalAuthenticate(
   req: AuthRequest,
@@ -149,7 +133,7 @@ export async function optionalAuthenticate(
         if (user && !user.isBlocked) {
           req.user = {
             id: user.id,
-            userId: user.id, // Alias for compatibility
+            userId: user.id,
             email: user.email,
             role: user.role,
           };
@@ -163,4 +147,14 @@ export async function optionalAuthenticate(
     next();
   }
 }
+
+/**
+ * Admin-only access (admin or superadmin)
+ */
+export const requireAdmin = requireRole("admin", "superadmin");
+
+/**
+ * Superadmin-only access
+ */
+export const requireSuperAdmin = requireRole("superadmin");
 

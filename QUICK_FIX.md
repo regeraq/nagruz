@@ -130,3 +130,5 @@ document.cookie.split(';').find(c => c.includes('csrf-token'))
 3. Проверьте, что все переменные окружения установлены
 
 
+
+
