@@ -2760,7 +2760,11 @@ export default function Admin() {
                     {/* Message */}
                     <div>
                       <Label className="text-sm text-muted-foreground">Сообщение</Label>
-                      <p className="mt-2 p-3 bg-muted rounded-md whitespace-pre-wrap">{selectedContact.message}</p>
+                      <div className="mt-2 p-4 bg-muted rounded-md border border-border/50 max-w-full">
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words max-h-64 overflow-y-auto pr-2" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                          {selectedContact.message}
+                        </p>
+                      </div>
                     </div>
 
                     {/* Files */}
