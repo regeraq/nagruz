@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { commercialProposalFiles, contactSubmissions } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import type { InsertCommercialProposalFile, CommercialProposalFile } from "@shared/schema";
 
 /**
@@ -41,7 +41,7 @@ export class FileService {
       .select()
       .from(commercialProposalFiles)
       .where(eq(commercialProposalFiles.proposalId, proposalId))
-      .orderBy(commercialProposalFiles.uploadedAt);
+      .orderBy(desc(commercialProposalFiles.uploadedAt));
   }
 
   /**
@@ -56,13 +56,22 @@ export class FileService {
    * Get a single file by ID
    */
   async getFileById(fileId: string): Promise<CommercialProposalFile | null> {
-    const [file] = await db
-      .select()
-      .from(commercialProposalFiles)
-      .where(eq(commercialProposalFiles.id, fileId))
-      .limit(1);
+    try {
+      const [file] = await db
+        .select()
+        .from(commercialProposalFiles)
+        .where(eq(commercialProposalFiles.id, fileId))
+        .limit(1);
 
-    return file || null;
+      return file || null;
+    } catch (error: any) {
+      // Check if table doesn't exist
+      if (error?.code === '42P01' || error?.message?.includes('does not exist') || error?.message?.includes('не существует')) {
+        console.error(`❌ [FileService] Table 'commercial_proposal_files' does not exist. Run migration: npm run db:push`);
+        throw new Error("Database table 'commercial_proposal_files' does not exist. Please run migration: npm run db:push");
+      }
+      throw error;
+    }
   }
 
   /**
