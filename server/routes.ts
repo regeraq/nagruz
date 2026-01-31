@@ -316,7 +316,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if file upload is enabled
       const fileUploadEnabled = await storage.getSiteSetting("enable_file_upload");
       // По умолчанию разрешено, если настройка не установлена
-      const isFileUploadEnabled = fileUploadEnabled === null || fileUploadEnabled?.value === "true" || fileUploadEnabled?.value === true;
+      const fileUploadValue = fileUploadEnabled?.value;
+      const isFileUploadEnabled = fileUploadEnabled === null || 
+        fileUploadValue === "true" || 
+        (typeof fileUploadValue === "string" && fileUploadValue.toLowerCase() === "true") ||
+        fileUploadValue === "1";
       
       // If file upload is disabled, reject file data
       if (!isFileUploadEnabled && (validatedData.fileData || validatedData.fileName)) {
@@ -327,40 +331,207 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
-      // FIXED: Validate and sanitize file data (only if file upload is enabled)
-      if (isFileUploadEnabled && validatedData.fileData && validatedData.fileName) {
-        const dataUrlMatch = validatedData.fileData.match(/^data:([^;]+);base64,(.+)$/);
-        const base64Data = dataUrlMatch ? dataUrlMatch[2] : validatedData.fileData;
-        const declaredMimeType = dataUrlMatch ? dataUrlMatch[1] : null;
-        
-        // FIXED: Accurate file size calculation
-        const fileSizeBytes = calculateBase64Size(validatedData.fileData);
-        const fileSizeMB = fileSizeBytes / (1024 * 1024);
-        
-        if (fileSizeMB > MAX_FILE_SIZE_MB) {
-          res.status(413).json({
-            success: false,
-            message: `Размер файла превышает максимально допустимый (${MAX_FILE_SIZE_MB} МБ)`,
-          });
-          return;
+      // SECURITY: Validate and sanitize file data (only if file upload is enabled)
+      // Support both old format (single file) and new format (multiple files)
+      const filesToProcess: Array<{fileName: string; fileData: string; mimeType: string; fileSize: number}> = [];
+      
+      if (isFileUploadEnabled) {
+        // New format: multiple files
+        if (validatedData.files && Array.isArray(validatedData.files) && validatedData.files.length > 0) {
+          const MAX_TOTAL_SIZE_MB = 50; // 50MB total limit
+          const MAX_FILES = 20; // Maximum number of files (DoS protection)
+          let totalSizeBytes = 0;
+          
+          // SECURITY: Limit number of files to prevent DoS
+          if (validatedData.files.length > MAX_FILES) {
+            res.status(400).json({
+              success: false,
+              message: `Превышено максимальное количество файлов (${MAX_FILES})`,
+            });
+            return;
+          }
+          
+          // SECURITY: Check for duplicate file names
+          const fileNames = new Set<string>();
+          
+          for (const file of validatedData.files) {
+            // SECURITY: Validate file name (prevent path traversal and XSS)
+            if (!file.fileName || typeof file.fileName !== 'string') {
+              res.status(400).json({
+                success: false,
+                message: "Недопустимое имя файла",
+              });
+              return;
+            }
+            
+            // Use security middleware function
+            const { validateFileName } = await import("./middleware/security");
+            if (!validateFileName(file.fileName)) {
+              res.status(400).json({
+                success: false,
+                message: `Недопустимое имя файла: ${file.fileName}`,
+              });
+              return;
+            }
+            
+            // Check for duplicates
+            if (fileNames.has(file.fileName.toLowerCase())) {
+              res.status(400).json({
+                success: false,
+                message: `Дубликат файла: ${file.fileName}`,
+              });
+              return;
+            }
+            fileNames.add(file.fileName.toLowerCase());
+            
+            // SECURITY: Validate file data is not empty
+            if (!file.fileData || typeof file.fileData !== 'string' || file.fileData.length === 0) {
+              res.status(400).json({
+                success: false,
+                message: `Файл "${file.fileName}" не содержит данных`,
+              });
+              return;
+            }
+            
+            // SECURITY: Validate base64 format before processing
+            const base64Regex = /^data:[^;]+;base64,[A-Za-z0-9+/]*={0,2}$|^[A-Za-z0-9+/]*={0,2}$/;
+            if (!base64Regex.test(file.fileData)) {
+              res.status(400).json({
+                success: false,
+                message: `Файл "${file.fileName}" имеет неверный формат данных`,
+              });
+              return;
+            }
+            
+            // Validate file size
+            const fileSizeBytes = calculateBase64Size(file.fileData);
+            const fileSizeMB = fileSizeBytes / (1024 * 1024);
+            
+            if (fileSizeMB > MAX_FILE_SIZE_MB) {
+              res.status(413).json({
+                success: false,
+                message: `Файл "${file.fileName}" превышает максимальный размер (${MAX_FILE_SIZE_MB} МБ)`,
+              });
+              return;
+            }
+            
+            totalSizeBytes += fileSizeBytes;
+            
+            // SECURITY: Validate MIME type matches declared type
+            if (!file.mimeType || typeof file.mimeType !== 'string') {
+              res.status(400).json({
+                success: false,
+                message: `Файл "${file.fileName}" не содержит MIME-тип`,
+              });
+              return;
+            }
+            
+            if (!isValidMimeType(file.mimeType, ALLOWED_MIME_TYPES)) {
+              res.status(400).json({
+                success: false,
+                message: `Файл "${file.fileName}" имеет недопустимый формат. Разрешены: PDF, DOC, DOCX, XLS, XLSX`,
+              });
+              return;
+            }
+            
+            // SECURITY: Validate file extension matches MIME type
+            if (!isValidFileExtension(file.fileName, ALLOWED_EXTENSIONS)) {
+              res.status(400).json({
+                success: false,
+                message: `Файл "${file.fileName}" имеет недопустимое расширение. Разрешены: PDF, DOC, DOCX, XLS, XLSX`,
+              });
+              return;
+            }
+            
+            // SECURITY: Sanitize file name (remove any remaining dangerous characters)
+            const sanitizedFileName = file.fileName.replace(/[<>:"|?*\x00-\x1f]/g, '').trim();
+            if (sanitizedFileName !== file.fileName) {
+              console.warn(`⚠️ [Contact] File name sanitized: "${file.fileName}" -> "${sanitizedFileName}"`);
+            }
+            
+            filesToProcess.push({
+              fileName: sanitizedFileName,
+              fileData: file.fileData,
+              mimeType: file.mimeType,
+              fileSize: fileSizeBytes,
+            });
+          }
+          
+          // Check total size
+          const totalSizeMB = totalSizeBytes / (1024 * 1024);
+          if (totalSizeMB > MAX_TOTAL_SIZE_MB) {
+            res.status(413).json({
+              success: false,
+              message: `Общий размер всех файлов (${totalSizeMB.toFixed(2)} МБ) превышает максимально допустимый (${MAX_TOTAL_SIZE_MB} МБ)`,
+            });
+            return;
+          }
         }
+        // Old format: single file (backward compatibility)
+        else if (validatedData.fileData && validatedData.fileName) {
+          // SECURITY: Validate file name
+          const { validateFileName } = await import("./middleware/security");
+          if (!validateFileName(validatedData.fileName)) {
+            res.status(400).json({
+              success: false,
+              message: "Недопустимое имя файла",
+            });
+            return;
+          }
+          
+          // SECURITY: Validate base64 format
+          const base64Regex = /^data:[^;]+;base64,[A-Za-z0-9+/]*={0,2}$|^[A-Za-z0-9+/]*={0,2}$/;
+          if (!base64Regex.test(validatedData.fileData)) {
+            res.status(400).json({
+              success: false,
+              message: "Неверный формат данных файла",
+            });
+            return;
+          }
+          
+          const dataUrlMatch = validatedData.fileData.match(/^data:([^;]+);base64,(.+)$/);
+          const base64Data = dataUrlMatch ? dataUrlMatch[2] : validatedData.fileData;
+          const declaredMimeType = dataUrlMatch ? dataUrlMatch[1] : null;
+          
+          // FIXED: Accurate file size calculation
+          const fileSizeBytes = calculateBase64Size(validatedData.fileData);
+          const fileSizeMB = fileSizeBytes / (1024 * 1024);
+          
+          if (fileSizeMB > MAX_FILE_SIZE_MB) {
+            res.status(413).json({
+              success: false,
+              message: `Размер файла превышает максимально допустимый (${MAX_FILE_SIZE_MB} МБ)`,
+            });
+            return;
+          }
 
-        // FIXED: Validate MIME type
-        if (declaredMimeType && !isValidMimeType(declaredMimeType, ALLOWED_MIME_TYPES)) {
-          res.status(400).json({
-            success: false,
-            message: "Недопустимый формат файла. Разрешены: PDF, DOC, DOCX, XLS, XLSX",
-          });
-          return;
-        }
+          // FIXED: Validate MIME type
+          if (declaredMimeType && !isValidMimeType(declaredMimeType, ALLOWED_MIME_TYPES)) {
+            res.status(400).json({
+              success: false,
+              message: "Недопустимый формат файла. Разрешены: PDF, DOC, DOCX, XLS, XLSX",
+            });
+            return;
+          }
 
-        // FIXED: Validate file extension
-        if (!isValidFileExtension(validatedData.fileName, ALLOWED_EXTENSIONS)) {
-          res.status(400).json({
-            success: false,
-            message: "Недопустимый формат файла. Разрешены: PDF, DOC, DOCX, XLS, XLSX",
+          // FIXED: Validate file extension
+          if (!isValidFileExtension(validatedData.fileName, ALLOWED_EXTENSIONS)) {
+            res.status(400).json({
+              success: false,
+              message: "Недопустимый формат файла. Разрешены: PDF, DOC, DOCX, XLS, XLSX",
+            });
+            return;
+          }
+          
+          // SECURITY: Sanitize file name
+          const sanitizedFileName = validatedData.fileName.replace(/[<>:"|?*\x00-\x1f]/g, '').trim();
+          
+          filesToProcess.push({
+            fileName: sanitizedFileName,
+            fileData: validatedData.fileData,
+            mimeType: declaredMimeType || "application/octet-stream",
+            fileSize: fileSizeBytes,
           });
-          return;
         }
       }
       
@@ -372,36 +543,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       const submission = await storage.createContactSubmission(submissionData);
       
-      // Save file to new table if provided
-      if (isFileUploadEnabled && validatedData.fileData && validatedData.fileName) {
+      // Save files to new table if provided
+      if (isFileUploadEnabled && filesToProcess.length > 0) {
         try {
           const { fileService } = await import("./services/files");
           const { logger } = await import("./services/logger");
           
-          const dataUrlMatch = validatedData.fileData.match(/^data:([^;]+);base64,(.+)$/);
-          const base64Data = dataUrlMatch ? dataUrlMatch[2] : validatedData.fileData;
-          const mimeType = dataUrlMatch ? dataUrlMatch[1] : "application/octet-stream";
-          const fileSizeBytes = calculateBase64Size(validatedData.fileData);
-          
-          await fileService.createFile(
-            submission.id,
-            userId,
-            validatedData.fileName,
-            mimeType,
-            fileSizeBytes,
-            validatedData.fileData // Store full data URL for now
-          );
-          
-          logger.logFileOperation("upload", {
-            proposalId: submission.id,
-            fileName: validatedData.fileName,
-            fileSize: fileSizeBytes,
-            mimeType,
-          }, userId);
-          
-          console.log(`📎 [Contact] File saved to new table: ${validatedData.fileName} for proposal ${submission.id}`);
+          // Save all files
+          for (const file of filesToProcess) {
+            await fileService.createFile(
+              submission.id,
+              userId,
+              file.fileName,
+              file.mimeType,
+              file.fileSize,
+              file.fileData // Store full data URL for now
+            );
+            
+            logger.logFileOperation("upload", {
+              proposalId: submission.id,
+              fileName: file.fileName,
+              fileSize: file.fileSize,
+              mimeType: file.mimeType,
+            }, userId);
+            
+            console.log(`📎 [Contact] File saved to new table: ${file.fileName} for proposal ${submission.id}`);
+          }
         } catch (fileError) {
-          console.error("❌ [Contact] Error saving file to new table:", fileError);
+          console.error("❌ [Contact] Error saving files to new table:", fileError);
           // Continue - submission is already created
         }
       }
@@ -460,13 +629,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ${escapeHtml(validatedData.message).replace(/\n/g, '<br>')}
               </div>
               
-              ${validatedData.fileName ? `
-              <!-- Файл -->
+              ${filesToProcess.length > 0 ? `
+              <!-- Файлы -->
               <div style="background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
-                <p style="margin: 0; color: #856404;">
-                  <strong>📎 Прикрепленный файл:</strong> ${escapeHtml(validatedData.fileName)}
+                <p style="margin: 0 0 10px 0; color: #856404;">
+                  <strong>📎 Прикрепленные файлы (${filesToProcess.length}):</strong>
                 </p>
-                <p style="margin: 5px 0 0 0; font-size: 12px; color: #856404;">Файл прикреплен к письму</p>
+                <ul style="margin: 0; padding-left: 20px; color: #856404;">
+                  ${filesToProcess.map(file => `
+                    <li style="margin: 5px 0; font-size: 12px;">
+                      ${escapeHtml(file.fileName)} (${(file.fileSize / 1024 / 1024).toFixed(2)} МБ)
+                    </li>
+                  `).join('')}
+                </ul>
+                <p style="margin: 10px 0 0 0; font-size: 12px; color: #856404;">Файлы прикреплены к письму</p>
               </div>
               ` : ''}
               
@@ -497,48 +673,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reply_to: validatedData.email || OWNER_EMAIL, // Reply to sender's email
       };
 
-      // Add attachment if file exists and file upload is enabled
-      if (isFileUploadEnabled && validatedData.fileName && validatedData.fileData) {
+      // Add attachments if files exist and file upload is enabled
+      if (isFileUploadEnabled && filesToProcess.length > 0) {
         try {
-          // Extract base64 data (Resend expects pure base64 string without data URL prefix)
-          let base64Data: string;
+          emailData.attachments = [];
+          let totalSizeKB = 0;
           
-          if (validatedData.fileData.includes(',')) {
-            // Remove data:type;base64, prefix
-            base64Data = validatedData.fileData.split(',')[1];
-          } else {
-            // Already base64 without prefix
-            base64Data = validatedData.fileData;
+          for (const file of filesToProcess) {
+            // Extract base64 data (Resend expects pure base64 string without data URL prefix)
+            let base64Data: string;
+            
+            if (file.fileData.includes(',')) {
+              // Remove data:type;base64, prefix
+              base64Data = file.fileData.split(',')[1];
+            } else {
+              // Already base64 without prefix
+              base64Data = file.fileData;
+            }
+            
+            // Validate base64
+            if (!base64Data || base64Data.length === 0) {
+              console.warn(`⚠️ [Contact] Empty base64 data for file: ${file.fileName}`);
+              continue;
+            }
+            
+            emailData.attachments.push({
+              filename: file.fileName,
+              content: base64Data, // Pure base64 string for Resend
+            });
+            
+            const sizeKB = Math.round(base64Data.length / 1024);
+            totalSizeKB += sizeKB;
+            
+            console.log("📎 [Contact] Adding attachment:", { 
+              filename: file.fileName, 
+              size: base64Data.length,
+              sizeKB,
+              sizeMB: `${(sizeKB / 1024).toFixed(2)} MB`,
+              note: sizeKB > 5000 ? "⚠️ Large file - may cause timeout" : "✓ File size OK"
+            });
           }
           
-          // Validate base64
-          if (!base64Data || base64Data.length === 0) {
-            throw new Error("Empty base64 data");
+          // Warn if total size is very large
+          if (totalSizeKB > 10000) {
+            console.warn(`⚠️ [Contact] Very large total attachment size (${(totalSizeKB / 1024).toFixed(2)} MB). Consider compressing files.`);
           }
           
-          emailData.attachments = [{
-            filename: validatedData.fileName,
-            content: base64Data, // Pure base64 string for Resend
-          }];
-          
-          const sizeKB = Math.round(base64Data.length / 1024);
-          const sizeMB = (sizeKB / 1024).toFixed(2);
-          console.log("📎 [Contact] Adding attachment:", { 
-            filename: validatedData.fileName, 
-            size: base64Data.length,
-            sizeKB,
-            sizeMB: `${sizeMB} MB`,
-            note: sizeKB > 5000 ? "⚠️ Large file - may cause timeout" : "✓ File size OK"
-          });
-          
-          // Warn if file is very large
-          if (sizeKB > 10000) {
-            console.warn("⚠️ [Contact] Very large attachment detected. Consider compressing the file.");
-          }
+          console.log(`📎 [Contact] Total attachments: ${emailData.attachments.length}, total size: ${(totalSizeKB / 1024).toFixed(2)} MB`);
         } catch (attachmentError: any) {
-          console.error("❌ [Contact] Error processing attachment:", attachmentError);
-          console.error("   Will send email without attachment");
-          // Continue without attachment if there's an error
+          console.error("❌ [Contact] Error processing attachments:", attachmentError);
+          console.error("   Will send email without attachments");
+          // Continue without attachments if there's an error
+          emailData.attachments = undefined;
         }
       }
 
@@ -3455,6 +3641,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get cookie settings error:", error);
       res.status(500).json({ success: false, message: "Failed to get cookie settings" });
+    }
+  });
+
+  // ADMIN: Get Database Size Information
+  app.get("/api/admin/database/size", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ success: false, message: "Invalid token" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+        res.status(403).json({ success: false, message: "Not authorized" });
+        return;
+      }
+
+      const client = await pool.connect();
+      try {
+        // Get database name from connection string
+        const dbName = process.env.DATABASE_URL?.split('/').pop()?.split('?')[0] || 'loaddevice_db';
+        
+        // Get total database size
+        const dbSizeResult = await client.query(`
+          SELECT 
+            pg_size_pretty(pg_database_size($1)) as size,
+            pg_database_size($1) as size_bytes
+        `, [dbName]);
+
+        // Get size of each table
+        const tablesSizeResult = await client.query(`
+          SELECT 
+            schemaname,
+            tablename,
+            pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size,
+            pg_total_relation_size(schemaname||'.'||tablename) AS size_bytes,
+            pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
+            pg_relation_size(schemaname||'.'||tablename) AS table_size_bytes,
+            pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size,
+            (pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size_bytes
+          FROM pg_tables
+          WHERE schemaname = 'public'
+          ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+        `);
+
+        // Get total size of all tables
+        const totalTablesSizeResult = await client.query(`
+          SELECT 
+            pg_size_pretty(SUM(pg_total_relation_size(schemaname||'.'||tablename))) AS total_size,
+            SUM(pg_total_relation_size(schemaname||'.'||tablename)) AS total_size_bytes
+          FROM pg_tables
+          WHERE schemaname = 'public';
+        `);
+
+        // Get indexes size
+        const indexesSizeResult = await client.query(`
+          SELECT 
+            pg_size_pretty(SUM(pg_relation_size(indexrelid))) AS total_indexes_size,
+            SUM(pg_relation_size(indexrelid)) AS total_indexes_size_bytes
+          FROM pg_indexes
+          WHERE schemaname = 'public';
+        `);
+
+        // Get number of rows per table
+        const tablesRowsResult = await client.query(`
+          SELECT 
+            schemaname,
+            tablename,
+            (xpath('/row/cnt/text()', xml_count))[1]::text::int AS row_count
+          FROM (
+            SELECT 
+              schemaname,
+              tablename,
+              query_to_xml(format('select count(*) as cnt from %I.%I', schemaname, tablename), false, true, '') AS xml_count
+            FROM pg_tables
+            WHERE schemaname = 'public'
+          ) t
+          ORDER BY tablename;
+        `);
+
+        // Combine table sizes with row counts
+        const tablesWithRows = tablesSizeResult.rows.map((table: any) => {
+          const rowCount = tablesRowsResult.rows.find((r: any) => r.tablename === table.tablename)?.row_count || 0;
+          return {
+            ...table,
+            row_count: rowCount,
+          };
+        });
+
+        res.json({
+          success: true,
+          database: {
+            name: dbName,
+            total_size: dbSizeResult.rows[0].size,
+            total_size_bytes: parseInt(dbSizeResult.rows[0].size_bytes),
+          },
+          tables: {
+            total_size: totalTablesSizeResult.rows[0].total_size,
+            total_size_bytes: parseInt(totalTablesSizeResult.rows[0].total_size_bytes || '0'),
+            count: tablesWithRows.length,
+            list: tablesWithRows.map((table: any) => ({
+              name: table.tablename,
+              total_size: table.size,
+              total_size_bytes: parseInt(table.size_bytes),
+              table_size: table.table_size,
+              table_size_bytes: parseInt(table.table_size_bytes),
+              indexes_size: table.indexes_size,
+              indexes_size_bytes: parseInt(table.indexes_size_bytes),
+              row_count: table.row_count,
+            })),
+          },
+          indexes: {
+            total_size: indexesSizeResult.rows[0].total_indexes_size || '0 bytes',
+            total_size_bytes: parseInt(indexesSizeResult.rows[0].total_indexes_size_bytes || '0'),
+          },
+        });
+      } finally {
+        client.release();
+      }
+    } catch (error: any) {
+      console.error("Error getting database size:", error);
+      res.status(500).json({
+        success: false,
+        message: "Ошибка при получении информации о размере базы данных",
+        error: error.message,
+      });
     }
   });
 

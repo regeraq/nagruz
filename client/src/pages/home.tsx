@@ -113,7 +113,7 @@ export default function Home() {
     window.history.replaceState({}, "", `?${params.toString()}`);
   };
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -407,7 +407,7 @@ export default function Home() {
       });
       queueMicrotask(() => {
         form.reset();
-        setSelectedFile(null);
+        setSelectedFiles([]);
         setConsentPersonalData(false);
         setConsentDataProcessing(false);
       });
@@ -430,31 +430,129 @@ export default function Home() {
   });
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB total limit
+    const ALLOWED_TYPES = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+
+    // Validate each file
+    const validFiles: File[] = [];
+    let totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+
+    for (const file of files) {
+      // Check individual file size
+      if (file.size > MAX_FILE_SIZE) {
         toast({
           title: "Файл слишком большой",
-          description: "Максимальный размер файла 10 МБ",
+          description: `Файл "${file.name}" превышает максимальный размер 10 МБ`,
           variant: "destructive",
         });
-        return;
+        continue;
       }
-      
-      setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        form.setValue("fileName", file.name);
-        form.setValue("fileData", reader.result as string);
-      };
-      reader.readAsDataURL(file);
+
+      // Check total size
+      if (totalSize + file.size > MAX_TOTAL_SIZE) {
+        toast({
+          title: "Превышен общий размер",
+          description: `Общий размер всех файлов не должен превышать 50 МБ`,
+          variant: "destructive",
+        });
+        break;
+      }
+
+      // Check MIME type
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        toast({
+          title: "Недопустимый формат",
+          description: `Файл "${file.name}" имеет недопустимый формат. Разрешены: PDF, DOC, DOCX, XLS, XLSX`,
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      // Check for duplicate names
+      if (selectedFiles.some(f => f.name === file.name)) {
+        toast({
+          title: "Дубликат файла",
+          description: `Файл "${file.name}" уже добавлен`,
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      validFiles.push(file);
+      totalSize += file.size;
     }
+
+    if (validFiles.length > 0) {
+      const newFiles = [...selectedFiles, ...validFiles];
+      setSelectedFiles(newFiles);
+
+      // Update form with files array
+      Promise.all(
+        newFiles.map(file => 
+          new Promise<{fileName: string; fileData: string; mimeType: string; fileSize: number}>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              resolve({
+                fileName: file.name,
+                fileData: reader.result as string,
+                mimeType: file.type,
+                fileSize: file.size,
+              });
+            };
+            reader.readAsDataURL(file);
+          })
+        )
+      ).then(filesData => {
+        form.setValue("files", filesData);
+        // Keep old fields for backward compatibility (set to null)
+        form.setValue("fileName", null);
+        form.setValue("fileData", null);
+      });
+    }
+
+    // Reset input
+    e.target.value = '';
   };
 
-  const removeFile = () => {
-    setSelectedFile(null);
-    form.setValue("fileName", null);
-    form.setValue("fileData", null);
+  const removeFile = (index: number) => {
+    const newFiles = selectedFiles.filter((_, i) => i !== index);
+    setSelectedFiles(newFiles);
+
+    if (newFiles.length === 0) {
+      form.setValue("files", undefined);
+      form.setValue("fileName", null);
+      form.setValue("fileData", null);
+    } else {
+      // Update form with remaining files
+      Promise.all(
+        newFiles.map(file => 
+          new Promise<{fileName: string; fileData: string; mimeType: string; fileSize: number}>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              resolve({
+                fileName: file.name,
+                fileData: reader.result as string,
+                mimeType: file.type,
+                fileSize: file.size,
+              });
+            };
+            reader.readAsDataURL(file);
+          })
+        )
+      ).then(filesData => {
+        form.setValue("files", filesData);
+      });
+    }
   };
 
   const onSubmit = (data: InsertContactSubmission) => {
@@ -1339,45 +1437,56 @@ export default function Home() {
                     </div>
 
                     <div>
-                      <Label className="text-xs sm:text-sm">Прикрепить файл (опционально)</Label>
-                      {!selectedFile ? (
-                        <label
-                          htmlFor="file-upload"
-                          className="mt-1.5 sm:mt-2 flex flex-col items-center justify-center w-full h-24 sm:h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover-elevate transition-all"
-                          data-testid="file-drop-zone"
-                        >
-                          <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground mb-1.5 sm:mb-2" />
-                          <span className="text-xs sm:text-sm text-muted-foreground">
-                            Нажмите для выбора файла
-                          </span>
-                          <span className="text-xs text-muted-foreground mt-1">
-                            Максимум 10 МБ
-                          </span>
-                          <input
-                            id="file-upload"
-                            type="file"
-                            className="hidden"
-                            onChange={handleFileSelect}
-                            accept=".pdf,.doc,.docx,.xls,.xlsx"
-                            data-testid="input-file-upload"
-                          />
-                        </label>
-                      ) : (
-                        <div className="mt-1.5 sm:mt-2 flex items-center justify-between p-3 sm:p-4 bg-muted rounded-lg" data-testid="file-selected">
-                          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                            <FileCheck className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
-                            <span className="text-xs sm:text-sm font-medium truncate" data-testid="text-file-name">{selectedFile.name}</span>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={removeFile}
-                            data-testid="button-remove-file"
-                            className="h-8 w-8 flex-shrink-0"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                      <Label className="text-xs sm:text-sm">Прикрепить файлы (опционально)</Label>
+                      <label
+                        htmlFor="file-upload"
+                        className="mt-1.5 sm:mt-2 flex flex-col items-center justify-center w-full h-24 sm:h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover-elevate transition-all"
+                        data-testid="file-drop-zone"
+                      >
+                        <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground mb-1.5 sm:mb-2" />
+                        <span className="text-xs sm:text-sm text-muted-foreground">
+                          Нажмите для выбора файлов
+                        </span>
+                        <span className="text-xs text-muted-foreground mt-1">
+                          До 10 МБ каждый, до 50 МБ общий размер
+                        </span>
+                        <input
+                          id="file-upload"
+                          type="file"
+                          className="hidden"
+                          onChange={handleFileSelect}
+                          accept=".pdf,.doc,.docx,.xls,.xlsx"
+                          multiple
+                          data-testid="input-file-upload"
+                        />
+                      </label>
+                      {selectedFiles.length > 0 && (
+                        <div className="mt-2 space-y-2">
+                          {selectedFiles.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg" data-testid={`file-selected-${index}`}>
+                              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                                <FileCheck className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-xs sm:text-sm font-medium truncate block" data-testid={`text-file-name-${index}`}>
+                                    {file.name}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {(file.size / 1024 / 1024).toFixed(2)} МБ
+                                  </span>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeFile(index)}
+                                data-testid={`button-remove-file-${index}`}
+                                className="h-8 w-8 flex-shrink-0"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

@@ -290,6 +290,25 @@ export default function Admin() {
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
 
+  // Fetch database size information
+  const databaseSizeQuery = useQuery({
+    queryKey: ["/api/admin/database/size"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) throw new Error("Not authenticated");
+      const res = await fetch("/api/admin/database/size", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch database size information");
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Failed to fetch database size");
+      return data;
+    },
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
+    refetchInterval: 60000, // Refresh every minute
+  });
+
   // Fetch admin stats (including userActivityByDay)
   const { data: statsData = {} as any } = useQuery({
     queryKey: ["/api/admin/stats"],
@@ -3631,67 +3650,212 @@ export default function Admin() {
             {/* Database Section */}
             {activeTab === "database" && (
               <div className="space-y-6">
+                {/* Database Size Monitoring */}
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500" />
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 shadow-lg">
+                          <Database className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-xl">Мониторинг базы данных</CardTitle>
+                          <CardDescription>Информация о размере и использовании базы данных</CardDescription>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          databaseSizeQuery.refetch();
+                        }}
+                        disabled={databaseSizeQuery.isFetching}
+                      >
+                        <Activity className="w-4 h-4 mr-2" />
+                        {databaseSizeQuery.isFetching ? "Обновление..." : "Обновить"}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {databaseSizeQuery.isLoading ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                          <p className="text-sm text-muted-foreground">Загрузка информации о БД...</p>
+                        </div>
+                      </div>
+                    ) : databaseSizeQuery.error ? (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          Ошибка при загрузке информации о базе данных: {databaseSizeQuery.error instanceof Error ? databaseSizeQuery.error.message : "Неизвестная ошибка"}
+                        </AlertDescription>
+                      </Alert>
+                    ) : databaseSizeQuery.data ? (
+                      <>
+                        {/* Total Database Size */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <Card className="bg-gradient-to-br from-indigo-500/10 to-violet-500/10 border-indigo-500/20">
+                            <CardContent className="pt-6">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground mb-1">Общий размер БД</p>
+                                  <p className="text-2xl font-bold">{databaseSizeQuery.data.database.total_size}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {((databaseSizeQuery.data.database.total_size_bytes / 1024 / 1024 / 1024) * 100).toFixed(2)}% от 1 ГБ
+                                  </p>
+                                </div>
+                                <Database className="w-10 h-10 text-indigo-500 opacity-50" />
+                              </div>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/20">
+                            <CardContent className="pt-6">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground mb-1">Размер таблиц</p>
+                                  <p className="text-2xl font-bold">{databaseSizeQuery.data.tables.total_size}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {databaseSizeQuery.data.tables.count} таблиц
+                                  </p>
+                                </div>
+                                <FileText className="w-10 h-10 text-blue-500 opacity-50" />
+                              </div>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/20">
+                            <CardContent className="pt-6">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground mb-1">Размер индексов</p>
+                                  <p className="text-2xl font-bold">{databaseSizeQuery.data.indexes.total_size}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {databaseSizeQuery.data.tables.list.filter((t: any) => t.indexes_size_bytes > 0).length} таблиц с индексами
+                                  </p>
+                                </div>
+                                <TrendingUp className="w-10 h-10 text-purple-500 opacity-50" />
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium">Использование пространства</span>
+                            <span className="text-muted-foreground">
+                              {((databaseSizeQuery.data.database.total_size_bytes / 1024 / 1024 / 1024) * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <Progress 
+                            value={(databaseSizeQuery.data.database.total_size_bytes / 1024 / 1024 / 1024) * 100} 
+                            className="h-2"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Рекомендуется поддерживать использование БД ниже 80% для оптимальной производительности
+                          </p>
+                        </div>
+
+                        {/* Tables List */}
+                        <div>
+                          <h3 className="text-lg font-semibold mb-4">Размер по таблицам</h3>
+                          <div className="rounded-lg border overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Таблица</TableHead>
+                                  <TableHead className="text-right">Строк</TableHead>
+                                  <TableHead className="text-right">Размер данных</TableHead>
+                                  <TableHead className="text-right">Размер индексов</TableHead>
+                                  <TableHead className="text-right">Общий размер</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {databaseSizeQuery.data.tables.list.map((table: any) => (
+                                  <TableRow key={table.name}>
+                                    <TableCell className="font-medium">{table.name}</TableCell>
+                                    <TableCell className="text-right">
+                                      {table.row_count.toLocaleString('ru-RU')}
+                                    </TableCell>
+                                    <TableCell className="text-right">{table.table_size}</TableCell>
+                                    <TableCell className="text-right">
+                                      {table.indexes_size_bytes > 0 ? table.indexes_size : '—'}
+                                    </TableCell>
+                                    <TableCell className="text-right font-semibold">{table.total_size}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+                  </CardContent>
+                </Card>
+
+                {/* Database Export */}
                 <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500" />
                   <CardHeader>
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 shadow-lg">
-                        <Database className="w-5 h-5 text-white" />
+                        <Download className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <CardTitle className="text-xl">Управление базой данных</CardTitle>
-                        <CardDescription>Выгрузка и управление базой данных</CardDescription>
+                        <CardTitle className="text-xl">Выгрузка базы данных</CardTitle>
+                        <CardDescription>Создание резервной копии базы данных</CardDescription>
                       </div>
                     </div>
                   </CardHeader>
-              <CardContent className="space-y-4">
-                <Alert>
-                  <AlertDescription>
-                    Выгрузка базы данных создаст полный SQL-дамп всех таблиц и данных. 
-                    Файл можно использовать для восстановления базы данных.
-                  </AlertDescription>
-                </Alert>
-                <Button
-                  onClick={async () => {
-                    try {
-                      const token = localStorage.getItem("accessToken");
-                      const response = await fetch("/api/admin/database/export", {
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                        },
-                      });
-                      if (!response.ok) {
-                        const error = await response.json();
-                        throw new Error(error.message || "Failed to export database");
-                      }
-                      const blob = await response.blob();
-                      const url = window.URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = `database-backup-${new Date().toISOString().split('T')[0]}.sql`;
-                      document.body.appendChild(a);
-                      a.click();
-                      window.URL.revokeObjectURL(url);
-                      document.body.removeChild(a);
-                      toast({
-                        title: "Успешно",
-                        description: "База данных успешно выгружена",
-                      });
-                    } catch (error: any) {
-                      toast({
-                        title: "Ошибка",
-                        description: error.message || "Не удалось выгрузить базу данных",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                  className="w-full"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Выгрузить базу данных (SQL)
-                </Button>
-              </CardContent>
-            </Card>
+                  <CardContent className="space-y-4">
+                    <Alert>
+                      <AlertDescription>
+                        Выгрузка базы данных создаст полный SQL-дамп всех таблиц и данных. 
+                        Файл можно использовать для восстановления базы данных.
+                      </AlertDescription>
+                    </Alert>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          const token = localStorage.getItem("accessToken");
+                          const response = await fetch("/api/admin/database/export", {
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                            },
+                          });
+                          if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.message || "Failed to export database");
+                          }
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `database-backup-${new Date().toISOString().split('T')[0]}.sql`;
+                          document.body.appendChild(a);
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                          document.body.removeChild(a);
+                          toast({
+                            title: "Успешно",
+                            description: "База данных успешно выгружена",
+                          });
+                        } catch (error: any) {
+                          toast({
+                            title: "Ошибка",
+                            description: error.message || "Не удалось выгрузить базу данных",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      className="w-full"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Выгрузить базу данных (SQL)
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             )}
           </main>

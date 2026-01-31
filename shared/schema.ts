@@ -25,8 +25,14 @@ export const insertContactSubmissionSchema = createInsertSchema(contactSubmissio
   email: z.string().email("Введите корректный email"),
   company: z.string().min(2, "Название компании обязательно"),
   message: z.string().min(10, "Сообщение должно содержать минимум 10 символов"),
-  fileName: z.string().nullable().optional(),
-  fileData: z.string().nullable().optional(),
+  fileName: z.string().nullable().optional(), // Deprecated: use files array instead
+  fileData: z.string().nullable().optional(), // Deprecated: use files array instead
+  files: z.array(z.object({
+    fileName: z.string().min(1, "Имя файла обязательно"),
+    fileData: z.string().min(1, "Данные файла обязательны"),
+    mimeType: z.string().min(1, "MIME-тип обязателен"),
+    fileSize: z.number().int().min(1, "Размер файла должен быть больше 0"),
+  })).optional(), // Array of files for multiple file upload
 });
 
 export type InsertContactSubmission = z.infer<typeof insertContactSubmissionSchema>;

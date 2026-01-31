@@ -124,3 +124,10 @@ export function checkResourceOwnership(
   return resourceUserId === currentUserId;
 }
 
+/**
+ * Limit query results to prevent DoS attacks
+ */
+export function limitQueryResults(count: number, maxLimit: number = 100): number {
+  return Math.min(Math.max(1, count), maxLimit);
+}
+
