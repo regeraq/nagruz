@@ -311,7 +311,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
-      const validatedData = insertContactSubmissionSchema.parse(req.body);
+      // Validate request body with better error handling
+      let validatedData;
+      try {
+        validatedData = insertContactSubmissionSchema.parse(req.body);
+      } catch (validationError: any) {
+        if (validationError instanceof z.ZodError) {
+          console.error("[Contact] Validation error:", validationError.errors);
+          res.status(400).json({
+            success: false,
+            message: "Ошибка валидации данных",
+            errors: validationError.errors.map(err => ({
+              path: err.path.join('.'),
+              message: err.message,
+            })),
+          });
+          return;
+        }
+        throw validationError;
+      }
       
       // Check if file upload is enabled
       const fileUploadEnabled = await storage.getSiteSetting("enable_file_upload");
@@ -538,6 +556,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create submission without file data (we'll save files separately)
       const submissionData = {
         ...validatedData,
+        company: validatedData.company || "", // Ensure company is always a string, even if empty
         fileName: null, // Don't save in old fields
         fileData: null, // Don't save in old fields
       };

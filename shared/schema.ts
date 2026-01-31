@@ -23,7 +23,7 @@ export const insertContactSubmissionSchema = createInsertSchema(contactSubmissio
   name: z.string().min(2, "Имя должно содержать минимум 2 символа"),
   phone: z.string().min(10, "Введите корректный номер телефона"),
   email: z.string().email("Введите корректный email"),
-  company: z.string().min(2, "Название компании обязательно"),
+  company: z.string().optional().transform(val => val || ""),
   message: z.string().min(10, "Сообщение должно содержать минимум 10 символов"),
   fileName: z.string().nullable().optional(), // Deprecated: use files array instead
   fileData: z.string().nullable().optional(), // Deprecated: use files array instead
