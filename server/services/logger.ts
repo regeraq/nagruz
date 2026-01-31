@@ -4,7 +4,7 @@
  */
 
 interface LogEntry {
-  timestamp: Date;
+  timestamp?: Date; // Optional - will be set automatically if not provided
   level: "info" | "warn" | "error";
   category: string;
   message: string;
@@ -80,7 +80,8 @@ class LoggerService {
    * Internal log method
    */
   private log(entry: LogEntry) {
-    const timestamp = entry.timestamp.toISOString();
+    // Ensure timestamp is set (use current time if not provided)
+    const timestamp = (entry.timestamp || new Date()).toISOString();
     const prefix = `[${timestamp}] [${entry.level.toUpperCase()}] [${entry.category}]`;
     const userInfo = entry.userEmail ? ` (user: ${entry.userEmail})` : entry.userId ? ` (userId: ${entry.userId})` : "";
     const message = `${prefix}${userInfo}: ${entry.message}`;
