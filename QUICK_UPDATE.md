@@ -15,12 +15,25 @@ cd "C:\Users\k62\Documents\Атом\сайт\HelloWhoAreYou-1 (5)\HelloWhoAreYou
 .\update-github.ps1
 ```
 
+Неинтерактивные варианты (без запроса сообщения коммита):
+
+```powershell
+# со своим сообщением:
+.\update-github.ps1 -Message "fix: нормальная отправка писем"
+
+# с дефолтным сообщением "Update project code":
+.\update-github.ps1 -Yes
+```
+
 Скрипт автоматически:
-- Проверит изменения
-- Добавит все файлы
-- Создаст коммит
-- Синхронизирует с GitHub
-- Отправит изменения
+- Проверит изменения и настройки git
+- Добавит все файлы (`git add -A`)
+- Создаст коммит **и проверит, что он действительно прошёл**
+- Подтянет чужие изменения с GitHub (rebase) при необходимости
+- Отправит изменения (`git push`)
+- В конце сверит `HEAD` c `origin/main` и сообщит об успехе только если всё реально на GitHub
+
+Если что-то пошло не так — скрипт завершится с красной ошибкой и укажет, что делать. В этом случае **ничего** не залито на GitHub.
 
 ### Вариант 2: Вручную
 
@@ -128,4 +141,35 @@ pm2 restart loaddevice
 ```bash
 # Поиск package.json
 find /var/www -name "package.json" -type f 2>/dev/null
+```
+
+### Если «обновил — а на сайте ничего не изменилось»
+
+Это значит, что локальные правки не долетели до GitHub, а сервер честно подтягивает то, что в `origin/main`. Проверьте:
+
+```powershell
+# В папке проекта на Windows:
+cd "C:\Users\k62\Documents\Атом\сайт\HelloWhoAreYou-1 (5)\HelloWhoAreYou-1"
+
+# Локальный HEAD и то, что реально на GitHub, должны совпадать:
+git rev-parse HEAD
+git fetch origin
+git rev-parse origin/main
+
+# Не должно быть застрявших в индексе файлов (staged, но без коммита):
+git status
+```
+
+Если `git status` показывает `Changes to be committed:` — значит прошлый запуск скрипта завершился на этапе коммита (например, окно PowerShell закрыли до ввода сообщения). Исправление:
+
+```powershell
+.\update-github.ps1 -Yes
+# или:
+git commit -m "Update project code"; git push origin main
+```
+
+После этого на сервере:
+
+```bash
+ssh root@45.9.72.103 "bash /var/www/loaddevice/update-project.sh"
 ```
