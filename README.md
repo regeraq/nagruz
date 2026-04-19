@@ -1,171 +1,134 @@
-# 🚀 Нагрузочное Устройство - Веб-сайт
+# Нагрузочное устройство — веб-сайт
 
-Современный веб-сайт для продажи нагрузочных устройств НУ-100 и НУ-30 с улучшенной безопасностью и производительностью.
+Современный веб-сайт для продажи нагрузочных устройств (НУ-100, НУ-30) с админ-панелью, регистрацией пользователей, заказами и рассылками.
 
-## ✨ Особенности
+## Технологии
 
-- 🎨 Современный UI/UX дизайн
-- 🔒 Защита от DDoS атак (Rate Limiting)
-- ⚡ Кэширование для высокой производительности
-- 🛡️ Защита от XSS атак
-- 💳 Поддержка различных способов оплаты (карты, СБП)
-- 📱 Адаптивный дизайн
-- 🌙 Темная/светлая тема
+- **Фронтенд**: React 18 + Vite + TypeScript + Tailwind + shadcn/ui
+- **Бэкенд**: Node.js 20 + Express + TypeScript
+- **БД**: PostgreSQL + Drizzle ORM
+- **Авторизация**: JWT (access + refresh) + CSRF, bcrypt
+- **Процесс-менеджер**: PM2
+- **Прокси/SSL**: nginx + Let's Encrypt
+- **Email (прод)**: предполагается Unisender Go (РФ), см. [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) §13
 
-## 🚀 Быстрый старт
-
-### Требования
-
-- Node.js 18+ 
-- npm или yarn
-
-### Установка
+## Быстрый старт (локально)
 
 ```bash
 npm install
+cp .env.example .env    # заполнить DATABASE_URL и секреты
+npm run dev             # http://localhost:5000
 ```
 
-### Запуск
-
-**Простой способ (Windows):**
-```bash
-# Дважды кликните на файл:
-scripts\start-server.bat
-```
-
-Или через PowerShell:
-```bash
-.\scripts\start-server.ps1
-```
-
-**Или через командную строку:**
-```bash
-npm run dev
-```
-
-Сервер будет доступен на http://localhost:5000
-
-### Сборка для production
+Production-сборка:
 
 ```bash
 npm run build
 npm start
 ```
 
-## 📁 Структура проекта
+## Структура проекта
 
 ```
 HelloWhoAreYou-1/
-├── client/              # React клиентское приложение
-│   ├── src/
-│   │   ├── components/  # React компоненты
-│   │   ├── pages/       # Страницы приложения
-│   │   └── lib/         # Утилиты
-├── server/              # Express сервер
-│   ├── routes.ts        # API маршруты
-│   ├── security.ts      # Утилиты безопасности
-│   ├── rateLimiter.ts   # Rate limiting
-│   └── cache.ts         # Кэширование
-├── shared/              # Общий код (схемы, типы)
-├── docs/                # Документация
-└── scripts/             # Скрипты запуска
+├── client/            # React + Vite фронтенд
+│   └── src/
+│       ├── components/
+│       ├── pages/
+│       └── lib/
+├── server/            # Express + TypeScript бэкенд
+│   ├── routes.ts
+│   ├── auth.ts
+│   ├── security.ts
+│   └── services/
+├── shared/            # общие схемы Drizzle/Zod
+├── scripts/
+│   ├── backup.sh          # резервное копирование БД+файлов
+│   └── migrate-server.sh  # миграция между серверами
+├── update-github.ps1      # push на GitHub (Windows)
+└── update-project.sh      # обновление на сервере
 ```
 
-## 🔒 Безопасность
+## Документация
 
-Проект включает следующие меры безопасности:
+Всё, что нужно знать для работы с проектом:
 
-- ✅ Rate Limiting на всех API эндпоинтах
-- ✅ Защита от XSS (экранирование HTML)
-- ✅ Валидация и санитизация входных данных
-- ✅ Security headers (X-Frame-Options, CSP и др.)
-- ✅ Защита от утечки информации в ошибках
+| Файл | Что внутри |
+| ---- | ---------- |
+| **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** | Мастер-гайд: покупка домена и VPS в РФ, первый деплой, nginx+SSL, миграция между серверами, email-рассылки, 152-ФЗ, чек-лист с нуля до продакшна |
+| **[QUICK_UPDATE.md](QUICK_UPDATE.md)** | Быстрое обновление кода: `.\update-github.ps1` → `ssh ... update-project.sh` |
+| **[ADMIN_PANEL_USER_GUIDE.md](ADMIN_PANEL_USER_GUIDE.md)** | Как пользоваться админ-панелью (товары, пользователи, заказы, контент, аналитика) |
+| **[DATABASE_GUIDE.md](DATABASE_GUIDE.md)** | Структура БД, миграции Drizzle, полезные SQL-запросы |
+| **[SECURITY_AUDIT_REPORT.md](SECURITY_AUDIT_REPORT.md)** | Аудит безопасности, статус 152-ФЗ / 242-ФЗ |
+| **[CHANGELOG.md](CHANGELOG.md)** | История изменений |
 
-Подробнее: [docs/README_SECURITY.md](docs/README_SECURITY.md)
+## Обновление кода на продакшне
 
-## 🚀 Обновление проекта
-
-**📖 Полная инструкция:** [QUICK_UPDATE.md](QUICK_UPDATE.md)
-
-### Кратко:
-
-1. **Загрузить на GitHub:**
 ```powershell
+# Локально (Windows):
 cd "C:\Users\k62\Documents\Атом\сайт\HelloWhoAreYou-1 (5)\HelloWhoAreYou-1"
-.\update-github.ps1
+.\update-github.ps1 -Message "что сделал"
+
+# На сервере:
+ssh root@45.9.72.103 "cd /var/www/loaddevice && git fetch origin && git reset --hard origin/main && bash update-project.sh"
 ```
 
-Или вручную:
-```powershell
-git add .
-git commit -m "Обновление кода проекта"
-git push origin main
-```
+Подробнее — в [QUICK_UPDATE.md](QUICK_UPDATE.md).
 
-2. **Обновить на сервере:**
-```bash
-ssh root@45.9.72.103 "cd /var/www/loaddevice && bash update-project.sh"
-```
+## Резервное копирование
 
-## 📚 Документация
+Автоматически раз в сутки в 03:30 МСК — через cron и `scripts/backup.sh`. Подробности — в [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) §11.
 
-Вся документация находится в папке `docs/`:
-
-- [📖 Индекс документации](docs/README.md)
-- [📋 Полный отчет по анализу кода](docs/CODE_REVIEW_REPORT.md)
-- [🔒 Руководство по безопасности](docs/README_SECURITY.md)
-- [🚀 Инструкция по запуску](docs/START_SERVER.md)
-- [📊 Краткое резюме улучшений](docs/SUMMARY.md)
-- [📁 Структура проекта](PROJECT_STRUCTURE.md)
-
-### Документация по развертыванию:
-
-- [⚡ Быстрое обновление проекта](QUICK_UPDATE.md) - **основная инструкция**
-- [🚀 Полное руководство по развертыванию](DEPLOYMENT_GUIDE.md)
-- [💻 Развертывание через PowerShell](POWERSHELL_DEPLOY.md)
-- [🔄 Автоматическое развертывание](AUTO_DEPLOY_SETUP.md)
-
-## 🛠️ Разработка
-
-### Скрипты
+Ручной запуск:
 
 ```bash
-npm run dev      # Запуск в режиме разработки
-npm run build    # Сборка для production
-npm run start    # Запуск production версии
-npm run check    # Проверка TypeScript
+bash /var/www/loaddevice/scripts/backup.sh
+ls -lh /var/backups/loaddevice/
 ```
 
-### Переменные окружения
+## Миграция на другой сервер
 
-Создайте файл `.env`:
+Скрипт `scripts/migrate-server.sh` переносит БД, `.env`, загруженные файлы, nginx-конфиг со старого сервера на новый. Подробности — в [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) §12.
+
+```bash
+bash scripts/migrate-server.sh \
+    --from-host 45.9.72.103 --from-user root \
+    --to-host   NEW.IP       --to-user   deploy \
+    --project-dir /var/www/loaddevice
+```
+
+## Переменные окружения
+
+Шаблон — в `.env.example`. Минимум для запуска:
 
 ```env
-NODE_ENV=development
+DATABASE_URL=postgresql://loaddevice_user:ПАРОЛЬ@localhost:5432/loaddevice_db
+NODE_ENV=production
 PORT=5000
-RESEND_API_KEY=your_key_here
-OWNER_EMAIL=owner@example.com
-DATABASE_URL=your_database_url
+
+JWT_SECRET=...                # openssl rand -base64 48
+JWT_REFRESH_SECRET=...        # ОТДЕЛЬНЫЙ от JWT_SECRET
+CSRF_SECRET=...               # ОТДЕЛЬНЫЙ ещё один
+
+UNISENDER_GO_API_KEY=...      # после подключения Unisender Go
+MAIL_FROM_EMAIL=noreply@ваш-домен.ru
+OWNER_EMAIL=owner@ваш-домен.ru
+
+FRONTEND_URL=https://ваш-домен.ru
+TRUST_PROXY=true
+FORCE_SECURE_COOKIES=true
 ```
 
-## 📊 Улучшения производительности
+## Скрипты npm
 
-- **Кэширование товаров**: 5 минут
-- **Таймауты для внешних API**: 10 секунд
-- **Асинхронная отправка email**: не блокирует ответ
+```bash
+npm run dev      # dev-режим с hot reload
+npm run build    # production build (vite + esbuild)
+npm start        # запуск собранного dist/
+npm run check    # TypeScript проверка
+npm run db:push  # накатить схему из shared/schema.ts в БД
+```
 
-## 🎯 API Endpoints
-
-- `GET /api/products` - Список товаров
-- `GET /api/products/:id` - Детали товара
-- `POST /api/contact` - Отправка формы обратной связи
-- `POST /api/orders` - Создание заказа
-- `POST /api/promo/validate` - Валидация промокода
-
-## 📝 Лицензия
+## Лицензия
 
 MIT
-
-## 👥 Авторы
-
-Разработано с использованием современных технологий и лучших практик безопасности.

@@ -1,808 +1,441 @@
-# 🚀 ПОЛНОЕ РУКОВОДСТВО ПО РАЗВЕРТЫВАНИЮ ПРОЕКТА
+# Полное руководство: домен, сервер, деплой, миграция, email-рассылки
 
-**Версия:** 1.2  
-**Целевое окружение:** Ubuntu 22.04 LTS на VPS (FirstByte, Timeweb, Selectel и др.)  
-**Дата создания:** 2024
+Единый документ для всего, что нужно, чтобы поставить проект на продакшн в РФ, переносить его между серверами без потерь данных и подключить российский email-сервис.
 
----
-
-## ⚡ БЫСТРЫЙ СТАРТ: ТРЕБОВАНИЯ К СЕРВЕРУ
-
-**Для нагрузки 1-3 пользователя в день:**
-
-### Минимальная конфигурация:
-- **RAM:** 1 GB (рекомендуется 2 GB)
-- **Диск:** 15 GB (рекомендуется 20 GB)
-- **CPU:** 1 ядро (рекомендуется 2 ядра)
-- **Стоимость:** ~300-500₽/месяц (минимум) или ~500-700₽/месяц (рекомендуется)
-
-### Рекомендуемые провайдеры:
-- **FirstByte:** 1-2 GB RAM, 15-20 GB SSD — от 300-700₽/мес
-- **Timeweb:** 1-2 GB RAM, 15-20 GB SSD — от 350-800₽/мес
-- **Selectel:** 1-2 GB RAM, 15-20 GB SSD — от 400-900₽/мес
-
-**Проект уже на GitHub:** https://github.com/regeraq/nagruz
+Актуально на: апрель 2026. Все цены указаны с учётом открытых тарифов провайдеров на начало 2026 года; перед оплатой **всегда сверяй на сайте**, цены и акции меняются.
 
 ---
 
-## 📋 СОДЕРЖАНИЕ
+## Содержание
 
-1. [Анализ проекта](#анализ-проекта)
-2. [Особенности FirstByte VPS](#особенности-firstbyte-vps)
-3. [Шаг 1: Подготовка сервера](#шаг-1-подготовка-сервера)
-4. [Шаг 2: Установка необходимого программного обеспечения](#шаг-2-установка-необходимого-программного-обеспечения)
-5. [Шаг 3: Настройка базы данных](#шаг-3-настройка-базы-данных)
-6. [Шаг 4: Развертывание кода проекта](#шаг-4-развертывание-кода-проекта)
-7. [Шаг 5: Запуск приложения](#шаг-5-запуск-приложения)
-8. [Шаг 6: Настройка Nginx в качестве Reverse Proxy](#шаг-6-настройка-nginx-в-качестве-reverse-proxy)
-9. [Шаг 7: Настройка HTTPS](#шаг-7-настройка-https)
-10. [Оптимизация для маломощного сервера](#оптимизация-для-маломощного-сервера-768-mb-ram)
-11. [Проверка и тестирование](#проверка-и-тестирование)
-12. [Устранение неполадок](#устранение-неполадок)
+1. [Что представляет собой проект](#1-что-представляет-собой-проект)
+2. [Требования к серверу и порядок действий](#2-требования-к-серверу-и-порядок-действий)
+3. [Покупка домена в РФ](#3-покупка-домена-в-рф)
+4. [Выбор и покупка VPS в РФ](#4-выбор-и-покупка-vps-в-рф)
+5. [Первоначальная настройка сервера (Ubuntu 22.04)](#5-первоначальная-настройка-сервера-ubuntu-2204)
+6. [Установка ПО: Node.js, PostgreSQL, nginx, pm2](#6-установка-по-nodejs-postgresql-nginx-pm2)
+7. [Настройка базы данных и переменных окружения](#7-настройка-базы-данных-и-переменных-окружения)
+8. [Первый деплой приложения](#8-первый-деплой-приложения)
+9. [nginx и HTTPS через Let's Encrypt](#9-nginx-и-https-через-lets-encrypt)
+10. [Привязка домена и DNS](#10-привязка-домена-и-dns)
+11. [Резервное копирование: backup.sh + cron](#11-резервное-копирование-backupsh--cron)
+12. [Миграция на новый сервер без потерь данных](#12-миграция-на-новый-сервер-без-потерь-данных)
+13. [Российский email-сервис: выбор, цены, интеграция](#13-российский-email-сервис-выбор-цены-интеграция)
+14. [Соответствие 152-ФЗ и 242-ФЗ](#14-соответствие-152-фз-и-242-фз)
+15. [Обновление кода на продакшне](#15-обновление-кода-на-продакшне)
+16. [Мониторинг, логи, типовые проблемы](#16-мониторинг-логи-типовые-проблемы)
+17. [Итоговый чек-лист «с нуля до продакшна»](#17-итоговый-чек-лист-с-нуля-до-продакшна)
 
 ---
 
-## 🔍 АНАЛИЗ ПРОЕКТА
+## 1. Что представляет собой проект
 
-Перед началом развертывания определим основные характеристики проекта:
+| Параметр               | Значение                                                                    |
+| ---------------------- | --------------------------------------------------------------------------- |
+| Репозиторий            | https://github.com/regeraq/nagruz                                           |
+| Стек                   | Node.js 20 + Express + React (Vite) + TypeScript                            |
+| База данных            | PostgreSQL 14+ (через Drizzle ORM)                                          |
+| Исполнение в проде     | PM2 (процесс называется `loaddevice`)                                       |
+| Порт приложения        | 5000 (за nginx reverse-proxy)                                               |
+| Точка входа            | `dist/index.js` (после `npm run build`)                                     |
+| Текущий сервер         | `45.9.72.103` (Ubuntu, FirstByte), проект в `/var/www/loaddevice`           |
+| Email (сейчас)         | Resend (США) — **нужно заменить на российский**, см. [§13](#13-российский-email-сервис-выбор-цены-интеграция) |
+| Сборка                 | `npm run build` → `vite build` + `esbuild server/index.ts`                  |
 
-### Основные параметры:
+---
 
-- **Язык и фреймворк:** Node.js + Express + React (TypeScript)
-- **Тип приложения:** SSR/SPA гибрид (Express сервер с React фронтендом)
-- **База данных:** PostgreSQL (используется Drizzle ORM)
-- **Менеджер пакетов:** npm
-- **Точка входа:** `dist/index.js` (после сборки)
-- **Порт по умолчанию:** 5000 (настраивается через переменную окружения `PORT`)
-- **Скрипты сборки:**
-  - `npm install` - установка зависимостей
-  - `npm run build` - сборка проекта (Vite + esbuild)
-  - `npm start` - запуск production версии
+## 2. Требования к серверу и порядок действий
 
-### Необходимые переменные окружения:
+Проект «в двух словах» — небольшой сайт/витрина с админкой и регистрацией пользователей. На 10–50 одновременных посетителей хватит скромного VPS.
 
-```env
-# Обязательные
-DATABASE_URL=postgresql://user:password@localhost:5432/database_name
-NODE_ENV=production
-PORT=5000
+### Минимальные требования
 
-# JWT аутентификация
-JWT_SECRET=your-very-secure-random-secret-key-here
+| Параметр | Минимум         | Рекомендуется       | Комфортно для роста |
+| -------- | --------------- | ------------------- | ------------------- |
+| CPU      | 1 vCPU          | 2 vCPU              | 2–4 vCPU            |
+| RAM      | 1 GB + swap 1GB | **2 GB**            | 4 GB                |
+| Диск     | 15 GB SSD/NVMe  | 20–30 GB NVMe       | 40–80 GB NVMe       |
+| ОС       | Ubuntu 22.04 LTS                                                             |
+| Канал    | 100 Мбит/с+, без ограничений по трафику                                      |
 
-# Email отправка (Resend)
-RESEND_API_KEY=your-resend-api-key
-OWNER_EMAIL=your-email@example.com
-RESEND_FROM_EMAIL=onboarding@resend.dev  # Опционально
+Сборка проекта (`vite build`) довольно прожорлива по RAM — на 1 GB без свопа бывают OOM-kill. Поэтому **всегда делайте swap** (см. [§5](#5-первоначальная-настройка-сервера-ubuntu-2204)) или берите 2 GB сразу.
 
-# Дополнительные
-FRONTEND_URL=https://your-domain.com  # Опционально, для ссылок в email
+### Порядок действий с нуля
+
+1. Покупка домена ([§3](#3-покупка-домена-в-рф)).
+2. Покупка VPS ([§4](#4-выбор-и-покупка-vps-в-рф)).
+3. Базовая настройка сервера: пользователи, SSH, firewall, swap ([§5](#5-первоначальная-настройка-сервера-ubuntu-2204)).
+4. Установка Node.js, PostgreSQL, nginx, pm2 ([§6](#6-установка-по-nodejs-postgresql-nginx-pm2)).
+5. Создание БД, `.env`, клонирование репо, деплой ([§7](#7-настройка-базы-данных-и-переменных-окружения), [§8](#8-первый-деплой-приложения)).
+6. Прописать A-запись домена → IP, получить SSL ([§9](#9-nginx-и-https-через-lets-encrypt), [§10](#10-привязка-домена-и-dns)).
+7. Включить бэкапы ([§11](#11-резервное-копирование-backupsh--cron)).
+8. Подключить российский email ([§13](#13-российский-email-сервис-выбор-цены-интеграция)).
+9. Пройти чек-лист 152-ФЗ ([§14](#14-соответствие-152-фз-и-242-фз)).
+
+---
+
+## 3. Покупка домена в РФ
+
+Домен = адрес сайта. Российские регистраторы с самыми удобными панелями и русской поддержкой: **Beget**, **REG.RU**, **RU-CENTER** (ранее NIC.ru).
+
+### Цены на домен `.ru` / `.рф` (апрель 2026)
+
+| Регистратор | Регистрация (.ru) | Продление (.ru)  | Плюсы                                                             |
+| ----------- | ----------------- | ---------------- | ----------------------------------------------------------------- |
+| **Beget**   | от 199 ₽          | от 399 ₽         | Самая простая панель, бесплатный DNS, бесплатное продление при покупке хостинга на год |
+| **REG.RU**  | от 199 ₽ (по акциям) | 399–599 ₽     | Лидер рынка, максимум доменных зон, интеграция с Яндекс.Почтой   |
+| **RU-CENTER** | 299–399 ₽        | 399–599 ₽        | Первый регистратор в РФ, строгая проверка, корпоративный акцент   |
+
+`.ru` и `.рф` стоят одинаково и подтверждают российскую привязку сайта (важно для SEO в Яндексе и выглядит доверительнее для русскоязычных клиентов).
+
+### Как купить домен на примере REG.RU (пошагово)
+
+1. Зайти на https://www.reg.ru.
+2. В поиске ввести желаемое имя: `loaddevice.ru`, `nagruz.ru`, `atomvolt.ru` и т.п.
+3. Если занято — сайт предложит свободные варианты. Выбрать один и нажать **«Купить»**.
+4. Регистрация личного кабинета:
+    - Для физлица: ФИО, паспорт, e-mail, телефон. Для домена `.ru` регистратор **обязан** проверить паспорт.
+    - Для юрлица: ИНН, КПП, реквизиты.
+5. Оплатить (карта МИР / Сбербанк / ЮKassa / ЮMoney).
+6. В течение 1–24 часов домен становится активным.
+7. В ЛК открыть раздел **DNS** — понадобится на [§10](#10-привязка-домена-и-dns).
+
+> **Совет**: сразу оплачивайте минимум на 2 года. Продление домена никто не забудет, и цена будет зафиксирована.
+
+### Как купить через Beget (самый простой вариант)
+
+1. https://beget.com/ru/domains — ввести имя.
+2. Зарегистрироваться, привязать карту.
+3. Купить. Панель очень дружелюбная; бесплатная DNS-зона уже включена.
+4. Раздел **«Домены и поддомены» → DNS-записи** — далее по [§10](#10-привязка-домена-и-dns).
+
+---
+
+## 4. Выбор и покупка VPS в РФ
+
+Все провайдеры ниже держат ДЦ в России (соответствие 242-ФЗ) и предоставляют Ubuntu «из коробки».
+
+### Сравнение (1–2 vCPU, 2 GB RAM, ~20–30 GB NVMe, апрель 2026)
+
+| Провайдер        | Базовый тариф для проекта    | Цена/мес    | Плюсы                                                     | Минусы                          |
+| ---------------- | ---------------------------- | ----------- | --------------------------------------------------------- | ------------------------------- |
+| **Timeweb Cloud**| Cloud MSK 30 (1 vCPU, 2 GB, 30 GB NVMe) | **657 ₽** | Лучшая цена/мощность в 2026, SLA 99.98%, Tier III, почасовая тарификация, скидка 10% за год | Иногда перегружен на базовых тарифах в часы пик |
+| **Beget**        | VPS-start (1 vCPU, 1 GB, 20 GB SSD) | ~250–400 ₽ | Очень простая панель, российские ДЦ, всё по-русски, ежемесячные платежи без обязательств | RAM мало — взять следующий тариф 2 GB ~500–700 ₽ |
+| **Selectel**     | Standard Line (1 vCPU, 2 GB, 16 GB SSD) | 1489 ₽ | Профессиональный уровень, защита от DDoS штатно, IPv6, SLA 99.95% | Дороже конкурентов за тот же ресурс |
+| **RuVDS**        | Начальный (1 vCPU, 1 GB)     | 200–400 ₽   | Самые дешёвые тарифы, много ДЦ (Москва, СПб, Екб, Крым)   | UX панели слабее                 |
+| **FirstByte**    | 2 GB RAM, 20 GB SSD          | 300–700 ₽   | Недорогой, тот, что сейчас используется (45.9.72.103)     | Поменьше гарантий SLA            |
+| **VK Cloud**     | Basic (1 vCPU, 2 GB, 20 GB)  | ~800–1200 ₽ | Корпоративный уровень, интеграции с VK                     | Дороже, избыточен для маленького сайта |
+
+### Что выбрать для этого проекта
+
+**Рекомендация: Timeweb Cloud MSK 30 за 657 ₽/мес** (или аналог на 2 GB у Beget/FirstByte). Причины:
+
+- 2 GB RAM + NVMe — хватает и на `vite build`, и на PostgreSQL, и на nginx.
+- SLA 99.98% и Tier III — аптайм как у дорогих облаков.
+- Почасовая тарификация — можно поднять второй сервер для тестовой миграции на пару часов и заплатить копейки.
+- ДЦ в Москве и СПб — соответствие 242-ФЗ.
+
+### Как купить VPS на примере Timeweb Cloud (пошагово)
+
+1. https://timeweb.cloud — зарегистрироваться.
+2. Привязать карту. Минимальное пополнение баланса ~100 ₽.
+3. **«Облачные серверы» → «Создать сервер»**.
+4. Выбрать конфигурацию: **Cloud MSK 30** (1 vCPU, 2 GB RAM, 30 GB NVMe, Москва).
+5. ОС: **Ubuntu 22.04**.
+6. Авторизация: **SSH-ключ** (сгенерируй его локально — см. следующий пункт) или пароль (пароль хуже).
+7. Имя сервера: `loaddevice-prod`.
+8. **Создать** — через ~60 секунд сервер запущен.
+9. Получить IP, root-пароль (если выбрал пароль) и команду SSH из ЛК.
+
+### Генерация SSH-ключа (рекомендуется вместо пароля)
+
+На своём Windows:
+
+```powershell
+# В PowerShell, один раз:
+ssh-keygen -t ed25519 -C "your-email@domain.ru"
+# Enter для пути (оставить по умолчанию), Enter для пустой passphrase (или введи — но потом надо будет вводить при каждом коннекте)
+
+# Публичный ключ для вставки в панель провайдера:
+Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
+```
+
+Полученную строку `ssh-ed25519 AAAA... email` вставь в поле «SSH-ключ» при создании сервера. Дальше заходить будет без пароля:
+
+```powershell
+ssh root@IP_АДРЕС
 ```
 
 ---
 
-## ОСОБЕННОСТИ FIRSTBYTE VPS
+## 5. Первоначальная настройка сервера (Ubuntu 22.04)
 
-### Информация о FirstByte
+Это базовая гигиена. Применять один раз на каждом новом сервере.
 
-FirstByte — российский хостинг-провайдер, предоставляющий VPS серверы. При покупке сервера вы получите:
-
-- **Панель управления:** Доступ через личный кабинет на сайте firstbyte.ru
-- **Данные для доступа:** IP-адрес, root пароль (или SSH ключ)
-- **Операционная система:** Обычно Ubuntu 22.04 LTS или другая выбранная ОС
-- **Расположение:** Серверы находятся в России (соответствие требованиям 152-ФЗ)
-
-### 📊 МИНИМАЛЬНЫЕ ТРЕБОВАНИЯ К СЕРВЕРУ
-
-**Для нагрузки 1-3 пользователя в день:**
-
-#### Минимальная конфигурация (абсолютный минимум):
-- **RAM:** 1 GB (рекомендуется 2 GB)
-- **Диск:** 15 GB (рекомендуется 20 GB)
-- **CPU:** 1 ядро (рекомендуется 2 ядра)
-- **Стоимость:** ~300-500₽/месяц
-
-#### Рекомендуемая конфигурация (комфортная работа):
-- **RAM:** 2 GB
-- **Диск:** 20 GB
-- **CPU:** 2 ядра
-- **Стоимость:** ~500-700₽/месяц
-
-#### Распределение ресурсов:
-
-**Минимальная конфигурация (1 GB RAM, 15 GB диск):**
-- Система Ubuntu: ~300-400 MB RAM, ~3-4 GB диск
-- PostgreSQL (оптимизированный): ~150-200 MB RAM, ~500 MB диск
-- Node.js приложение: ~200-300 MB RAM, ~1-2 GB диск (с node_modules)
-- Nginx: ~20-30 MB RAM, ~50 MB диск
-- Сборка проекта: ~500 MB диск
-- Логи и резерв: ~1-2 GB диск
-- Резерв для работы: ~200-300 MB RAM, ~5-7 GB диск
-- **Итого:** ~700-900 MB RAM, ~10-12 GB диск
-
-**Рекомендуемая конфигурация (2 GB RAM, 20 GB диск):**
-- Больше места для логов и резервных копий
-- Комфортная работа без swap файла
-- Возможность роста нагрузки до 5-10 пользователей
-
-### 🛒 РЕКОМЕНДУЕМЫЕ ПРОВАЙДЕРЫ
-
-#### FirstByte (российский хостинг):
-- **Минимум:** 1 GB RAM, 15 GB SSD, 1 CPU — ~300-400₽/мес
-- **Рекомендуется:** 2 GB RAM, 20 GB SSD, 2 CPU — ~500-700₽/мес
-- **Преимущества:** Соответствие 152-ФЗ, серверы в России
-
-#### Timeweb:
-- **Минимум:** 1 GB RAM, 15 GB SSD, 1 CPU — ~350-500₽/мес
-- **Рекомендуется:** 2 GB RAM, 20 GB SSD, 2 CPU — ~600-800₽/мес
-
-#### Selectel:
-- **Минимум:** 1 GB RAM, 15 GB SSD, 1 CPU — ~400-600₽/мес
-- **Рекомендуется:** 2 GB RAM, 20 GB SSD, 2 CPU — ~700-900₽/мес
-
-### ⚠️ ВАЖНО: Оптимизация для минимального сервера
-
-Если используете сервер с 1 GB RAM, обязательно выполните:
-
-1. ✅ **Настроить swap файл** (Шаг 1.4.1) - **ОБЯЗАТЕЛЬНО!**
-2. ✅ **Оптимизировать PostgreSQL** (Шаг 2.2.1) - критически важно!
-3. ✅ **Оптимизировать Node.js через PM2** (Шаг 5.1) - ограничение памяти
-4. ✅ **Регулярно очищать логи** - для экономии места на диске
-
-**Ожидаемое использование ресурсов (1 GB RAM, 15 GB диск):**
-- Память: ~700-900 MB из 1 GB (с swap файлом)
-- Диск: ~10-12 GB из 15 GB
-- CPU: 10-20% в покое, до 40% при нагрузке 1-3 пользователя
-
-### Получение данных для доступа
-
-1. Войдите в личный кабинет FirstByte: https://firstbyte.ru
-2. Перейдите в раздел "Мои серверы" или "VPS"
-3. Найдите ваш сервер и откройте его настройки
-4. Скопируйте следующие данные:
-   - **IP-адрес сервера**
-   - **Root пароль** (или загрузите SSH ключ)
-   - **Порт SSH** (обычно 22, но может отличаться)
-
-### Важные замечания для FirstByte
-
-- ✅ Серверы FirstByte обычно уже имеют базовую настройку
-- ✅ Файрвол может быть уже настроен, но стоит проверить
-- ⚠️ Убедитесь, что выбран Ubuntu 22.04 LTS при создании сервера
-- ⚠️ Если сервер новый, возможно потребуется дождаться завершения установки ОС (обычно 5-15 минут)
-
----
-
-## ШАГ 1: ПОДГОТОВКА СЕРВЕРА
-
-### 1.1. Первое подключение к серверу FirstByte по SSH
-
-**Вариант A: Подключение с паролем (первый раз)**
+### 5.1. Обновление системы
 
 ```bash
-ssh root@YOUR_SERVER_IP
+ssh root@IP_АДРЕС
+apt update && apt upgrade -y
+apt install -y curl wget git ufw fail2ban htop nano
+timedatectl set-timezone Europe/Moscow
 ```
 
-**Вариант B: Подключение с указанием порта (если порт нестандартный)**
+### 5.2. Swap (обязательно, если RAM <= 2 GB)
 
 ```bash
-ssh -p PORT_NUMBER root@YOUR_SERVER_IP
+# 2 ГБ swap-файл
+fallocate -l 2G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+# Проверка:
+free -h
 ```
 
-**Вариант C: Подключение с SSH ключом (если настроен)**
+### 5.3. Firewall (UFW)
 
 ```bash
-ssh -i /path/to/your/private/key root@YOUR_SERVER_IP
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp    # SSH
+ufw allow 80/tcp    # HTTP
+ufw allow 443/tcp   # HTTPS
+ufw --force enable
+ufw status verbose
 ```
 
-**Примечания:**
-- Замените `YOUR_SERVER_IP` на IP-адрес вашего сервера из панели FirstByte
-- При первом подключении система спросит подтверждение fingerprint - введите `yes`
-- Введите root пароль из панели FirstByte
+Порт 5000 (само приложение) **не открывать** наружу — nginx будет проксировать к нему через localhost.
 
-**Если не можете подключиться:**
-- Проверьте, что сервер запущен в панели FirstByte
-- Убедитесь, что используете правильный IP-адрес
-- Проверьте, не заблокирован ли ваш IP в файрволе FirstByte
-- Попробуйте использовать веб-консоль в панели FirstByte (если доступна)
-
-### 1.2. Обновление системы
-
-После подключения обновите систему до последних версий пакетов:
+### 5.4. fail2ban (защита от брута SSH)
 
 ```bash
-apt update
-apt upgrade -y
+systemctl enable --now fail2ban
+fail2ban-client status sshd
 ```
 
-### 1.3. Создание нового пользователя с sudo-правами
+### 5.5. Пользователь для деплоя (не-root)
 
-**Важно:** Работа под root небезопасна. Создайте отдельного пользователя:
+Работать из-под root — плохой тон. Заведём пользователя `deploy`:
 
 ```bash
-# Создание нового пользователя
 adduser deploy
-
-# Добавление пользователя в группу sudo
 usermod -aG sudo deploy
+# Скопируем root-ключи, чтобы сразу можно было зайти по ssh
+rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy
+```
 
-# Переключение на нового пользователя
+Проверить, что под новым пользователем работает SSH:
+
+```powershell
+ssh deploy@IP_АДРЕС
+sudo whoami   # должно вернуть "root"
+```
+
+После этого желательно запретить root-логин по SSH (`PermitRootLogin no` в `/etc/ssh/sshd_config`, потом `systemctl restart ssh`). Но удостоверься, что `deploy` работает!
+
+---
+
+## 6. Установка ПО: Node.js, PostgreSQL, nginx, pm2
+
+### 6.1. Node.js 20 через nvm
+
+`nvm` удобен тем, что версию Node легко обновить без пересборки пакетов. **Под пользователем `deploy`** (или root, как договоришься):
+
+```bash
 su - deploy
-```
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+# Перезайти в сессию, чтобы nvm подхватился:
+exit
+ssh deploy@IP_АДРЕС
 
-**Примечание:** Во время создания пользователя система попросит ввести пароль. Используйте надежный пароль.
-
-### 1.4. Настройка SSH для нового пользователя (опционально, но рекомендуется)
-
-Если вы хотите использовать SSH-ключи вместо паролей:
-
-```bash
-# На вашем локальном компьютере создайте SSH-ключ (если еще не создан)
-ssh-keygen -t ed25519 -C "your_email@example.com"
-
-# Скопируйте публичный ключ на сервер
-ssh-copy-id deploy@YOUR_SERVER_IP
-```
-
-Теперь вы сможете подключаться без ввода пароля:
-
-```bash
-ssh deploy@YOUR_SERVER_IP
-```
-
-### 1.4.1. Настройка Swap файла (КРИТИЧЕСКИ ВАЖНО для маломощного сервера!)
-
-**Для сервера с 768 MB RAM swap файл обязателен!** Это предотвратит падения при нехватке памяти.
-
-```bash
-# Проверка текущего swap
-free -h
-swapon --show
-
-# Создание swap файла размером 1 GB (рекомендуется для вашего сервера)
-sudo fallocate -l 1G /swapfile
-
-# Установка правильных прав доступа
-sudo chmod 600 /swapfile
-
-# Форматирование как swap
-sudo mkswap /swapfile
-
-# Активация swap
-sudo swapon /swapfile
-
-# Проверка
-free -h
-swapon --show
-
-# Сделать swap постоянным (автозагрузка при перезапуске)
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-
-# Оптимизация параметров swap (для SSD)
-sudo sysctl vm.swappiness=10
-sudo sysctl vm.vfs_cache_pressure=50
-
-# Сохранение параметров
-echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
-echo 'vm.vfs_cache_pressure=50' | sudo tee -a /etc/sysctl.conf
-```
-
-**Проверка после настройки:**
-```bash
-free -h
-# Должно показать ~1.7 GB доступной памяти (768 MB RAM + 1 GB swap)
-```
-
-### 1.5. Настройка базового файрвола (UFW)
-
-**Примечание для FirstByte:** На серверах FirstByte файрвол может быть уже настроен через панель управления. Проверьте настройки файрвола в панели FirstByte перед настройкой UFW.
-
-Установите и настройте UFW (Uncomplicated Firewall):
-
-```bash
-# Проверка, установлен ли UFW
-which ufw
-
-# Установка UFW (если не установлен)
-sudo apt install -y ufw
-
-# Проверка текущего статуса
-sudo ufw status
-
-# Если файрвол уже активен, проверьте открытые порты
-# Разрешение SSH (ВАЖНО: сделайте это перед включением файрвола!)
-# Замените 22 на ваш порт SSH, если он отличается
-sudo ufw allow 22/tcp
-
-# Разрешение HTTP
-sudo ufw allow 80/tcp
-
-# Разрешение HTTPS
-sudo ufw allow 443/tcp
-
-# Включение файрвола (если еще не включен)
-sudo ufw enable
-
-# Проверка статуса
-sudo ufw status verbose
-```
-
-**Важно:** 
-- Убедитесь, что порт SSH (обычно 22) открыт перед включением файрвола, иначе вы можете потерять доступ к серверу!
-- Если файрвол уже настроен в панели FirstByte, возможно, не нужно включать UFW, или настройте его так, чтобы не конфликтовать с настройками панели
-- Для FirstByte также рекомендуется проверить настройки файрвола в веб-панели управления сервером
-
----
-
-## ШАГ 2: УСТАНОВКА НЕОБХОДИМОГО ПРОГРАММНОГО ОБЕСПЕЧЕНИЯ
-
-### 2.1. Установка Node.js через NVM (рекомендуется)
-
-NVM (Node Version Manager) позволяет легко управлять версиями Node.js:
-
-```bash
-# Установка NVM
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-
-# Перезагрузка профиля bash
-source ~/.bashrc
-
-# Установка Node.js 20 LTS (рекомендуемая версия)
 nvm install 20
-nvm use 20
 nvm alias default 20
-
-# Проверка установки
-node --version
-npm --version
+node -v   # v20.x.x
+npm -v
 ```
 
-**Ожидаемый вывод:** Node.js версии 20.x.x и npm версии 10.x.x
-
-### 2.2. Установка PostgreSQL
+Если ssh-сессия интерактивная, но `nvm` не находится — добавь в `~/.bashrc`:
 
 ```bash
-# Установка PostgreSQL
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+```
+
+> **Важно**: скрипт `update-project.sh` в репозитории уже умеет сам подгружать nvm при запуске через `ssh host "bash script.sh"`. Так что даже в неинтерактивной сессии всё работает.
+
+### 6.2. PostgreSQL 14+
+
+```bash
 sudo apt install -y postgresql postgresql-contrib
-
-# Проверка статуса службы
-sudo systemctl status postgresql
-
-# Включение автозапуска PostgreSQL
-sudo systemctl enable postgresql
+sudo systemctl enable --now postgresql
+psql --version
 ```
 
-### 2.2.1. Оптимизация PostgreSQL для маломощного сервера (КРИТИЧЕСКИ ВАЖНО!)
-
-**Для сервера с 768 MB RAM нужно оптимизировать PostgreSQL, иначе он будет потреблять слишком много памяти.**
+### 6.3. nginx
 
 ```bash
-# Резервное копирование оригинального конфига
-sudo cp /etc/postgresql/*/main/postgresql.conf /etc/postgresql/*/main/postgresql.conf.backup
-
-# Редактирование конфигурации PostgreSQL
-sudo nano /etc/postgresql/*/main/postgresql.conf
-```
-
-**Найдите и измените следующие параметры:**
-
-```ini
-# Память (для сервера с 768 MB RAM)
-shared_buffers = 128MB              # Было: 128MB (оставляем)
-effective_cache_size = 256MB        # Было: 4GB (уменьшаем!)
-maintenance_work_mem = 64MB         # Было: 64MB (оставляем)
-work_mem = 4MB                      # Было: 4MB (оставляем)
-max_connections = 20                # Было: 100 (уменьшаем!)
-
-# Проверки и логирование (упрощаем для экономии ресурсов)
-checkpoint_timeout = 15min          # Было: 5min (увеличиваем)
-checkpoint_completion_target = 0.9
-wal_buffers = 4MB                   # Было: 16MB (уменьшаем)
-default_statistics_target = 50      # Было: 100 (уменьшаем)
-random_page_cost = 1.1              # Для SSD
-effective_io_concurrency = 200      # Для SSD
-```
-
-**Сохранение:** `Ctrl+O`, `Enter`, `Ctrl+X`
-
-**Оптимизация pg_hba.conf (если нужно):**
-
-```bash
-sudo nano /etc/postgresql/*/main/pg_hba.conf
-```
-
-**Перезапуск PostgreSQL:**
-
-```bash
-sudo systemctl restart postgresql
-sudo systemctl status postgresql
-```
-
-**Проверка использования памяти PostgreSQL:**
-
-```bash
-# После перезапуска проверьте использование памяти
-ps aux | grep postgres
-free -h
-```
-
-**Ожидаемое использование:** PostgreSQL должен использовать ~150-200 MB RAM вместо 400+ MB.
-
-### 2.3. Установка Nginx
-
-```bash
-# Установка Nginx
 sudo apt install -y nginx
-
-# Запуск Nginx
-sudo systemctl start nginx
-
-# Включение автозапуска Nginx
-sudo systemctl enable nginx
-
-# Проверка статуса
-sudo systemctl status nginx
+sudo systemctl enable --now nginx
+# Проверить, что отвечает:
+curl http://localhost
 ```
 
-После установки Nginx должен быть доступен по IP-адресу сервера. Откройте в браузере `http://YOUR_SERVER_IP` - вы должны увидеть страницу приветствия Nginx.
-
-### 2.4. Установка PM2 (менеджер процессов для Node.js)
-
-PM2 позволяет управлять Node.js приложениями, обеспечивает автозапуск и мониторинг:
+### 6.4. pm2 (менеджер процессов Node)
 
 ```bash
-# Установка PM2 глобально
 npm install -g pm2
-
-# Проверка установки
-pm2 --version
+pm2 startup systemd -u deploy --hp /home/deploy
+# Выполни команду, которую выведет pm2 (начинается с sudo)
 ```
 
-### 2.5. Установка Certbot (для SSL-сертификатов)
-
-Certbot используется для автоматического получения и обновления SSL-сертификатов Let's Encrypt:
+### 6.5. certbot (для HTTPS)
 
 ```bash
-# Установка Certbot и плагина для Nginx
 sudo apt install -y certbot python3-certbot-nginx
-
-# Проверка установки
-certbot --version
-```
-
-### 2.6. Проверка использования ресурсов после установки ПО
-
-**Важно для маломощного сервера:** Проверьте, что у вас достаточно места и памяти:
-
-```bash
-# Проверка использования памяти
-free -h
-
-# Проверка использования диска
-df -h
-
-# Проверка размера установленных пакетов
-dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -rn | head -20
-
-# Очистка кэша apt (освободит место)
-sudo apt clean
-```
-
-**Ожидаемые результаты:**
-- **Память:** Должно быть свободно ~500+ MB (после настройки swap)
-- **Диск:** Должно быть свободно ~3+ GB из 5 GB
-
-**Если места мало:**
-```bash
-# Удаление неиспользуемых пакетов
-sudo apt autoremove -y
-
-# Очистка старых логов
-sudo journalctl --vacuum-time=3d
 ```
 
 ---
 
-## ШАГ 3: НАСТРОЙКА БАЗЫ ДАННЫХ
+## 7. Настройка базы данных и переменных окружения
 
-### 3.1. Создание базы данных и пользователя
+### 7.1. Создание БД и пользователя PostgreSQL
 
 ```bash
-# Переключение на пользователя postgres
 sudo -u postgres psql
 ```
 
-В интерактивной консоли PostgreSQL выполните следующие команды:
+Внутри psql:
 
 ```sql
--- Создание пользователя базы данных
-CREATE USER loaddevice_user WITH PASSWORD 'your_secure_password_here';
-
--- Создание базы данных
-CREATE DATABASE loaddevice_db OWNER loaddevice_user;
-
--- Предоставление всех привилегий пользователю на базу данных
+CREATE DATABASE loaddevice_db;
+CREATE USER loaddevice_user WITH ENCRYPTED PASSWORD 'ПРИДУМАЙ_СИЛЬНЫЙ_ПАРОЛЬ_20+_СИМВОЛОВ';
 GRANT ALL PRIVILEGES ON DATABASE loaddevice_db TO loaddevice_user;
-
--- Выход из PostgreSQL
+ALTER DATABASE loaddevice_db OWNER TO loaddevice_user;
 \q
 ```
 
-**Важно:** 
-- Замените `your_secure_password_here` на надежный пароль
-- Запомните эти данные - они понадобятся для настройки `DATABASE_URL` в `.env` файле
-
-### 3.2. Проверка подключения к базе данных
+Сильный пароль можно сгенерировать:
 
 ```bash
-# Проверка подключения
-sudo -u postgres psql -d loaddevice_db -U loaddevice_user
+openssl rand -base64 24
 ```
 
-Если подключение успешно, вы увидите приглашение PostgreSQL. Введите `\q` для выхода.
-
----
-
-## ШАГ 4: РАЗВЕРТЫВАНИЕ КОДА ПРОЕКТА
-
-### 4.1. Создание директории для проекта
+Проверка подключения:
 
 ```bash
-# Создание директории
-sudo mkdir -p /var/www/loaddevice
-
-# Изменение владельца директории на вашего пользователя
-sudo chown -R $USER:$USER /var/www/loaddevice
-
-# Переход в директорию
-cd /var/www/loaddevice
+psql "postgresql://loaddevice_user:ПАРОЛЬ@localhost:5432/loaddevice_db" -c "SELECT version();"
 ```
 
-### 4.2. Клонирование проекта из Git-репозитория
-
-**Проект уже размещён на GitHub:** https://github.com/regeraq/nagruz
+### 7.2. Клонирование репозитория
 
 ```bash
-# Клонирование репозитория
-git clone https://github.com/regeraq/nagruz.git .
-
-# Или если репозиторий был обновлён и нужно обновить код:
-# cd /var/www/loaddevice
-# git pull origin main
+sudo mkdir -p /var/www
+sudo chown deploy:deploy /var/www
+cd /var/www
+git clone https://github.com/regeraq/nagruz.git loaddevice
+cd loaddevice
 ```
 
-### 4.3. Установка зависимостей
+### 7.3. Файл `.env`
 
 ```bash
-# Убедитесь, что вы находитесь в директории проекта
-cd /var/www/loaddevice
-
-# Установка зависимостей
-npm install
-```
-
-**Примечание:** Это может занять несколько минут, так как устанавливаются все зависимости проекта.
-
-### 4.4. Сборка проекта
-
-```bash
-# Сборка проекта для production
-npm run build
-```
-
-После успешной сборки должна быть создана директория `dist/` с собранными файлами:
-- `dist/index.js` - скомпилированный сервер
-- `dist/public/` - статические файлы клиента
-
-### 4.5. Создание и настройка файла `.env`
-
-```bash
-# Создание файла .env
+cp .env.example .env
 nano .env
 ```
 
-Добавьте следующие переменные окружения (замените значения на ваши):
+Заполни минимально:
 
 ```env
-# База данных
-DATABASE_URL=postgresql://loaddevice_user:your_secure_password_here@localhost:5432/loaddevice_db
-
-# Node.js окружение
+DATABASE_URL=postgresql://loaddevice_user:ПАРОЛЬ@localhost:5432/loaddevice_db
 NODE_ENV=production
 PORT=5000
 
-# JWT секретные ключи (сгенерируйте надежные случайные строки)
-JWT_SECRET=your-very-secure-random-secret-key-minimum-32-characters-long
+TRUST_PROXY=true
+FORCE_SECURE_COOKIES=true
 
-# Email настройки (Resend)
-RESEND_API_KEY=your-resend-api-key-here
-OWNER_EMAIL=your-email@example.com
-RESEND_FROM_EMAIL=onboarding@resend.dev
+# Секреты — по 48+ символов, три РАЗНЫХ значения.
+# Сгенерируй: openssl rand -base64 48 — и вставь КАЖДЫЙ РАЗ ЗАНОВО.
+JWT_SECRET=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+JWT_REFRESH_SECRET=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+CSRF_SECRET=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
-# URL фронтенда (для ссылок в email)
-FRONTEND_URL=https://your-domain.com
+FRONTEND_URL=https://ваш-домен.ru
+
+# Пока (до §13) — оставить пустым, временно можно Resend, потом заменим.
+RESEND_API_KEY=
+OWNER_EMAIL=owner@ваш-домен.ru
+RESEND_FROM_EMAIL=noreply@ваш-домен.ru
 ```
 
-**Как сгенерировать надежные секретные ключи:**
+Установи права только на чтение владельцем:
 
 ```bash
-# Генерация случайной строки для JWT_SECRET
-openssl rand -base64 32
-```
-
-**Сохранение файла:**
-- В nano: нажмите `Ctrl+O` для сохранения, затем `Enter`, затем `Ctrl+X` для выхода
-
-### 4.6. Применение миграций базы данных (если есть)
-
-Если в проекте есть миграции базы данных:
-
-```bash
-# Применение миграций через Drizzle Kit
-npm run db:push
-```
-
-Или если миграции в формате SQL:
-
-```bash
-# Применение SQL миграций
-psql -U loaddevice_user -d loaddevice_db -f migrations/your_migration_file.sql
+chmod 600 .env
 ```
 
 ---
 
-## ШАГ 5: ЗАПУСК ПРИЛОЖЕНИЯ
+## 8. Первый деплой приложения
 
-### 5.1. Запуск приложения через PM2
-
-**Для маломощного сервера важно ограничить использование памяти Node.js:**
+### 8.1. Установка зависимостей и сборка
 
 ```bash
-# Убедитесь, что вы находитесь в директории проекта
 cd /var/www/loaddevice
-
-# Запуск приложения с ограничением памяти (максимум 300 MB для Node.js)
-pm2 start dist/index.js --name loaddevice --max-memory-restart 300M
-
-# Или создайте файл конфигурации PM2 для более точной настройки
-nano ecosystem.config.js
+npm install
+npm run build
+npm run db:push   # накатит схему из shared/schema.ts через drizzle-kit
 ```
 
-**Создайте файл `ecosystem.config.js` в корне проекта:**
+### 8.2. Запуск под pm2
 
-```javascript
-module.exports = {
-  apps: [{
-    name: 'loaddevice',
-    script: './dist/index.js',
-    instances: 1,
-    exec_mode: 'fork',
-    max_memory_restart: '300M',
-    node_args: '--max-old-space-size=256',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 5000
-    },
-    error_file: './logs/pm2-error.log',
-    out_file: './logs/pm2-out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-    merge_logs: true,
-    autorestart: true,
-    watch: false
-  }]
-};
-```
-
-**Запуск с конфигурацией:**
+В репозитории есть `ecosystem.config.cjs`. Если его нет — pm2 запустит `dist/index.js` напрямую:
 
 ```bash
-# Создание директории для логов
-mkdir -p logs
+pm2 start ecosystem.config.cjs
+# или:
+pm2 start dist/index.js --name loaddevice --max-memory-restart 500M --cwd /var/www/loaddevice
 
-# Запуск с конфигурацией
-pm2 start ecosystem.config.js
-
-# Проверка статуса
-pm2 status
-```
-
-**Ожидаемый вывод:** Приложение должно быть в статусе `online`.
-
-**Проверка использования памяти:**
-
-```bash
-# Просмотр использования ресурсов
-pm2 monit
-
-# Или
-pm2 show loaddevice
-```
-
-**Ожидаемое использование:** Node.js приложение должно использовать ~150-250 MB RAM.
-
-### 5.2. Просмотр логов
-
-```bash
-# Просмотр логов в реальном времени
-pm2 logs loaddevice
-
-# Или только последние 100 строк
-pm2 logs loaddevice --lines 100
-```
-
-### 5.3. Настройка автозапуска приложения
-
-```bash
-# Сохранение текущей конфигурации PM2
 pm2 save
-
-# Настройка автозапуска PM2 при загрузке системы
-pm2 startup
-
-# Выполните команду, которую выведет pm2 startup (она будет выглядеть примерно так):
-# sudo env PATH=$PATH:/home/deploy/.nvm/versions/node/v20.x.x/bin /home/deploy/.nvm/versions/node/v20.x.x/lib/node_modules/pm2/bin/pm2 startup systemd -u deploy --hp /home/deploy
+pm2 status
+pm2 logs loaddevice --lines 50
 ```
 
-**Примечание:** PM2 выведет команду, которую нужно выполнить с `sudo`. Скопируйте и выполните её.
+После `pm2 save` список процессов сохранён, и при рестарте сервера они поднимутся автоматически (благодаря `pm2 startup` из [§6.4](#6-установка-по-nodejs-postgresql-nginx-pm2)).
 
-### 5.4. Полезные команды PM2
+### 8.3. Проверка
 
 ```bash
-# Перезапуск приложения
-pm2 restart loaddevice
-
-# Остановка приложения
-pm2 stop loaddevice
-
-# Удаление приложения из PM2
-pm2 delete loaddevice
-
-# Мониторинг ресурсов
-pm2 monit
-
-# Просмотр детальной информации
-pm2 show loaddevice
+curl http://localhost:5000/api/products
 ```
 
-### 5.5. Проверка работы приложения
-
-```bash
-# Проверка, что приложение слушает на порту 5000
-curl http://localhost:5000
-
-# Или проверка через netstat
-sudo netstat -tlnp | grep 5000
-```
+Должен прийти JSON со списком продуктов.
 
 ---
 
-## ШАГ 6: НАСТРОЙКА NGINX В КАЧЕСТВЕ REVERSE PROXY
+## 9. nginx и HTTPS через Let's Encrypt
 
-### 6.1. Создание конфигурационного файла Nginx
+### 9.1. Конфиг nginx
 
-```bash
-# Создание конфигурационного файла
-sudo nano /etc/nginx/sites-available/loaddevice
-```
-
-### 6.2. Конфигурация Nginx
-
-Скопируйте и вставьте следующую конфигурацию (замените `your-domain.com` на ваш домен):
+Создай `/etc/nginx/sites-available/loaddevice`:
 
 ```nginx
-# HTTP сервер - редирект на HTTPS
 server {
     listen 80;
-    listen [::]:80;
-    server_name your-domain.com www.your-domain.com;
+    server_name ваш-домен.ru www.ваш-домен.ru;
 
-    # Временная конфигурация для получения SSL сертификата
-    # После настройки HTTPS замените на редирект:
-    # return 301 https://$server_name$request_uri;
-    
-    # Проксирование на Node.js приложение (временно, до настройки SSL)
+    # Увеличенный лимит загрузки (аватары, галереи товаров)
+    client_max_body_size 10M;
+
+    # gzip
+    gzip on;
+    gzip_vary on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript;
+    gzip_min_length 1024;
+
     location / {
-        proxy_pass http://localhost:5000;
+        proxy_pass http://127.0.0.1:5000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -811,860 +444,468 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
-        
-        # Таймауты для длительных запросов
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
         proxy_read_timeout 60s;
     }
-
-    # Максимальный размер загружаемых файлов (для форм с вложениями)
-    client_max_body_size 20M;
 }
-
-# HTTPS сервер (будет активирован после настройки SSL)
-# Раскомментируйте после получения SSL сертификата
-# server {
-#     listen 443 ssl http2;
-#     listen [::]:443 ssl http2;
-#     server_name your-domain.com www.your-domain.com;
-#
-#     # SSL сертификаты (будут настроены Certbot)
-#     ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-#     ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-#
-#     # Современные настройки SSL
-#     ssl_protocols TLSv1.2 TLSv1.3;
-#     ssl_ciphers HIGH:!aNULL:!MD5;
-#     ssl_prefer_server_ciphers on;
-#     ssl_session_cache shared:SSL:10m;
-#     ssl_session_timeout 10m;
-#
-#     # Логи
-#     access_log /var/log/nginx/loaddevice-access.log;
-#     error_log /var/log/nginx/loaddevice-error.log;
-#
-#     # Максимальный размер загружаемых файлов
-#     client_max_body_size 20M;
-#
-#     # Проксирование на Node.js приложение
-#     location / {
-#         proxy_pass http://localhost:5000;
-#         proxy_http_version 1.1;
-#         proxy_set_header Upgrade $http_upgrade;
-#         proxy_set_header Connection 'upgrade';
-#         proxy_set_header Host $host;
-#         proxy_set_header X-Real-IP $remote_addr;
-#         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-#         proxy_set_header X-Forwarded-Proto $scheme;
-#         proxy_cache_bypass $http_upgrade;
-#
-#         # Таймауты
-#         proxy_connect_timeout 60s;
-#         proxy_send_timeout 60s;
-#         proxy_read_timeout 60s;
-#     }
-#
-#     # Кэширование статических файлов
-#     location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot)$ {
-#         proxy_pass http://localhost:5000;
-#         expires 1y;
-#         add_header Cache-Control "public, immutable";
-#     }
-# }
 ```
 
-**Важно:** 
-- Замените `your-domain.com` на ваш реальный домен
-- Пока оставьте HTTP конфигурацию активной (без редиректа на HTTPS) - это нужно для получения SSL сертификата
-
-### 6.3. Активация конфигурации
+Активировать:
 
 ```bash
-# Создание символической ссылки для активации сайта
 sudo ln -s /etc/nginx/sites-available/loaddevice /etc/nginx/sites-enabled/
-
-# Удаление дефолтной конфигурации (опционально)
-sudo rm /etc/nginx/sites-enabled/default
-
-# Проверка конфигурации на ошибки
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
-```
-
-**Ожидаемый вывод:** `nginx: configuration file /etc/nginx/nginx.conf test is successful`
-
-### 6.4. Перезагрузка Nginx
-
-```bash
-# Перезагрузка Nginx для применения изменений
 sudo systemctl reload nginx
-
-# Или полный перезапуск
-sudo systemctl restart nginx
-
-# Проверка статуса
-sudo systemctl status nginx
 ```
 
-### 6.5. Проверка работы
-
-Откройте в браузере `http://your-domain.com` или `http://YOUR_SERVER_IP`. Вы должны увидеть ваше приложение.
-
-**Примечание:** Если домен еще не настроен, используйте IP-адрес сервера. Для работы с доменом необходимо настроить DNS записи у вашего регистратора домена.
-
----
-
-## ШАГ 7: НАСТРОЙКА HTTPS
-
-### 7.1. Настройка DNS записей
-
-Перед получением SSL сертификата убедитесь, что DNS записи настроены правильно:
-
-**У вашего регистратора домена создайте A-записи:**
-
-```
-your-domain.com      A       YOUR_SERVER_IP
-www.your-domain.com  A       YOUR_SERVER_IP
-```
-
-Или используйте CNAME для www:
-
-```
-your-domain.com      A       YOUR_SERVER_IP
-www.your-domain.com  CNAME   your-domain.com
-```
-
-**Примечание для FirstByte:**
-- Если вы покупали домен через FirstByte, DNS записи можно настроить прямо в панели управления
-- Если домен у другого регистратора, настройте DNS записи там, указав IP вашего сервера FirstByte
-
-**Проверка DNS:**
+### 9.2. Получение SSL (после прописанной A-записи, см. [§10](#10-привязка-домена-и-dns))
 
 ```bash
-# Проверка DNS записей
-dig your-domain.com
-nslookup your-domain.com
-
-# Или используйте онлайн-сервисы:
-# https://dnschecker.org/
-# https://www.whatsmydns.net/
+sudo certbot --nginx -d ваш-домен.ru -d www.ваш-домен.ru
 ```
 
-Дождитесь распространения DNS (может занять от нескольких минут до 24 часов, обычно 5-30 минут).
+Certbot сам перепишет nginx-конфиг, добавит `listen 443 ssl`, пропишет редирект с HTTP на HTTPS. Сертификат продлевается автоматически (cron в `/etc/cron.d/certbot`).
 
-### 7.2. Получение SSL сертификата через Certbot
-
-```bash
-# Получение SSL сертификата для вашего домена
-sudo certbot --nginx -d your-domain.com -d www.your-domain.com
-```
-
-**Во время выполнения Certbot:**
-
-1. Введите ваш email адрес (для уведомлений об истечении сертификата)
-2. Согласитесь с условиями использования (A)
-3. Выберите, хотите ли вы делиться email с EFF (Y/N)
-4. Certbot автоматически настроит Nginx для работы с HTTPS
-
-**Ожидаемый результат:** Certbot автоматически:
-- Получит SSL сертификат от Let's Encrypt
-- Обновит конфигурацию Nginx
-- Настроит редирект с HTTP на HTTPS
-
-### 7.3. Проверка автоматического обновления сертификата
-
-Let's Encrypt сертификаты действительны 90 дней. Certbot автоматически настраивает обновление:
+Проверить автопродление:
 
 ```bash
-# Тестовый запуск обновления (dry-run)
 sudo certbot renew --dry-run
 ```
 
-**Ожидаемый вывод:** Успешное обновление без реального получения нового сертификата.
+---
 
-### 7.4. Обновление конфигурации Nginx для HTTPS
+## 10. Привязка домена и DNS
 
-После получения сертификата Certbot автоматически обновит конфигурацию. Проверьте:
+В ЛК регистратора домена (Beget / REG.RU) создать **A-запись**:
 
-```bash
-# Просмотр обновленной конфигурации
-sudo cat /etc/nginx/sites-available/loaddevice
+| Тип | Имя (поддомен) | Значение        | TTL   |
+| --- | -------------- | --------------- | ----- |
+| A   | @              | IP_ТВОЕГО_VPS   | 3600  |
+| A   | www            | IP_ТВОЕГО_VPS   | 3600  |
+
+DNS обновляются от 5 минут до 24 часов (обычно <1 часа). Проверить:
+
+```powershell
+# На Windows:
+nslookup ваш-домен.ru
 ```
 
-Вы должны увидеть, что Certbot добавил SSL настройки и настроил редирект с HTTP на HTTPS.
+Когда `nslookup` показывает IP твоего сервера — запускай certbot ([§9.2](#92-получение-ssl-после-прописанной-a-записи-см-10)).
 
-### 7.5. Финальная проверка HTTPS
+### MX-записи для почты
 
-```bash
-# Проверка конфигурации
-sudo nginx -t
-
-# Перезагрузка Nginx
-sudo systemctl reload nginx
-```
-
-Откройте в браузере `https://your-domain.com`. Вы должны увидеть:
-- ✅ Зеленый замок в адресной строке
-- ✅ Ваше приложение работает по HTTPS
-- ✅ Автоматический редирект с HTTP на HTTPS
+Когда подключишь российский email-сервис ([§13](#13-российский-email-сервис-выбор-цены-интеграция)), он попросит добавить **MX-, SPF-, DKIM-, DMARC-записи** — это обязательно для доставки писем. Делается в том же разделе DNS.
 
 ---
 
-## ПРОВЕРКА И ТЕСТИРОВАНИЕ
+## 11. Резервное копирование: backup.sh + cron
 
-### Проверка работы всех компонентов
+В репозитории есть готовый скрипт `scripts/backup.sh` — он делает дамп БД, архивирует `.env`, папку `dist/` и ротирует старые бэкапы. См. также «Автоматический дамп по расписанию» ниже.
 
-```bash
-# 1. Проверка статуса PM2
-pm2 status
+### 11.1. Установка
 
-# 2. Проверка статуса Nginx
-sudo systemctl status nginx
-
-# 3. Проверка статуса PostgreSQL
-sudo systemctl status postgresql
-
-# 4. Проверка работы приложения
-curl http://localhost:5000
-
-# 5. Проверка работы через Nginx
-curl http://your-domain.com
-curl https://your-domain.com
-```
-
-### Проверка безопасности SSL
-
-Используйте онлайн инструменты:
-- [SSL Labs SSL Test](https://www.ssllabs.com/ssltest/)
-- [Security Headers](https://securityheaders.com/)
-
-Введите ваш домен и проверьте оценку безопасности.
-
-### Функциональное тестирование
-
-1. Откройте сайт в браузере: `https://your-domain.com`
-2. Проверьте работу всех страниц
-3. Проверьте отправку форм (контактная форма, заказы)
-4. Проверьте работу админ-панели (если есть)
-5. Проверьте работу API эндпоинтов
-
----
-
-## УСТРАНЕНИЕ НЕПОЛАДОК
-
-### Проблема: Сайт не открывается
-
-**Диагностика:**
+Скрипт уже в репо — он попадает на сервер вместе с `git pull`. Делаем исполняемым и создаём папку для бэкапов:
 
 ```bash
-# 1. Проверка статуса PM2
-pm2 status
-pm2 logs loaddevice
-
-# 2. Проверка статуса Nginx
-sudo systemctl status nginx
-sudo nginx -t
-
-# 3. Проверка портов
-sudo netstat -tlnp | grep 5000
-sudo netstat -tlnp | grep 80
-sudo netstat -tlnp | grep 443
-
-# 4. Проверка логов Nginx
-sudo tail -f /var/log/nginx/error.log
-sudo tail -f /var/log/nginx/loaddevice-error.log
+sudo mkdir -p /var/backups/loaddevice
+sudo chown deploy:deploy /var/backups/loaddevice
+chmod +x /var/www/loaddevice/scripts/backup.sh
 ```
 
-**Возможные решения:**
-- Убедитесь, что приложение запущено: `pm2 restart loaddevice`
-- Проверьте, что порт в `.env` совпадает с портом в конфигурации Nginx
-- Проверьте файрвол: `sudo ufw status`
-
-### Проблема: Ошибки подключения к базе данных
-
-**Диагностика:**
+### 11.2. Ручной запуск
 
 ```bash
-# 1. Проверка статуса PostgreSQL
-sudo systemctl status postgresql
-
-# 2. Проверка подключения
-psql -U loaddevice_user -d loaddevice_db
-
-# 3. Проверка DATABASE_URL в .env
-cat .env | grep DATABASE_URL
+bash /var/www/loaddevice/scripts/backup.sh
+ls -lh /var/backups/loaddevice/
 ```
 
-**Возможные решения:**
-- Убедитесь, что PostgreSQL запущен: `sudo systemctl start postgresql`
-- Проверьте правильность DATABASE_URL в `.env`
-- Проверьте права доступа пользователя к базе данных
-
-### Проблема: SSL сертификат не работает
-
-**Диагностика:**
-
-```bash
-# 1. Проверка сертификатов
-sudo certbot certificates
-
-# 2. Проверка конфигурации Nginx
-sudo nginx -t
-
-# 3. Проверка логов Certbot
-sudo tail -f /var/log/letsencrypt/letsencrypt.log
-```
-
-**Возможные решения:**
-- Убедитесь, что DNS записи настроены правильно
-- Проверьте, что порты 80 и 443 открыты в файрволе
-- Попробуйте обновить сертификат: `sudo certbot renew`
-
-### Проблема: Приложение не запускается
-
-**Диагностика:**
-
-```bash
-# 1. Просмотр логов PM2
-pm2 logs loaddevice --lines 100
-
-# 2. Попытка запуска вручную
-cd /var/www/loaddevice
-node dist/index.js
-```
-
-**Возможные решения:**
-- Проверьте, что все переменные окружения установлены в `.env`
-- Убедитесь, что проект собран: `npm run build`
-- Проверьте версию Node.js: `node --version` (должна быть 18+)
-
-### Проблема: 502 Bad Gateway
-
-**Причина:** Nginx не может подключиться к приложению на порту 5000.
-
-**Решение:**
-
-```bash
-# 1. Проверьте, что приложение запущено
-pm2 status
-
-# 2. Проверьте порт
-sudo netstat -tlnp | grep 5000
-
-# 3. Перезапустите приложение
-pm2 restart loaddevice
-
-# 4. Проверьте логи
-pm2 logs loaddevice
-```
-
-### Проблема: 413 Request Entity Too Large
-
-**Причина:** Размер загружаемого файла превышает лимит Nginx.
-
-**Решение:**
-
-Отредактируйте конфигурацию Nginx и увеличьте `client_max_body_size`:
-
-```bash
-sudo nano /etc/nginx/sites-available/loaddevice
-```
-
-Убедитесь, что есть строка:
-```nginx
-client_max_body_size 20M;
-```
-
-Затем перезагрузите Nginx:
-```bash
-sudo systemctl reload nginx
-```
-
----
-
-## ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ
-
-### Специфичные настройки для FirstByte
-
-**Мониторинг в панели FirstByte:**
-- Используйте панель управления FirstByte для мониторинга использования ресурсов
-- Проверяйте статистику CPU, RAM, диска
-- Настройте уведомления о превышении лимитов (если доступно)
-
-**Резервное копирование:**
-- FirstByte может предоставлять услуги автоматического бэкапа
-- Проверьте доступные опции в панели управления
-- Рекомендуется настроить собственное резервное копирование (см. ниже)
-
-**Обновления системы:**
-- Регулярно обновляйте систему: `sudo apt update && sudo apt upgrade -y`
-- FirstByte обычно предоставляет стабильные образы ОС, но обновления безопасности важны
-
-### Настройка резервного копирования
-
-**Резервное копирование базы данных:**
-
-```bash
-# Создание директории для бэкапов
-mkdir -p ~/backups
-
-# Создание скрипта бэкапа
-nano ~/backup-db.sh
-```
-
-Добавьте в скрипт:
-
-```bash
-#!/bin/bash
-BACKUP_DIR="$HOME/backups"
-DATE=$(date +%Y%m%d_%H%M%S)
-pg_dump -U loaddevice_user loaddevice_db > "$BACKUP_DIR/loaddevice_db_$DATE.sql"
-# Удаление бэкапов старше 7 дней
-find "$BACKUP_DIR" -name "loaddevice_db_*.sql" -mtime +7 -delete
-```
-
-Сделайте скрипт исполняемым:
-
-```bash
-chmod +x ~/backup-db.sh
-```
-
-Добавьте в crontab (ежедневный бэкап в 2:00):
+### 11.3. Автоматически — раз в сутки в 03:30 МСК
 
 ```bash
 crontab -e
 ```
 
-Добавьте строку:
-```
-0 2 * * * /home/deploy/backup-db.sh
-```
+Добавить строку:
 
-### Мониторинг ресурсов
-
-```bash
-# Установка htop для мониторинга
-sudo apt install -y htop
-
-# Запуск мониторинга
-htop
+```cron
+30 3 * * * /bin/bash /var/www/loaddevice/scripts/backup.sh >> /var/log/loaddevice-backup.log 2>&1
 ```
 
-### Настройка логирования
+### 11.4. Выкачивание бэкапа к себе
 
-PM2 автоматически логирует вывод приложения. Логи находятся в:
-```bash
-~/.pm2/logs/
+**Важно: хранить бэкапы только на том же сервере — бессмысленно.** Раз в неделю забирай их к себе:
+
+```powershell
+# На Windows (PowerShell):
+scp deploy@IP:/var/backups/loaddevice/loaddevice-db-*.sql.gz "C:\backups\"
 ```
+
+Или автоматизируй через Windows Task Scheduler + `scp`.
 
 ---
 
-## ЗАКЛЮЧЕНИЕ
+## 12. Миграция на новый сервер без потерь данных
 
-После выполнения всех шагов ваше приложение должно быть:
+Пригодится, когда:
 
-✅ Развернуто на сервере  
-✅ Доступно по домену  
-✅ Работать по HTTPS  
-✅ Автоматически запускаться при перезагрузке сервера  
-✅ Иметь настроенный файрвол  
-✅ Иметь резервное копирование базы данных  
+- Меняешь провайдера (например, с FirstByte на Timeweb).
+- Увеличиваешь мощность (новый VPS с большей RAM/диском).
+- Хочешь сделать staging-среду по образу прода.
 
-**Важные напоминания:**
+В репозитории есть скрипт `scripts/migrate-server.sh` — запускается локально и делает всё сам. Но полезно понимать и ручной процесс.
 
-1. Регулярно обновляйте систему: `sudo apt update && sudo apt upgrade -y`
-2. Делайте резервные копии базы данных
-3. Мониторьте логи приложения: `pm2 logs loaddevice`
-4. Проверяйте статус сервисов: `pm2 status`, `sudo systemctl status nginx`
-5. Обновляйте зависимости проекта: `npm update`
+### 12.1. Сценарий «ручной перенос» (понять, что делает скрипт)
 
-**Полезные команды для ежедневного использования:**
+**На новом сервере** (выполни §5–§6, не трогая §7–§8).
+
+**На старом сервере**:
 
 ```bash
-# Просмотр статуса всех сервисов
-pm2 status
-sudo systemctl status nginx
-sudo systemctl status postgresql
-
-# Просмотр логов
-pm2 logs loaddevice
-sudo tail -f /var/log/nginx/loaddevice-access.log
-
-# Перезапуск приложения после обновления
+# 1. Дамп БД
 cd /var/www/loaddevice
-git pull
+pg_dump "$DATABASE_URL" --no-owner --no-privileges --format=custom \
+    -f /tmp/loaddevice-db.dump
+# (или через env из .env):
+export $(grep ^DATABASE_URL= .env | xargs)
+pg_dump "$DATABASE_URL" --no-owner --no-privileges --format=custom \
+    -f /tmp/loaddevice-db.dump
+
+# 2. Архив файлов: .env, загруженные файлы, конфиг nginx, ecosystem
+tar -czf /tmp/loaddevice-files.tar.gz \
+    /var/www/loaddevice/.env \
+    /var/www/loaddevice/uploads 2>/dev/null \
+    /var/www/loaddevice/ecosystem.config.cjs 2>/dev/null \
+    /etc/nginx/sites-available/loaddevice 2>/dev/null \
+    || true
+```
+
+**Перетащить дамп и архив на новый сервер**:
+
+```bash
+# Со старого сервера (заменить IP_NEW на новый):
+scp /tmp/loaddevice-db.dump  deploy@IP_NEW:/tmp/
+scp /tmp/loaddevice-files.tar.gz deploy@IP_NEW:/tmp/
+```
+
+**На новом сервере**:
+
+```bash
+# 3. Распаковать конфиги/файлы
+sudo tar -xzf /tmp/loaddevice-files.tar.gz -C /
+
+# 4. Создать пустую БД (см. §7.1), затем:
+pg_restore -d "postgresql://loaddevice_user:PWD@localhost:5432/loaddevice_db" \
+    --no-owner --no-privileges --clean --if-exists \
+    /tmp/loaddevice-db.dump
+
+# 5. Развернуть код
+cd /var/www
+git clone https://github.com/regeraq/nagruz.git loaddevice
+cd loaddevice
 npm install
 npm run build
-pm2 restart loaddevice
+npm run db:push   # на всякий случай, docirm schema
+
+# 6. Запустить pm2
+pm2 start ecosystem.config.cjs
+pm2 save
 ```
+
+**Обновить DNS**: поменять A-запись в ЛК регистратора на IP нового сервера. Дождаться обновления DNS (5 мин – 1 час).
+
+**Выключить приложение на старом сервере** (чтобы не было двойной записи в БД):
+
+```bash
+pm2 stop loaddevice
+```
+
+Убедиться, что сайт работает на новом сервере, после чего старый VPS можно удалить.
+
+### 12.2. Скрипт `scripts/migrate-server.sh`
+
+Автоматизирует то же самое. Запускается **со своего Windows** (из папки проекта) и делает: дамп на источнике → `scp` → восстановление на приёмнике → `npm install` → `npm run build` → `pm2 start`.
+
+```powershell
+# Пример запуска:
+bash scripts/migrate-server.sh `
+    --from-host  45.9.72.103     `
+    --from-user  root            `
+    --to-host    NEW_IP          `
+    --to-user    deploy          `
+    --project-dir /var/www/loaddevice
+```
+
+Или изнутри WSL / Git Bash. Подробные флаги — внутри скрипта (`scripts/migrate-server.sh --help`).
+
+### 12.3. Минимизация простоя (downtime)
+
+Для строгой безостановочности:
+
+1. На новом сервере готовишь всё, кроме DNS.
+2. Делаешь **первый** дамп, накатываешь на новый.
+3. Проверяешь сайт на новом IP напрямую (без DNS): `curl -H "Host: ваш-домен.ru" http://IP_NEW/`.
+4. Включаешь на старом сервере режим только-чтение или просто быстро переключаешь DNS.
+5. Сразу после переключения — второй дамп и «дораскатка» только изменившихся записей. Для маленького сайта обычно достаточно одного дампа — просто переключайся ночью.
 
 ---
 
----
+## 13. Российский email-сервис: выбор, цены, интеграция
 
-## ОПТИМИЗАЦИЯ ДЛЯ МАЛОМОЩНОГО СЕРВЕРА (768 MB RAM)
+Сейчас код использует **Resend (США)**. Это проблема по двум причинам:
 
-### Мониторинг использования ресурсов
+1. **152-ФЗ ст. 12** — отправка писем на email = трансграничная передача персональных данных. Для США нужно отдельное согласие пользователя и уведомление Роскомнадзора. Проще — не передавать.
+2. **Санкции/блокировки** — Resend может в любой момент перестать работать с РФ-картой.
 
-**Установка утилит мониторинга:**
+### Сравнение российских сервисов для транзакционных писем (2026)
 
-```bash
-# Установка htop и других утилит
-sudo apt install -y htop iotop nethogs
+| Сервис                  | Стартовая цена                  | Где ДЦ    | API/SMTP         | Бесплатный лимит       | Для нашего объёма (до 1–5 тыс. писем/мес) |
+| ----------------------- | ------------------------------- | --------- | ---------------- | ---------------------- | --------------------------------------- |
+| **Unisender Go**        | от ~500 ₽/мес (1000 писем)      | Москва    | REST API + SMTP  | 1000 писем/мес бесплатно на старте | ⭐ **оптимально**: серверы в РФ, 152-ФЗ, API похожий на SendGrid |
+| **Yandex Cloud Postbox**| pay-per-use, ~10 ₽ / 1000 писем | Москва    | SMTP + AWS SES API | До 100 писем/сутки бесплатно | Самый дешёвый при больших объёмах; нужна привязка Yandex Cloud-аккаунта |
+| **DashaMail**           | 1750 ₽/мес (50k писем)          | Россия    | SMTP + HTTP API  | Пробный период         | Дороговато для маленьких объёмов |
+| **SendPulse (RU)**      | ~500 ₽/мес или freemium 12k/мес бесплатно | Россия | SMTP + API | 12000 писем/мес бесплатно | Хорошо для старта |
+| **MailoPost**           | от 500–1500 ₽/мес               | Россия    | SMTP + API       | Пробный период         | Меньше документации, слабее API |
+| **Mail.ru for Business**| Бесплатно для своего домена, но без API по подписке | Россия | SMTP | ограничения по лимитам | Не подходит — бесплатная версия имеет жёсткие дневные лимиты |
 
-# Просмотр использования ресурсов в реальном времени
-htop
+### Рекомендация
+
+Для этого проекта **оптимум — Unisender Go**:
+
+- Серверы в Москве, документирован как совместимый с 152-ФЗ.
+- REST API аналогичен SendGrid/Resend — миграция кода ~15 строк.
+- Цены: первые 1000 писем/мес бесплатно, дальше — от 500 ₽/мес за небольшие объёмы.
+- Есть SMTP-шлюз, если захочешь не трогать код (но API лучше — он даёт статусы доставки).
+
+**Запасной вариант — Yandex Cloud Postbox**, если объёмы вырастут до десятков тысяч писем в месяц.
+
+### Пошаговая регистрация в Unisender Go
+
+1. https://go.unisender.ru/ → **«Зарегистрироваться»**.
+2. Указать домен-отправитель — `ваш-домен.ru`.
+3. В ЛК открыть раздел **«Домены»** → «Проверить домен». Сервис покажет **три DNS-записи** для вставки в DNS-зону регистратора (TXT для SPF, TXT+CNAME для DKIM, TXT для DMARC).
+4. В ЛК регистратора домена (Beget/REG.RU) добавить эти три записи точь-в-точь.
+5. Вернуться в Unisender Go → «Проверить» — через 5–30 минут зелёные галочки у всех трёх.
+6. В разделе **«API и интеграции»** → создать **API-ключ** (записать, больше не покажет).
+
+### Интеграция Unisender Go в код
+
+Создай файл `server/services/email-unisender.ts` (вместо/рядом с текущим Resend-сервисом):
+
+```typescript
+// Минимальная обёртка над Unisender Go Web API.
+// Документация: https://godocs.unisender.ru/web-api
+import { z } from "zod";
+
+const API_URL = "https://go1.unisender.ru/ru/transactional/api/v1/email/send.json";
+
+export interface SendEmailInput {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+  fromName?: string;
+}
+
+export async function sendEmail(input: SendEmailInput): Promise<void> {
+  const apiKey = process.env.UNISENDER_GO_API_KEY;
+  if (!apiKey) {
+    console.warn("[email] UNISENDER_GO_API_KEY not set — email skipped");
+    return;
+  }
+
+  const fromEmail  = process.env.MAIL_FROM_EMAIL || "noreply@example.ru";
+  const fromName   = input.fromName || process.env.MAIL_FROM_NAME || "Loaddevice";
+  const recipients = Array.isArray(input.to) ? input.to : [input.to];
+
+  const body = {
+    message: {
+      recipients: recipients.map((email) => ({ email })),
+      body:        { html: input.html, plaintext: input.text ?? stripHtml(input.html) },
+      subject:     input.subject,
+      from_email:  fromEmail,
+      from_name:   fromName,
+    },
+  };
+
+  const res = await fetch(API_URL, {
+    method:  "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-KEY":    apiKey,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Unisender Go error ${res.status}: ${err}`);
+  }
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+}
 ```
 
-**Скрипт для проверки использования ресурсов:**
+В `.env` добавляем:
 
-```bash
-# Создание скрипта мониторинга
-nano ~/check-resources.sh
+```env
+UNISENDER_GO_API_KEY=eyJ...
+MAIL_FROM_EMAIL=noreply@ваш-домен.ru
+MAIL_FROM_NAME=Loaddevice
 ```
 
-Добавьте в скрипт:
+Дальше в местах отправки (регистрация, сброс пароля, уведомление о заказе) использовать `sendEmail()` из этого модуля вместо Resend. Удобнее всего — сделать общий `server/services/email.ts`, который экспортирует один `sendEmail`, а внутри переключает провайдера через `process.env.EMAIL_PROVIDER` (`unisender` | `resend`).
 
-```bash
-#!/bin/bash
-echo "=== ИСПОЛЬЗОВАНИЕ РЕСУРСОВ ==="
-echo ""
-echo "Память:"
-free -h
-echo ""
-echo "Диск:"
-df -h
-echo ""
-echo "Процессы (топ 10 по памяти):"
-ps aux --sort=-%mem | head -11
-echo ""
-echo "PM2 статус:"
-pm2 status
-echo ""
-echo "PostgreSQL:"
-sudo systemctl status postgresql --no-pager | head -10
-echo ""
-echo "Nginx:"
-sudo systemctl status nginx --no-pager | head -10
-```
-
-Сделайте исполняемым:
-
-```bash
-chmod +x ~/check-resources.sh
-```
-
-**Запуск проверки:**
-
-```bash
-~/check-resources.sh
-```
-
-### Очистка неиспользуемых пакетов
-
-```bash
-# Очистка кэша apt
-sudo apt clean
-sudo apt autoremove -y
-
-# Очистка логов (старые логи могут занимать место)
-sudo journalctl --vacuum-time=7d
-
-# Проверка размера директорий
-sudo du -sh /var/log/*
-sudo du -sh /var/www/*
-```
-
-### Оптимизация Nginx для малого объема памяти
-
-```bash
-# Редактирование конфигурации Nginx
-sudo nano /etc/nginx/nginx.conf
-```
-
-**Найдите секцию `worker_processes` и установите:**
-
-```nginx
-worker_processes 1;  # Для 1 ядра CPU
-worker_connections 512;  # Уменьшаем с 1024
-```
-
-**Добавьте ограничения:**
-
-```nginx
-# В секции http
-client_body_buffer_size 128k;
-client_max_body_size 20m;
-client_header_buffer_size 1k;
-large_client_header_buffers 2 1k;
-```
-
-**Перезапуск Nginx:**
-
-```bash
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### Ожидаемое использование ресурсов
-
-**После оптимизации:**
-
-- **Система (Ubuntu):** ~100-150 MB
-- **PostgreSQL:** ~150-200 MB
-- **Node.js приложение:** ~150-250 MB
-- **Nginx:** ~20-30 MB
-- **Резерв:** ~100-200 MB для буферов и кэша
-- **Итого:** ~520-830 MB (в пределах 768 MB + 1 GB swap)
-
-**При нагрузке 2 пользователя:**
-- Использование памяти: ~600-700 MB
-- Использование CPU: 10-30% (пики до 50%)
-- Использование диска: ~2-3 GB (с учетом ОС, БД, приложения)
-
-### Предупреждения и ограничения
-
-⚠️ **Важно понимать:**
-
-1. **Это временное решение** для тестирования с малым количеством пользователей
-2. **При росте нагрузки** (5+ одновременных пользователей) сервер может начать тормозить
-3. **Swap файл** будет использоваться, что замедлит работу (но предотвратит падения)
-4. **Регулярно проверяйте** использование ресурсов: `~/check-resources.sh`
-5. **При проблемах** рассмотрите возможность апгрейда сервера
-
-### Рекомендации по масштабированию
-
-**Если нагрузка растет:**
-
-1. **Минимум для комфортной работы:** 2 GB RAM, 2 CPU ядра
-2. **Рекомендуется для production:** 4 GB RAM, 2-4 CPU ядра
-3. **Для высоких нагрузок:** 8+ GB RAM, 4+ CPU ядра
-
-**Альтернативы:**
-- Использование внешней БД (например, managed PostgreSQL)
-- Миграция на более мощный сервер
-- Использование CDN для статических файлов
+> Если нужно — могу отдельным шагом сделать полную миграцию Resend → Unisender Go во всех endpoint-ах, с обратной совместимостью на переходный период.
 
 ---
 
-## СПЕЦИФИКА FIRSTBYTE: ПОЛЕЗНЫЕ СОВЕТЫ
+## 14. Соответствие 152-ФЗ и 242-ФЗ
 
-### Работа с панелью управления FirstByte
+Подробный аудит — в `SECURITY_AUDIT_REPORT.md`. Кратко: чтобы не получить штраф Роскомнадзора:
 
-**Доступные функции в панели:**
-- Перезагрузка сервера (soft/hard reboot)
-- Переустановка ОС (если потребуется)
-- Управление файрволом (если доступно)
-- Просмотр статистики использования ресурсов
-- Доступ к веб-консоли (VNC/KVM) для экстренного доступа
+| Требование                                                                 | Как выполнено                                              |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **242-ФЗ** БД с ПД граждан РФ хранится в РФ                                | Timeweb/Beget/Selectel/FirstByte — все ДЦ в Москве/СПб     |
+| **152-ФЗ** Политика обработки ПД на сайте + явное согласие при регистрации | Проверь наличие `/privacy` и галочки согласия в форме      |
+| **152-ФЗ ст. 12** Трансграничная передача ПД                               | Email-сервис в РФ (см. §13), платёжка — российская (ЮKassa, Robokassa) |
+| **Уведомление РКН** (оператор ПД)                                          | Подать через https://rkn.gov.ru/personal-data/forms/       |
+| **Доступ субъекта ПД к своим данным, удаление, отзыв согласия**            | Реализовано: `/api/auth/me`, `/api/auth/consents/:type/revoke`, удаление аккаунта в профиле |
+| **Хранение дампов БД**                                                     | Локально на том же российском сервере (см. §11)            |
 
-**Рекомендации:**
-- Сохраните данные для доступа в безопасном месте
-- Настройте двухфакторную аутентификацию в личном кабинете (если доступно)
-- Регулярно проверяйте уведомления в панели управления
+### Что сделать в интерфейсе сайта (если ещё не сделано)
 
-### Особенности сетевой конфигурации FirstByte
+- [ ] Страница «Политика обработки персональных данных» (`/privacy`).
+- [ ] Страница «Согласие на обработку персональных данных» (`/consent`).
+- [ ] Галочка «Я согласен с политикой обработки ПД» в формах регистрации, заказа, обратной связи.
+- [ ] Кнопка «Удалить аккаунт» в профиле (есть).
+- [ ] Кнопка «Отозвать согласие» в профиле (есть, см. `/api/auth/consents/:type/revoke`).
 
-FirstByte обычно предоставляет:
-- Статический IP-адрес
-- Возможность настройки дополнительных IP (за отдельную плату)
-- Прямой доступ к интернету без NAT
+### Что сделать юридически
 
-**Проверка сетевых настроек:**
-
-```bash
-# Проверка IP-адреса
-ip addr show
-
-# Проверка маршрутизации
-ip route show
-
-# Проверка DNS
-cat /etc/resolv.conf
-```
-
-### Рекомендации по безопасности для FirstByte
-
-1. **Измените root пароль** после первого входа (если используете пароль)
-2. **Настройте SSH ключи** вместо паролей
-3. **Отключите вход по паролю для root** (после настройки SSH ключей)
-4. **Используйте fail2ban** для защиты от брутфорса:
-
-```bash
-# Установка fail2ban
-sudo apt install -y fail2ban
-
-# Запуск и автозапуск
-sudo systemctl enable fail2ban
-sudo systemctl start fail2ban
-
-# Проверка статуса
-sudo systemctl status fail2ban
-```
-
-### Мониторинг ресурсов на FirstByte
-
-FirstByte обычно предоставляет мониторинг в панели, но можно также использовать:
-
-```bash
-# Установка утилит мониторинга
-sudo apt install -y htop iotop nethogs
-
-# Просмотр использования ресурсов
-htop          # CPU, RAM
-iotop         # Диск I/O
-nethogs       # Сетевой трафик
-```
-
-### Контакты поддержки FirstByte
-
-Если возникнут проблемы с сервером:
-- **Техническая поддержка:** через тикет-систему в личном кабинете
-- **Документация:** https://firstbyte.ru/help/ (если доступна)
-- **Telegram канал:** проверьте наличие официального канала поддержки
+1. Зарегистрироваться как оператор ПД на https://rkn.gov.ru/personal-data/forms/ (бесплатно, 1–2 недели на рассмотрение).
+2. Распечатать и подписать «Политику обработки ПД» и «Положение об обработке ПД».
+3. Если сайт принимает оплату — использовать российский эквайринг (ЮKassa / Robokassa / Тинькофф).
 
 ---
 
-## 🔄 АВТОМАТИЧЕСКИЙ ДЕПЛОЙ (CI/CD)
+## 15. Обновление кода на продакшне
 
-### Настройка автоматического развертывания при изменении кода
+Полная инструкция — в [QUICK_UPDATE.md](QUICK_UPDATE.md). Короткая версия:
 
-После настройки автоматического деплоя, каждый раз когда вы делаете `git push` в ветку `main`, изменения автоматически применятся на сервере.
-
-### Вариант 1: GitHub Actions (Рекомендуется)
-
-#### Шаг 1: Генерация SSH ключа на сервере
-
-```bash
-# На сервере выполните:
-ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_actions_deploy -N ""
-
-# Просмотр публичного ключа
-cat ~/.ssh/github_actions_deploy.pub
-
-# Добавление публичного ключа в authorized_keys
-cat ~/.ssh/github_actions_deploy.pub >> ~/.ssh/authorized_keys
-
-# Просмотр приватного ключа (скопируйте его полностью!)
-cat ~/.ssh/github_actions_deploy
+```powershell
+# Локально на Windows:
+cd "C:\Users\k62\Documents\Атом\сайт\HelloWhoAreYou-1 (5)\HelloWhoAreYou-1"
+.\update-github.ps1 -Message "что сделал"
 ```
 
-#### Шаг 2: Настройка GitHub Secrets
-
-1. Перейдите в ваш репозиторий на GitHub: https://github.com/regeraq/nagruz
-2. Откройте **Settings** → **Secrets and variables** → **Actions**
-3. Добавьте следующие секреты:
-
-   - **`SERVER_HOST`** - IP-адрес вашего сервера (например: `46.17.105.24`)
-   - **`SERVER_USER`** - имя пользователя на сервере (например: `deploy`)
-   - **`SERVER_PORT`** - порт SSH (обычно `22`)
-   - **`SSH_PRIVATE_KEY`** - приватный SSH ключ (весь текст из `~/.ssh/github_actions_deploy`)
-
-#### Шаг 3: Проверка работы
-
-1. Сделайте любое изменение в коде
-2. Закоммитьте и запушьте:
-   ```bash
-   git add .
-   git commit -m "Test auto-deploy"
-   git push origin main
-   ```
-3. Перейдите в **Actions** на GitHub и следите за процессом деплоя
-4. Через 1-2 минуты изменения должны появиться на сервере!
-
-### Вариант 2: Простой скрипт на сервере (Альтернатива)
-
-Если не хотите использовать GitHub Actions, можно настроить автоматическую проверку изменений на сервере:
-
-#### Установка скрипта деплоя на сервере
-
-```bash
-# На сервере выполните:
-cd /var/www/loaddevice
-
-# Скачивание скрипта деплоя
-curl -o deploy.sh https://raw.githubusercontent.com/regeraq/nagruz/main/deploy.sh
-# Или создайте файл вручную и скопируйте содержимое из deploy.sh
-
-# Делаем скрипт исполняемым
-chmod +x deploy.sh
+```powershell
+# На сервере (одной командой с Windows):
+ssh root@45.9.72.103 "cd /var/www/loaddevice && git fetch origin && git reset --hard origin/main && bash update-project.sh"
 ```
 
-#### Настройка автоматической проверки через cron
+Скрипт `update-project.sh`:
 
-```bash
-# Открыть crontab
-crontab -e
-
-# Добавить строку (проверка каждые 5 минут):
-*/5 * * * * cd /var/www/loaddevice && /var/www/loaddevice/deploy.sh >> /var/www/loaddevice/deploy.log 2>&1
-```
-
-#### Ручной запуск деплоя
-
-```bash
-# На сервере:
-cd /var/www/loaddevice
-./deploy.sh
-```
-
-### Что происходит при автоматическом деплое:
-
-1. ✅ Получение последних изменений из GitHub (`git pull`)
-2. ✅ Установка новых зависимостей (`npm install`)
-3. ✅ Сборка проекта (`npm run build`)
-4. ✅ Применение миграций БД (`npm run db:push`)
-5. ✅ Перезапуск приложения (`pm2 restart`)
-
-### Проверка логов деплоя
-
-**GitHub Actions:**
-- Перейдите в **Actions** → выберите последний workflow → просмотрите логи
-
-**Скрипт на сервере:**
-```bash
-# Просмотр логов
-tail -f /var/www/loaddevice/deploy.log
-
-# Или просмотр логов PM2
-pm2 logs loaddevice
-```
-
-### Откат изменений (если что-то пошло не так)
-
-```bash
-# На сервере:
-cd /var/www/loaddevice
-
-# Просмотр истории коммитов
-git log --oneline -10
-
-# Откат к предыдущему коммиту
-git reset --hard HEAD~1
-
-# Пересборка и перезапуск
-npm run build
-pm2 restart loaddevice
-```
-
-### Важные замечания:
-
-⚠️ **Безопасность:**
-- Никогда не коммитьте файл `.env` с паролями и секретами
-- Используйте GitHub Secrets для хранения чувствительных данных
-- Регулярно обновляйте SSH ключи
-
-⚠️ **Производительность:**
-- Автоматический деплой занимает 1-3 минуты
-- Во время деплоя сайт может быть недоступен на несколько секунд
-- Рекомендуется деплоить в нерабочее время для production
-
-✅ **Рекомендации:**
-- Тестируйте изменения локально перед пушем
-- Используйте отдельную ветку для разработки (`develop`)
-- Деплойте в `main` только проверенный код
+- Сам подгружает nvm / находит node/npm/pm2.
+- Делает `git fetch && git reset --hard`, `npm install`, `npm run build`, `npm run db:push`, `pm2 restart`.
+- В конце выводит `SHA Было/Стало` и `pm2 status`.
+- Если коммит не изменился, всё равно пересобирает (на случай правки `.env`).
 
 ---
 
-**Успешного развертывания на FirstByte! 🚀**
+## 16. Мониторинг, логи, типовые проблемы
 
+### Основные команды
+
+```bash
+pm2 status                       # все процессы pm2
+pm2 logs loaddevice --lines 100  # последние 100 строк логов
+pm2 logs loaddevice              # live-tail
+pm2 monit                        # интерактивный монитор CPU/RAM
+pm2 restart loaddevice           # перезапустить
+pm2 reload loaddevice            # zero-downtime reload (если процессов >1)
+
+systemctl status nginx
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+
+sudo systemctl status postgresql
+sudo -u postgres psql loaddevice_db
+
+htop                             # CPU/RAM в реальном времени
+df -h                            # место на диске
+free -h                          # RAM + swap
+```
+
+### Типовые проблемы
+
+| Симптом                                              | Причина                                   | Решение |
+| ---------------------------------------------------- | ----------------------------------------- | ------- |
+| `npm: command not found` через `ssh host "..."`      | `~/.bashrc`/nvm не подгружается в non-interactive shell | Скрипт `update-project.sh` это уже решает; для других команд — `bash -lc "..."` |
+| PM2 `errored`, цикл рестартов                        | Обычно отсутствует `.env` или упал коннект к БД | `pm2 logs loaddevice --lines 200` → найти ошибку, проверить `.env` и `psql` |
+| 502 Bad Gateway из nginx                             | Приложение не слушает `localhost:5000`    | `pm2 status`; `curl http://localhost:5000/api/products` |
+| `vite build` убивается OOM на 1 GB VPS               | Мало RAM                                  | Добавить swap ([§5.2](#52-swap-обязательно-если-ram--2-gb)) или поднять тариф до 2 GB |
+| Сайт открывается без SSL                             | Certbot не настроил / A-запись неверна    | `sudo certbot --nginx -d домен -d www.домен`; проверить `nslookup` |
+| Email «уходят, но не доходят»                        | Не настроены SPF/DKIM/DMARC               | В DNS добавить записи, которые просит Unisender Go ([§13](#13-российский-email-сервис-выбор-цены-интеграция)) |
+| «Обновил код — на сайте не поменялось»               | Либо не закоммитил (staged, но без push), либо не перезапустил pm2 | См. [QUICK_UPDATE.md](QUICK_UPDATE.md) раздел «Если обновил — а на сайте ничего не изменилось» |
+
+---
+
+## 17. Итоговый чек-лист «с нуля до продакшна»
+
+Распечатать и идти по пунктам:
+
+### До покупки
+
+- [ ] Выбрано доменное имя (`nagruz.ru`, `loaddevice.ru`, `atomvolt.ru` — под что-то осмысленное).
+- [ ] Выбран провайдер домена (Beget или REG.RU).
+- [ ] Выбран VPS-провайдер (Timeweb Cloud — Cloud MSK 30 за 657 ₽).
+- [ ] Сгенерирован SSH-ключ на рабочей машине.
+
+### После покупки сервера
+
+- [ ] `apt update && upgrade`, таймзона, swap, UFW, fail2ban.
+- [ ] Создан пользователь `deploy`, заблокирован `root` по SSH (опционально).
+- [ ] Установлены: Node 20 (nvm), PostgreSQL, nginx, pm2, certbot.
+- [ ] Создана БД `loaddevice_db`, пользователь, пароль записан.
+
+### Деплой
+
+- [ ] `git clone` в `/var/www/loaddevice`.
+- [ ] Заполнен `.env` со всеми секретами (JWT×3 разных, CSRF, DATABASE_URL).
+- [ ] `npm install && npm run build && npm run db:push`.
+- [ ] `pm2 start ecosystem.config.cjs`, `pm2 save`, `pm2 startup`.
+- [ ] Проверка: `curl http://localhost:5000/api/products` → 200.
+
+### Домен + SSL
+
+- [ ] В ЛК регистратора прописаны A-записи на IP сервера.
+- [ ] nginx-конфиг `/etc/nginx/sites-available/loaddevice` активирован.
+- [ ] `sudo certbot --nginx -d домен -d www.домен` успешен.
+- [ ] Сайт открывается по `https://домен.ru`, редирект с HTTP работает.
+
+### Email и 152-ФЗ
+
+- [ ] Зарегистрирован аккаунт в Unisender Go (или выбранном).
+- [ ] В DNS добавлены SPF / DKIM / DMARC.
+- [ ] Домен подтверждён в Unisender Go (зелёные галочки).
+- [ ] `.env` содержит `UNISENDER_GO_API_KEY`, `MAIL_FROM_EMAIL`.
+- [ ] Код отправки email переведён на Unisender Go.
+- [ ] Отправлено тестовое письмо (регистрация/сброс пароля) — дошло.
+- [ ] На сайте есть страницы `/privacy` и `/consent`.
+- [ ] Подана заявка в РКН как оператор ПД.
+
+### Бэкапы
+
+- [ ] `scripts/backup.sh` исполняемый.
+- [ ] Cron настроен на 03:30 МСК.
+- [ ] Проверено: файл появляется в `/var/backups/loaddevice/` после ручного запуска.
+- [ ] Налажена регулярная выгрузка на локальный диск (или в Яндекс.Диск / S3).
+
+### Обновления
+
+- [ ] Проверен цикл: `.\update-github.ps1` → `ssh root@IP "... bash update-project.sh"`.
+- [ ] На сайте отражается новый коммит.
+
+После прохождения всех пунктов — можно спокойно сдавать проект.
