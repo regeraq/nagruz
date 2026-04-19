@@ -12,7 +12,10 @@ param(
     [string]$Branch = "main"
 )
 
-$ErrorActionPreference = "Stop"
+# Do NOT use 'Stop' here. PowerShell 5.1 treats anything git writes to stderr
+# (progress, "From https://github.com/..." etc.) as a terminating NativeCommandError.
+# We check $LASTEXITCODE explicitly after every git call instead.
+$ErrorActionPreference = "Continue"
 
 function Write-Step($text) { Write-Host $text -ForegroundColor Yellow }
 function Write-Ok($text)   { Write-Host $text -ForegroundColor Green  }
