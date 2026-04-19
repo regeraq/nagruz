@@ -49,11 +49,49 @@ export const products = pgTable("products", {
   stock: integer("stock").notNull().default(0),
   category: text("category"),
   imageUrl: text("image_url"),
-  images: text("images"), // Store as JSON string
+  images: text("images"), // JSON-строка: массив URL/data:base64
+  // JSON-строка: массив { title, description, icon? } — до 12 штук.
+  // Отображается на home.tsx в блоке "Ключевые преимущества устройства".
+  advantages: text("advantages"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/**
+ * Одно преимущество товара.
+ * `icon` — строковый идентификатор из фиксированного списка
+ * PRODUCT_ADVANTAGE_ICONS (см. ниже); клиент маппит его в компонент
+ * lucide-react. `null` / отсутствует — иконка не отображается.
+ */
+export interface ProductAdvantage {
+  title: string;
+  description: string;
+  icon?: string | null;
+}
+
+/**
+ * Белый список допустимых иконок для преимуществ.
+ * Совпадает с маппингом в client/src/pages/home.tsx.
+ * Добавляя сюда новые значения — не забудь обновить маппинг.
+ */
+export const PRODUCT_ADVANTAGE_ICONS = [
+  "Gauge",
+  "Cable",
+  "Zap",
+  "Cpu",
+  "Shield",
+  "Thermometer",
+  "Wrench",
+  "Battery",
+  "Activity",
+  "Settings",
+  "CheckCircle2",
+  "Award",
+  "Sparkles",
+  "Layers",
+] as const;
+export type ProductAdvantageIcon = (typeof PRODUCT_ADVANTAGE_ICONS)[number];
 
 export const insertProductSchema = createInsertSchema(products).omit({
   createdAt: true,
@@ -90,6 +128,16 @@ export const adminCreateProductSchema = z.object({
   images: z.union([
     z.array(z.string().max(10_000_000)).max(30, "Максимум 30 изображений"),
     z.string().max(100_000_000), // уже JSON-сериализованная строка
+  ]).optional().nullable(),
+  // Преимущества товара. Принимаем либо массив объектов (из UI),
+  // либо уже сериализованную JSON-строку (из импорта/копирования).
+  advantages: z.union([
+    z.array(z.object({
+      title: z.string().trim().min(1, "Заголовок обязателен").max(120, "Заголовок слишком длинный"),
+      description: z.string().trim().min(1, "Описание обязательно").max(600, "Описание слишком длинное"),
+      icon: z.string().trim().max(40).optional().nullable(),
+    })).max(12, "Максимум 12 преимуществ"),
+    z.string().max(50_000), // уже JSON-строка
   ]).optional().nullable(),
   isActive: z.boolean().optional().default(true),
 });

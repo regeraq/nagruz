@@ -19,8 +19,14 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Navigation } from "@/components/navigation";
 import { PowerGauge } from "@/components/power-gauge";
 import { useRealtimeValidation, ValidationIcon, ValidationMessage, validationRules } from "@/components/form-validation";
-import { insertContactSubmissionSchema, type InsertContactSubmission, type Product } from "@shared/schema";
+import {
+  insertContactSubmissionSchema,
+  type InsertContactSubmission,
+  type Product,
+  type ProductAdvantage,
+} from "@shared/schema";
 import { parseSpecGroups, type ProductSpecGroups } from "@shared/specs";
+import { getAdvantageIcon } from "@/lib/product-advantages";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
@@ -280,6 +286,41 @@ export default function Home() {
 
   // Current product helper
   const currentProduct = products.find(p => p.id === selectedDevice) || null;
+
+  /**
+   * Преимущества выбранного товара.
+   * Если у товара заданы свои — используем их; иначе возвращаем `null`,
+   * чтобы показать дефолтный (захардкоженный) блок из этой же страницы.
+   * API (GET /api/products) возвращает advantages уже распарсенными в массив,
+   * но на всякий случай (кэш, старые версии) поддерживаем и JSON-строку.
+   */
+  const productAdvantages = useMemo<ProductAdvantage[] | null>(() => {
+    if (!currentProduct) return null;
+    const raw = (currentProduct as { advantages?: unknown }).advantages;
+    let arr: unknown = raw;
+    if (typeof arr === "string" && arr.trim()) {
+      try {
+        arr = JSON.parse(arr);
+      } catch {
+        return null;
+      }
+    }
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    const normalized = arr
+      .map((item): ProductAdvantage | null => {
+        if (!item || typeof item !== "object") return null;
+        const obj = item as { title?: unknown; description?: unknown; icon?: unknown };
+        const title = typeof obj.title === "string" ? obj.title.trim() : "";
+        const description =
+          typeof obj.description === "string" ? obj.description.trim() : "";
+        if (!title || !description) return null;
+        const icon =
+          typeof obj.icon === "string" && obj.icon.trim() ? obj.icon.trim() : null;
+        return { title, description, icon };
+      })
+      .filter((v): v is ProductAdvantage => v !== null);
+    return normalized.length > 0 ? normalized : null;
+  }, [currentProduct]);
 
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ['/api/settings'],
@@ -648,7 +689,7 @@ export default function Home() {
       {showScrollTop && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full shadow-lg shadow-primary/40 hover:shadow-primary/60 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 hover:-translate-y-1"
+          className="scroll-to-top-btn fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-40 w-11 h-11 sm:w-12 sm:h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full shadow-lg shadow-primary/40 hover:shadow-primary/60 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 hover:-translate-y-1"
           data-testid="button-scroll-top-floating"
           aria-label="Вернуться в начало"
         >
@@ -662,7 +703,7 @@ export default function Home() {
       >
         <div className="absolute inset-0 bg-grid-pattern opacity-30 animate-fade-up" />
         
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-20 sm:py-28 md:py-32 lg:py-40 text-center">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-16 sm:py-24 md:py-32 lg:py-40 text-center">
           <Badge 
             variant="secondary" 
             className="mb-4 sm:mb-6 text-xs sm:text-sm font-medium px-3 sm:px-4 py-1.5 sm:py-2 animate-fade-scale"
@@ -738,21 +779,21 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="purpose" className="py-24 md:py-32 scroll-animate">
-        <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+      <section id="purpose" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="grid md:grid-cols-2 gap-8 sm:gap-10 md:gap-12 items-center">
             <div>
               <Badge variant="secondary" className="mb-4" data-testid="badge-purpose-section">
                 Назначение
               </Badge>
-              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6" data-testid="heading-purpose">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6" data-testid="heading-purpose">
                 Точная имитация нагрузки
               </h2>
-              <p className="text-lg text-muted-foreground mb-6 leading-relaxed" data-testid="text-purpose-1">
+              <p className="text-base sm:text-lg text-muted-foreground mb-4 sm:mb-6 leading-relaxed" data-testid="text-purpose-1">
                 Устройство предназначено для точной имитации реальной нагрузки, полностью контролируемой 
                 и стабильной, в отличие от непредсказуемой реальной нагрузки.
               </p>
-              <p className="text-lg text-muted-foreground mb-8 leading-relaxed" data-testid="text-purpose-2">
+              <p className="text-base sm:text-lg text-muted-foreground mb-6 sm:mb-8 leading-relaxed" data-testid="text-purpose-2">
                 Оборудование позволяет тестировать качество вырабатываемой электроэнергии и оценивать 
                 работоспособность источников питания под различными нагрузками.
               </p>
@@ -791,85 +832,68 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="benefits" className="py-24 md:py-32 bg-muted/30 scroll-animate">
-        <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
+      <section id="benefits" className="py-16 sm:py-20 md:py-24 lg:py-32 bg-muted/30 scroll-animate">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-benefits-section">
               Преимущества
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-benefits">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-benefits">
               Ключевые преимущества устройства
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-benefits-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-benefits-desc">
               Профессиональное решение для комплексного тестирования электрооборудования
             </p>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              {
-                icon: Gauge,
-                title: "20 ступеней нагрузки",
-                description: "Точная регулировка от 5 до 100 кВт с шагом 5 кВт, формируемых комбинациями 7 кнопок",
-              },
-              {
-                icon: Cable,
-                title: "AC/DC совместимость",
-                description: "Работа с переменным током (230-400 В, 50 Гц) и постоянным током (110-220 В)",
-              },
-              {
-                icon: Zap,
-                title: "Объединение устройств",
-                description: "Возможность подключения нескольких устройств для увеличения суммарной мощности",
-              },
-              {
-                icon: Cpu,
-                title: "Высокий cos φ ≥ 0.99",
-                description: "Оптимальный коэффициент мощности для точного моделирования реальной нагрузки",
-              },
-              {
-                icon: Shield,
-                title: "Система защиты",
-                description: "Защита от перегрева, отсутствия охлаждения, перегрузки и короткого замыкания",
-              },
-              {
-                icon: Thermometer,
-                title: "Климатическое исполнение",
-                description: "Работа на улице и в помещении при температуре от −40°C до +40°C",
-              },
-            ].map((benefit, idx) => (
-              <Card 
-                key={idx} 
-                className="hover-elevate transition-all duration-300 card-hover stagger-item hover:shadow-lg hover:shadow-primary/10 border-border/50 hover:border-primary/30"
-                data-testid={`card-benefit-${idx}`}
-              >
-                <CardHeader>
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                    <benefit.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <CardTitle className="text-xl">{benefit.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-base leading-relaxed">
-                    {benefit.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
+            {(
+              productAdvantages ?? [
+                { icon: "Gauge", title: "20 ступеней нагрузки", description: "Точная регулировка от 5 до 100 кВт с шагом 5 кВт, формируемых комбинациями 7 кнопок" },
+                { icon: "Cable", title: "AC/DC совместимость", description: "Работа с переменным током (230-400 В, 50 Гц) и постоянным током (110-220 В)" },
+                { icon: "Zap", title: "Объединение устройств", description: "Возможность подключения нескольких устройств для увеличения суммарной мощности" },
+                { icon: "Cpu", title: "Высокий cos φ ≥ 0.99", description: "Оптимальный коэффициент мощности для точного моделирования реальной нагрузки" },
+                { icon: "Shield", title: "Система защиты", description: "Защита от перегрева, отсутствия охлаждения, перегрузки и короткого замыкания" },
+                { icon: "Thermometer", title: "Климатическое исполнение", description: "Работа на улице и в помещении при температуре от −40°C до +40°C" },
+              ]
+            ).map((benefit, idx) => {
+              const BenefitIcon = getAdvantageIcon(benefit.icon ?? null);
+              return (
+                <Card
+                  key={idx}
+                  className="hover-elevate transition-all duration-300 card-hover stagger-item hover:shadow-lg hover:shadow-primary/10 border-border/50 hover:border-primary/30"
+                  data-testid={`card-benefit-${idx}`}
+                >
+                  <CardHeader>
+                    {BenefitIcon && (
+                      <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                        <BenefitIcon className="h-6 w-6 text-primary" />
+                      </div>
+                    )}
+                    <CardTitle className="text-xl">{benefit.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription className="text-base leading-relaxed">
+                      {benefit.description}
+                    </CardDescription>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      <section id="specifications" className="py-24 md:py-32 scroll-animate">
-        <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
+      <section id="specifications" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-specs-section">
               Характеристики
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-specifications">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-specifications">
               {specGroups?.heading || "Технические характеристики"}
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-specifications-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-specifications-desc">
               {specGroups?.subheading || `Полная спецификация нагрузочного устройства ${device.name}`}
             </p>
           </div>
@@ -877,12 +901,12 @@ export default function Home() {
           {specGroups && specGroups.tabs.length > 0 ? (
             <Tabs defaultValue={specGroups.tabs[0].id} className="w-full">
               <TabsList
-                className="grid w-full mb-8"
+                className="grid w-full mb-6 sm:mb-8 h-auto p-1"
                 style={{ gridTemplateColumns: `repeat(${specGroups.tabs.length}, minmax(0, 1fr))` }}
                 data-testid="tabs-specifications"
               >
                 {specGroups.tabs.map((tab) => (
-                  <TabsTrigger key={tab.id} value={tab.id} data-testid={`tab-${tab.id}`}>
+                  <TabsTrigger key={tab.id} value={tab.id} data-testid={`tab-${tab.id}`} className="text-xs sm:text-sm px-2 sm:px-3 py-2 whitespace-normal">
                     {tab.label}
                   </TabsTrigger>
                 ))}
@@ -939,10 +963,10 @@ export default function Home() {
             </Tabs>
           ) : (
             <Tabs defaultValue="general" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-8" data-testid="tabs-specifications">
-                <TabsTrigger value="general" data-testid="tab-general">Общие</TabsTrigger>
-                <TabsTrigger value="ac" data-testid="tab-ac">Блок AC</TabsTrigger>
-                <TabsTrigger value="dc" data-testid="tab-dc">Блок DC</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3 mb-6 sm:mb-8 h-auto p-1" data-testid="tabs-specifications">
+                <TabsTrigger value="general" data-testid="tab-general" className="text-xs sm:text-sm px-2 sm:px-3 py-2">Общие</TabsTrigger>
+                <TabsTrigger value="ac" data-testid="tab-ac" className="text-xs sm:text-sm px-2 sm:px-3 py-2">Блок AC</TabsTrigger>
+                <TabsTrigger value="dc" data-testid="tab-dc" className="text-xs sm:text-sm px-2 sm:px-3 py-2">Блок DC</TabsTrigger>
               </TabsList>
 
               <TabsContent value="general" className="space-y-4">
@@ -1106,20 +1130,20 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="delivery" className="py-24 md:py-32 bg-muted/30">
-        <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 scroll-animate">
+      <section id="delivery" className="py-16 sm:py-20 md:py-24 lg:py-32 bg-muted/30">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 scroll-animate">
             <Badge variant="secondary" className="mb-4" data-testid="badge-delivery-section">
               Комплектация
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-delivery">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-delivery">
               Комплект поставки
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-delivery-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-delivery-desc">
               Полная комплектация оборудования и документации
             </p>
           </div>
-          <div className="grid md:grid-cols-2 gap-8 scroll-animate">
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6 md:gap-8 scroll-animate">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1181,20 +1205,20 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="documentation" className="py-24 md:py-32">
-        <div className="max-w-6xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 scroll-animate">
+      <section id="documentation" className="py-16 sm:py-20 md:py-24 lg:py-32">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 scroll-animate">
             <Badge variant="secondary" className="mb-4" data-testid="badge-docs-section">
               Соответствие
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-documentation">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-documentation">
               Документы и сертификация
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-documentation-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-documentation-desc">
               Полное соответствие стандартам и требованиям безопасности
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 scroll-animate">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6 mb-8 sm:mb-10 md:mb-12 scroll-animate">
             {[
               { title: "ГОСТ РФ", desc: "Соответствие ГОСТам" },
               { title: "Безопасность", desc: "Требования РФ" },
@@ -1243,16 +1267,16 @@ export default function Home() {
       </section>
 
       {/* Product Images Gallery - always show section, with loading state */}
-      <section id="gallery" className="py-24 md:py-32 scroll-animate">
-        <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 animate-fade-up">
+      <section id="gallery" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-gallery-section">
               Фотогалерея
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-gallery">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-gallery">
               Фотографии устройства {device.name}
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-gallery-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-gallery-desc">
               Ознакомьтесь с фотографиями нагрузочного устройства
             </p>
           </div>
@@ -1353,21 +1377,21 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="applications" className="py-24 md:py-32 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-6 md:px-8">
-          <div className="text-center mb-16 scroll-animate">
+      <section id="applications" className="py-16 sm:py-20 md:py-24 lg:py-32 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 scroll-animate">
             <Badge variant="secondary" className="mb-4" data-testid="badge-apps-section">
               Применение
             </Badge>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-applications">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-applications">
               Сферы применения
             </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-applications-desc">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-applications-desc">
               Профессиональное тестирование широкого спектра энергетического оборудования
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 scroll-animate">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8 scroll-animate">
             {[
               {
                 icon: Factory,
@@ -1402,13 +1426,13 @@ export default function Home() {
             ].map((app, idx) => (
               <div 
                 key={idx} 
-                className="flex flex-col items-center text-center p-6 rounded-xl hover-elevate bg-card border border-card-border transition-all duration-300"
+                className="flex flex-col items-center text-center p-5 sm:p-6 rounded-xl hover-elevate bg-card border border-card-border transition-all duration-300"
                 data-testid={`app-${idx}`}
               >
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <app.icon className="h-8 w-8 text-primary" />
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary/10 flex items-center justify-center mb-3 sm:mb-4">
+                  <app.icon className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold mb-3">{app.title}</h3>
+                <h3 className="text-base sm:text-lg md:text-xl font-semibold mb-2 sm:mb-3">{app.title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {app.description}
                 </p>
@@ -1418,21 +1442,21 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="about" className="py-24 md:py-32 scroll-animate">
-        <div className="max-w-4xl mx-auto px-6 md:px-8 text-center animate-fade-up">
+      <section id="about" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 text-center animate-fade-up">
           <Badge variant="secondary" className="mb-4" data-testid="badge-about-section">
             О компании
           </Badge>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6" data-testid="heading-about">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6" data-testid="heading-about">
             Надёжный партнёр в энергетике
           </h2>
-          <p className="text-lg text-muted-foreground mb-12 leading-relaxed" data-testid="text-about-desc">
+          <p className="text-base sm:text-lg text-muted-foreground mb-8 sm:mb-10 md:mb-12 leading-relaxed" data-testid="text-about-desc">
             Мы специализируемся на поставке профессионального испытательного оборудования 
             для крупных промышленных заказчиков, включая предприятия атомной энергетики, 
             нефтегазовой отрасли и критической инфраструктуры.
           </p>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-3 gap-4 sm:gap-6 md:gap-8">
             {[
               { value: "15+", label: "Лет опыта" },
               { value: "500+", label: "Проектов" },
@@ -1440,11 +1464,11 @@ export default function Home() {
             ].map((stat, idx) => (
               <div 
                 key={idx} 
-                className="p-6"
+                className="p-3 sm:p-4 md:p-6"
                 data-testid={`stat-${idx}`}
               >
-                <div className="text-4xl md:text-5xl font-bold text-primary mb-2">{stat.value}</div>
-                <div className="text-sm text-muted-foreground uppercase tracking-wide">{stat.label}</div>
+                <div className="text-3xl sm:text-4xl md:text-5xl font-bold text-primary mb-1 sm:mb-2">{stat.value}</div>
+                <div className="text-[10px] sm:text-xs md:text-sm text-muted-foreground uppercase tracking-wide">{stat.label}</div>
               </div>
             ))}
           </div>
@@ -1460,7 +1484,7 @@ export default function Home() {
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4" data-testid="heading-contact">
               Получить коммерческое предложение
             </h2>
-            <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-contact-desc">
+            <p className="text-sm sm:text-base md:text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2 px-2" data-testid="text-contact-desc">
               Заполните форму, и мы свяжемся с вами в ближайшее время
             </p>
           </div>

@@ -32,6 +32,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar } from "rec
 import { SpecGroupsEditor } from "@/components/admin/spec-groups-editor";
 import { UserDetailDialog } from "@/components/admin/user-detail-dialog";
 import { ContentManager } from "@/components/admin/content-manager";
+import { AdvantagesEditor } from "@/components/admin/advantages-editor";
+import type { ProductAdvantage } from "@shared/schema";
 import {
   parseSpecGroups,
   serializeSpecGroups,
@@ -104,6 +106,8 @@ export default function Admin() {
   const [editSpecsStructured, setEditSpecsStructured] = useState<Array<{ key: string; value: string }>>([]);
   const [editSpecsMode, setEditSpecsMode] = useState<'showcase' | 'structured' | 'raw'>('structured');
   const [editSpecGroups, setEditSpecGroups] = useState<ProductSpecGroups | null>(null);
+  // Advantages editor state for EDIT dialog
+  const [editAdvantages, setEditAdvantages] = useState<ProductAdvantage[]>([]);
 
   // CREATE product: fully controlled state for nicer UX (+ gallery + structured specs)
   const emptyCreateForm = {
@@ -129,6 +133,7 @@ export default function Admin() {
   ]);
   const [createSpecsMode, setCreateSpecsMode] = useState<'showcase' | 'structured' | 'raw'>('structured');
   const [createSpecGroups, setCreateSpecGroups] = useState<ProductSpecGroups | null>(null);
+  const [createAdvantages, setCreateAdvantages] = useState<ProductAdvantage[]>([]);
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   const [notificationForm, setNotificationForm] = useState({
     userId: "all",
@@ -828,6 +833,7 @@ export default function Admin() {
       imageUrl: string;
       isActive: boolean;
       images: string[];
+      advantages: ProductAdvantage[];
     }) => {
       const res = await apiRequest("PATCH", `/api/admin/products/${data.id}`, {
         name: data.name,
@@ -841,6 +847,7 @@ export default function Admin() {
         imageUrl: data.imageUrl,
         isActive: data.isActive,
         images: JSON.stringify(data.images),
+        advantages: data.advantages,
       });
       return res.json();
     },
@@ -851,6 +858,7 @@ export default function Admin() {
       setShowEditProduct(false);
       setEditingFullProduct(null);
       setEditProductImages([]);
+      setEditAdvantages([]);
       toast({ title: "Товар успешно обновлен" });
     },
     onError: (error: any) => {
@@ -888,6 +896,28 @@ export default function Admin() {
       isActive: product.isActive ?? true,
     });
     setEditProductImages(images);
+
+    // Загружаем advantages из товара (API отдаёт уже массив;
+    // на старых записях / кэше может быть JSON-строка — подстраховываемся).
+    let loadedAdvantages: ProductAdvantage[] = [];
+    const rawAdv = (product as { advantages?: unknown }).advantages;
+    if (Array.isArray(rawAdv)) {
+      loadedAdvantages = rawAdv as ProductAdvantage[];
+    } else if (typeof rawAdv === "string" && rawAdv.trim()) {
+      try {
+        const parsed = JSON.parse(rawAdv);
+        if (Array.isArray(parsed)) loadedAdvantages = parsed as ProductAdvantage[];
+      } catch {
+        loadedAdvantages = [];
+      }
+    }
+    setEditAdvantages(
+      loadedAdvantages.map((a) => ({
+        title: typeof a?.title === "string" ? a.title : "",
+        description: typeof a?.description === "string" ? a.description : "",
+        icon: typeof a?.icon === "string" ? a.icon : null,
+      })),
+    );
     const existingGroups = parseSpecGroups(product.specifications || "");
     const parsedSpecs = parseSpecsText(product.specifications || "");
     setEditSpecsStructured(parsedSpecs.length > 0 ? parsedSpecs : [{ key: "", value: "" }]);
@@ -1005,7 +1035,23 @@ export default function Admin() {
     setCreateSpecsStructured([{ key: "Мощность", value: "" }, { key: "Напряжение", value: "" }]);
     setCreateSpecsMode('structured');
     setCreateSpecGroups(null);
+    setCreateAdvantages([]);
   };
+
+  /**
+   * Перед отправкой на сервер — нормализуем преимущества: убираем пустые,
+   * триммим строки, отбрасываем невалидные. Возвращает массив, готовый
+   * к передаче как `advantages` в API.
+   */
+  const sanitizeAdvantages = (items: ProductAdvantage[]): ProductAdvantage[] =>
+    items
+      .map((a) => ({
+        title: (a.title ?? "").trim(),
+        description: (a.description ?? "").trim(),
+        icon: a.icon ? a.icon.trim() || null : null,
+      }))
+      .filter((a) => a.title.length > 0 && a.description.length > 0)
+      .slice(0, 12);
 
   // Save privacy policy settings (operator data)
   const savePrivacyPolicySettings = useMutation({
@@ -2052,6 +2098,7 @@ export default function Admin() {
                               specifications: specs,
                               imageUrl: createProductForm.imageUrl.trim() || (createProductImages[0] ?? null),
                               images: createProductImages,
+                              advantages: sanitizeAdvantages(createAdvantages),
                               isActive: createProductForm.isActive,
                             });
                           }}
@@ -2404,6 +2451,18 @@ export default function Admin() {
                             </div>
                           </div>
 
+                          {/* Преимущества товара */}
+                          <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide border-b pb-2">
+                              5. Преимущества
+                            </h3>
+                            <AdvantagesEditor
+                              value={createAdvantages}
+                              onChange={setCreateAdvantages}
+                              testIdPrefix="create-advantage"
+                            />
+                          </div>
+
                           <DialogFooter className="mt-6 gap-2 sm:gap-0">
                             <Button
                               type="button"
@@ -2639,6 +2698,7 @@ export default function Admin() {
                 setEditingFullProduct(null);
                 setEditProductImages([]);
                 setNewEditImageUrl("");
+                setEditAdvantages([]);
               }
             }}>
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -2655,6 +2715,7 @@ export default function Admin() {
                       updateFullProduct.mutate({
                         ...editingFullProduct,
                         images: editProductImages,
+                        advantages: sanitizeAdvantages(editAdvantages),
                       });
                     }}
                     className="space-y-6"
@@ -3061,7 +3122,17 @@ export default function Admin() {
                         </div>
                       </div>
                     </div>
-                    
+
+                    {/* Преимущества товара */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold border-b pb-2">Преимущества товара</h3>
+                      <AdvantagesEditor
+                        value={editAdvantages}
+                        onChange={setEditAdvantages}
+                        testIdPrefix="edit-advantage"
+                      />
+                    </div>
+
                     <DialogFooter className="gap-2 sm:gap-0">
                       <Button
                         type="button"
@@ -3070,6 +3141,7 @@ export default function Admin() {
                           setShowEditProduct(false);
                           setEditingFullProduct(null);
                           setEditProductImages([]);
+                          setEditAdvantages([]);
                         }}
                       >
                         Отмена

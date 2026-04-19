@@ -67,6 +67,38 @@ const ALLOWED_MIME_TYPES = [
 ];
 const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
 
+/**
+ * Превращает `advantages` из БД (JSON-строка или массив) в чистый
+ * массив `{ title, description, icon? }`. Никогда не кидает исключений:
+ * при любой ошибке возвращает пустой массив.
+ */
+function parseAdvantagesFromDb(raw: unknown): Array<{ title: string; description: string; icon: string | null }> {
+  if (raw == null) return [];
+  let data: unknown = raw;
+  if (typeof data === "string") {
+    const trimmed = data.trim();
+    if (!trimmed) return [];
+    try {
+      data = JSON.parse(trimmed);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const obj = item as { title?: unknown; description?: unknown; icon?: unknown };
+      const title = typeof obj.title === "string" ? obj.title : "";
+      const description = typeof obj.description === "string" ? obj.description : "";
+      if (!title && !description) return null;
+      const icon = typeof obj.icon === "string" && obj.icon ? obj.icon : null;
+      return { title, description, icon };
+    })
+    .filter((v): v is { title: string; description: string; icon: string | null } => v !== null)
+    .slice(0, 12);
+}
+
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // CSRF token endpoint
@@ -756,7 +788,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Return product with validated images array
           return {
             ...p,
-            images: parsedImages
+            images: parsedImages,
+            advantages: parseAdvantagesFromDb(p.advantages),
           };
         });
         
@@ -820,7 +853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch {
           parsed = [];
         }
-        return { ...p, images: parsed };
+        return { ...p, images: parsed, advantages: parseAdvantagesFromDb(p.advantages) };
       });
       res.json({ success: true, products: parsedProducts });
     } catch (error) {
@@ -983,7 +1016,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const parsedProduct = {
         ...product,
-        images: parsedImages
+        images: parsedImages,
+        advantages: parseAdvantagesFromDb(product.advantages),
       };
       
       res.json(parsedProduct);

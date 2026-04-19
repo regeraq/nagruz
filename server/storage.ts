@@ -6,6 +6,49 @@ import {
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 
+/**
+ * Сериализация `advantages` перед записью в БД.
+ *  - массив объектов → JSON-строка (нормализованная, с обрезкой пробелов);
+ *  - JSON-строка → проверяется на валидность и оставляется как есть;
+ *  - null / undefined / пустой массив / невалидные данные → null в БД.
+ * В БД поле хранится как TEXT (JSON-строка), чтобы не плодить лишние таблицы.
+ */
+function serializeAdvantages(input: unknown): string | null {
+  if (input == null) return null;
+
+  let raw: unknown = input;
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      raw = JSON.parse(trimmed);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!Array.isArray(raw)) return null;
+  if (raw.length === 0) return null;
+
+  const normalized = raw
+    .map((item): { title: string; description: string; icon: string | null } | null => {
+      if (!item || typeof item !== "object") return null;
+      const obj = item as { title?: unknown; description?: unknown; icon?: unknown };
+      const title = typeof obj.title === "string" ? obj.title.trim() : "";
+      const description = typeof obj.description === "string" ? obj.description.trim() : "";
+      if (!title && !description) return null;
+      const icon =
+        typeof obj.icon === "string" && obj.icon.trim() ? obj.icon.trim() : null;
+      return { title, description, icon };
+    })
+    .filter((v): v is { title: string; description: string; icon: string | null } => v !== null)
+    .slice(0, 12);
+
+  if (normalized.length === 0) return null;
+  return JSON.stringify(normalized);
+}
+
 export interface IStorage {
   getUserByEmail(email: string): Promise<any>;
   getUserById(id: string): Promise<any>;
@@ -208,6 +251,7 @@ export class DrizzleStorage implements IStorage {
       category: product.category || null,
       imageUrl: product.imageUrl || null,
       images: product.images ? JSON.stringify(product.images) : null,
+      advantages: serializeAdvantages(product.advantages),
       isActive: product.isActive !== undefined ? product.isActive : true,
     }).returning();
     return result[0];
@@ -217,6 +261,9 @@ export class DrizzleStorage implements IStorage {
     const updateData: any = { ...data };
     if (updateData.images && Array.isArray(updateData.images)) {
       updateData.images = JSON.stringify(updateData.images);
+    }
+    if (updateData.advantages !== undefined) {
+      updateData.advantages = serializeAdvantages(updateData.advantages);
     }
     const result = await db.update(products).set(updateData).where(eq(products.id, id)).returning();
     return result[0];
@@ -273,6 +320,10 @@ export class DrizzleStorage implements IStorage {
           updateData.images = JSON.stringify([updateData.images]);
         }
       }
+    }
+
+    if (updateData.advantages !== undefined) {
+      updateData.advantages = serializeAdvantages(updateData.advantages);
     }
     
     // Ensure price is a string (decimal format)
