@@ -41,3 +41,7 @@ pm2 logs loaddevice --lines 20
 
 **Примечание:** Если вы еще не применили миграцию БД (`npm run db:push`), сделайте это тоже, чтобы таблица `commercial_proposal_files` существовала.
 
+
+
+
+

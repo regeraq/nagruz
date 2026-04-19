@@ -29,7 +29,10 @@ export default function Contacts() {
   const [consentPersonalData, setConsentPersonalData] = useState(false);
   const [consentDataProcessing, setConsentDataProcessing] = useState(false);
 
-  const { data: userData } = useQuery({
+  const { data: userData } = useQuery<{
+    success: boolean;
+    user?: { firstName?: string; lastName?: string; email?: string; phone?: string };
+  } | null>({
     queryKey: ['/api/auth/me'],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
@@ -63,8 +66,9 @@ export default function Contacts() {
 
     try {
       const response = await apiRequest("POST", "/api/contact", formData);
-      
-      if (response.success) {
+      const payload = (await response.json().catch(() => ({}))) as { success?: boolean; message?: string };
+
+      if (response.ok && payload.success) {
         toast({
           title: "Спасибо!",
           description: "Ваша заявка успешно отправлена. Мы свяжемся с вами в ближайшее время.",

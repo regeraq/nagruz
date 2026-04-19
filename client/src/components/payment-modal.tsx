@@ -70,7 +70,18 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const queryClient = useQueryClient();
 
   // Fetch user data
-  const { data: userData } = useQuery({
+  const { data: userData } = useQuery<{
+    success: boolean;
+    user?: {
+      id: string;
+      email: string;
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+      avatar?: string | null;
+      [key: string]: any;
+    };
+  } | null>({
     queryKey: ['/api/auth/me'],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });

@@ -4,8 +4,14 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { pool } from "./db";
 import { hashPassword, verifyPassword, generateAccessToken, verifyAccessToken, generateRefreshToken } from "./auth";
-import { insertContactSubmissionSchema, insertOrderSchema } from "@shared/schema";
+import {
+  insertContactSubmissionSchema,
+  insertOrderSchema,
+  adminCreateProductSchema,
+  adminUpdateProductSchema,
+} from "@shared/schema";
 import { z } from "zod";
+import { requireAdmin } from "./middleware/admin";
 import { 
   escapeHtml, 
   sanitizeInput, 
@@ -18,6 +24,7 @@ import { rateLimiters } from "./rateLimiter";
 import { cache, CACHE_TTL } from "./cache";
 import { csrfProtection } from "./csrf";
 import { bruteForceProtection, recordLoginAttempt, checkBruteForce } from "./middleware/bruteForce";
+import { randomBytes } from "crypto";
 
 // Import new API routes
 import commercialFilesRouter from "./api/commercial/files";
@@ -998,31 +1005,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get all products (including inactive)
-  app.get("/api/admin/products", async (req, res) => {
+  app.get("/api/admin/products", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
       const products = await storage.getProducts();
-      const parsedProducts = products.map((p: any) => ({
-        ...p,
-        images: p.images ? (typeof p.images === 'string' ? JSON.parse(p.images) : p.images) : []
-      }));
+      const parsedProducts = products.map((p: any) => {
+        let parsed: string[] = [];
+        try {
+          if (p.images) {
+            if (typeof p.images === 'string') {
+              const t = p.images.trim();
+              parsed = t.startsWith('[') ? JSON.parse(t) : (t ? [t] : []);
+            } else if (Array.isArray(p.images)) {
+              parsed = p.images;
+            }
+          }
+        } catch {
+          parsed = [];
+        }
+        return { ...p, images: parsed };
+      });
       res.json({ success: true, products: parsedProducts });
     } catch (error) {
       console.error("Error fetching all products:", error);
@@ -1653,15 +1654,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // SECURITY: Only admins can change order status
       const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Недостаточно прав для изменения статуса" });
+      if (!user) {
+        res.status(401).json({ success: false, message: "Пользователь не найден" });
         return;
       }
 
       const { status, paymentDetails } = req.body;
-      
+
       if (!status || typeof status !== 'string') {
         res.status(400).json({
           success: false,
@@ -1673,6 +1673,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // FIXED: Sanitize input
       const sanitizedStatus = sanitizeInput(status, 50);
       const sanitizedPaymentDetails = paymentDetails ? sanitizeInput(paymentDetails, 1000) : undefined;
+
+      const isAdmin = user.role === "admin" || user.role === "superadmin";
+
+      // SECURITY: пользователь может только отменять свой собственный pending-заказ.
+      if (!isAdmin) {
+        const existingOrder = await storage.getOrder(req.params.id).catch(() => null);
+        if (!existingOrder) {
+          res.status(404).json({ success: false, message: "Заказ не найден" });
+          return;
+        }
+        if (existingOrder.userId !== user.id) {
+          res.status(403).json({ success: false, message: "Это не ваш заказ" });
+          return;
+        }
+        if (sanitizedStatus !== "cancelled") {
+          res.status(403).json({
+            success: false,
+            message: "Вы можете только отменить заказ",
+          });
+          return;
+        }
+        if (existingOrder.paymentStatus !== "pending") {
+          res.status(400).json({
+            success: false,
+            message: "Отменить можно только заказ со статусом 'Ожидает оплаты'",
+          });
+          return;
+        }
+      }
 
       const order = await storage.updateOrderStatus(req.params.id, sanitizedStatus, sanitizedPaymentDetails);
       
@@ -1752,6 +1781,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const refreshToken = generateRefreshToken(user.id);
+
+      // Создаём запись сессии для регистрации
+      try {
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await storage.createSession({
+          userId: user.id,
+          refreshToken,
+          expiresAt,
+          ipAddress: clientIp,
+          userAgent: typeof userAgent === "string" ? userAgent.slice(0, 500) : null,
+        });
+      } catch (sessionErr) {
+        console.warn("[Register] Failed to persist session:", sessionErr);
+      }
 
       res.json({
         success: true,
@@ -1837,6 +1880,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update last login timestamp
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
 
+      // Создаём запись сессии для управления устройствами
+      try {
+        const userAgent = (req.headers["user-agent"] || "").toString().slice(0, 500);
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 дней
+        await storage.createSession({
+          userId: user.id,
+          refreshToken,
+          expiresAt,
+          ipAddress,
+          userAgent,
+        });
+      } catch (sessionErr) {
+        // Не блокируем логин если не удалось записать сессию (fail-open)
+        console.warn("[Login] Failed to persist session:", sessionErr);
+      }
+
       res.json({
         success: true,
         message: "Login successful",
@@ -1915,6 +1974,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           avatar: user.avatar,
           isEmailVerified: user.isEmailVerified || false,
           isPhoneVerified: user.isPhoneVerified || false,
+          isBlocked: user.isBlocked || false,
+          lastLoginAt: user.lastLoginAt || null,
+          updatedAt: user.updatedAt || null,
           createdAt: user.createdAt || new Date().toISOString(),
         },
       });
@@ -1997,7 +2059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Profile update endpoint
+  // Profile update endpoint — SECURITY: строгая валидация, разрешённые поля
   app.patch("/api/auth/profile", rateLimiters.general, async (req, res) => {
     try {
       const token = req.headers.authorization?.replace("Bearer ", "");
@@ -2018,11 +2080,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const { firstName, lastName, phone } = req.body;
-      
-      // Update user in storage
-      const updatedUser = await storage.updateUser(payload.userId, { firstName, lastName, phone });
-      
+      // Validate input
+      const profileSchema = z.object({
+        firstName: z.string().trim().max(100).optional().nullable(),
+        lastName: z.string().trim().max(100).optional().nullable(),
+        phone: z.string().trim().max(30).optional().nullable(),
+        // Avatar: base64 data URL или обычный URL. Лимит ~7 МБ (5 МБ файл после base64).
+        avatar: z
+          .string()
+          .max(10_000_000, "Аватар слишком большой (макс. ~5 МБ)")
+          .optional()
+          .nullable(),
+      });
+
+      const parsed = profileSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          message: "Некорректные данные профиля",
+          errors: parsed.error.issues,
+        });
+        return;
+      }
+
+      const updates: Record<string, any> = {};
+      if (parsed.data.firstName !== undefined) updates.firstName = parsed.data.firstName || null;
+      if (parsed.data.lastName !== undefined) updates.lastName = parsed.data.lastName || null;
+      if (parsed.data.phone !== undefined) {
+        const phoneValue = parsed.data.phone?.trim() || null;
+        if (phoneValue && phoneValue !== user.phone) {
+          // Номер изменился — сбрасываем подтверждение
+          updates.phone = phoneValue;
+          updates.isPhoneVerified = false;
+        } else if (!phoneValue) {
+          updates.phone = null;
+          updates.isPhoneVerified = false;
+        }
+      }
+      if (parsed.data.avatar !== undefined) {
+        const avatar = parsed.data.avatar;
+        if (avatar && avatar.length > 0) {
+          // Разрешаем только data: URL с image/* или http(s)://
+          const isDataUrl = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(avatar);
+          const isHttpUrl = /^https?:\/\//i.test(avatar);
+          if (!isDataUrl && !isHttpUrl) {
+            res.status(400).json({
+              success: false,
+              message: "Аватар должен быть data: URL изображения или https-ссылкой",
+            });
+            return;
+          }
+          updates.avatar = avatar;
+        } else {
+          updates.avatar = null;
+        }
+      }
+
+      updates.updatedAt = new Date();
+
+      const updatedUser = await storage.updateUser(payload.userId, updates);
+
       if (!updatedUser) {
         res.status(404).json({ success: false, message: "User not found" });
         return;
@@ -2040,6 +2157,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           avatar: updatedUser.avatar,
           isEmailVerified: updatedUser.isEmailVerified || false,
           isPhoneVerified: updatedUser.isPhoneVerified || false,
+          isBlocked: updatedUser.isBlocked || false,
+          lastLoginAt: updatedUser.lastLoginAt || null,
+          updatedAt: updatedUser.updatedAt || null,
           createdAt: updatedUser.createdAt || new Date().toISOString(),
         },
       });
@@ -2049,50 +2169,399 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // USER-SIDE EXTENDED ENDPOINTS (sessions, consents, preferences, verify)
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Admin: Update product stock
-  app.patch("/api/admin/products/:id/stock", async (req, res) => {
+  /**
+   * Вспомогательная функция: достаёт текущего пользователя по JWT.
+   */
+  async function getCurrentUser(req: any) {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) return null;
+    const payload = verifyAccessToken(token);
+    if (!payload) return null;
+    const user = await storage.getUserById(payload.userId);
+    if (!user || user.isBlocked) return null;
+    return user;
+  }
+
+  // ───── Active sessions (устройства/сессии) ─────
+  app.get("/api/auth/sessions", rateLimiters.general, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
+      const user = await getCurrentUser(req);
+      if (!user) {
         res.status(401).json({ success: false, message: "Not authenticated" });
         return;
       }
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
+      const sessions = await storage.getUserSessions(user.id).catch(() => []);
+      res.json({
+        success: true,
+        sessions: sessions.map((s: any) => ({
+          id: s.id,
+          // Никогда не возвращаем refresh-токен целиком — только хэш-превью
+          tokenPreview: s.refreshToken ? s.refreshToken.slice(-8) : null,
+          ipAddress: s.ipAddress,
+          userAgent: s.userAgent,
+          expiresAt: s.expiresAt,
+          createdAt: s.createdAt,
+        })),
+      });
+    } catch (error) {
+      console.error("Get sessions error:", error);
+      res.status(500).json({ success: false, message: "Failed to load sessions" });
+    }
+  });
+
+  app.delete("/api/auth/sessions/:id", rateLimiters.general, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+      const session = await storage.getSessionById(req.params.id);
+      if (!session) {
+        res.status(404).json({ success: false, message: "Сессия не найдена" });
+        return;
+      }
+      if (session.userId !== user.id) {
+        res.status(403).json({ success: false, message: "Это не ваша сессия" });
+        return;
+      }
+      await storage.deleteSession(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete session error:", error);
+      res.status(500).json({ success: false, message: "Failed to delete session" });
+    }
+  });
+
+  app.post("/api/auth/sessions/revoke-all", rateLimiters.general, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+      // Удаляем все сессии пользователя (текущую тоже — пользователь выйдет отовсюду)
+      const removed = await storage.deleteUserSessions(user.id);
+      res.json({ success: true, revoked: removed });
+    } catch (error) {
+      console.error("Revoke sessions error:", error);
+      res.status(500).json({ success: false, message: "Failed to revoke sessions" });
+    }
+  });
+
+  // ───── Consents (152-ФЗ: просмотр и отзыв согласий) ─────
+  app.get("/api/auth/consents", rateLimiters.general, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+      const consents = await storage.getUserConsents(user.id).catch(() => []);
+      res.json({ success: true, consents });
+    } catch (error) {
+      console.error("Get consents error:", error);
+      res.status(500).json({ success: false, message: "Failed to load consents" });
+    }
+  });
+
+  app.post("/api/auth/consents/:consentType/revoke", rateLimiters.general, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+      const consentType = String(req.params.consentType || "").slice(0, 50);
+      // Базовое согласие 'registration' отзывать нельзя — оно равнозначно удалению аккаунта
+      if (consentType === "registration") {
+        res.status(400).json({
+          success: false,
+          message: "Отзыв базового согласия возможен только через удаление аккаунта",
+        });
+        return;
+      }
+      const result = await storage.revokeConsent(user.id, consentType);
+      if (!result) {
+        res.status(404).json({ success: false, message: "Согласие не найдено" });
+        return;
+      }
+      res.json({ success: true, consent: result });
+    } catch (error) {
+      console.error("Revoke consent error:", error);
+      res.status(500).json({ success: false, message: "Failed to revoke consent" });
+    }
+  });
+
+  // ───── Notification preferences ─────
+  // Храним в siteSettings c ключом user_prefs_notifications_{userId}
+  const NOTIF_PREFS_KEY = (userId: string) => `user_prefs_notifications_${userId}`;
+  const DEFAULT_NOTIF_PREFS = {
+    orders: true,
+    promotions: false,
+    news: true,
+    email: true,
+    push: false,
+  };
+
+  app.get("/api/auth/notification-preferences", rateLimiters.general, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+      const setting = await storage.getSiteSetting(NOTIF_PREFS_KEY(user.id)).catch(() => null);
+      let prefs = { ...DEFAULT_NOTIF_PREFS };
+      if (setting?.value) {
+        try {
+          prefs = { ...DEFAULT_NOTIF_PREFS, ...JSON.parse(setting.value) };
+        } catch {
+          // игнорируем битый JSON
+        }
+      }
+      res.json({ success: true, preferences: prefs });
+    } catch (error) {
+      console.error("Get notification prefs error:", error);
+      res.status(500).json({ success: false, message: "Failed to load preferences" });
+    }
+  });
+
+  app.put("/api/auth/notification-preferences", rateLimiters.general, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+      const prefsSchema = z.object({
+        orders: z.boolean().optional(),
+        promotions: z.boolean().optional(),
+        news: z.boolean().optional(),
+        email: z.boolean().optional(),
+        push: z.boolean().optional(),
+      });
+      const parsed = prefsSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Некорректные настройки", errors: parsed.error.issues });
+        return;
+      }
+      const existing = await storage.getSiteSetting(NOTIF_PREFS_KEY(user.id)).catch(() => null);
+      let current = { ...DEFAULT_NOTIF_PREFS };
+      if (existing?.value) {
+        try { current = { ...current, ...JSON.parse(existing.value) }; } catch { /* noop */ }
+      }
+      const merged = { ...current, ...parsed.data };
+      await storage.setSiteSetting(
+        NOTIF_PREFS_KEY(user.id),
+        JSON.stringify(merged),
+        "json",
+        `Notification prefs for user ${user.id}`,
+        user.id,
+      );
+      res.json({ success: true, preferences: merged });
+    } catch (error) {
+      console.error("Update notification prefs error:", error);
+      res.status(500).json({ success: false, message: "Failed to save preferences" });
+    }
+  });
+
+  // ───── Email verification ─────
+  app.post("/api/auth/resend-verification", rateLimiters.auth, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+      if (user.isEmailVerified) {
+        res.status(400).json({ success: false, message: "Email уже подтверждён" });
+        return;
+      }
+      if (!RESEND_API_KEY) {
+        res.status(503).json({
+          success: false,
+          message: "Отправка email временно недоступна. Обратитесь в поддержку.",
+        });
+        return;
+      }
+      // Генерируем безопасный токен и сохраняем его в БД
+      const token = randomBytes(32).toString("hex");
+      await storage.updateUser(user.id, { emailVerificationToken: token });
+
+      const origin = (req.headers["x-forwarded-host"] as string)
+        || req.get("host")
+        || "localhost:5000";
+      const proto = (req.headers["x-forwarded-proto"] as string) || (req.secure ? "https" : "http");
+      const verifyUrl = `${proto}://${origin}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
+
+      const html = `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;">
+          <h2 style="color:#1e40af;">Подтверждение email</h2>
+          <p>Здравствуйте${user.firstName ? `, ${escapeHtml(user.firstName)}` : ""}!</p>
+          <p>Чтобы подтвердить адрес <b>${escapeHtml(user.email)}</b>, перейдите по ссылке:</p>
+          <p style="margin:24px 0;">
+            <a href="${verifyUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">
+              Подтвердить email
+            </a>
+          </p>
+          <p style="color:#64748b;font-size:12px;">
+            Если вы не запрашивали подтверждение — просто проигнорируйте письмо.
+          </p>
+        </div>
+      `;
+
+      await sendEmail(user.email, "Подтверждение email", html);
+      res.json({ success: true, message: "Письмо с подтверждением отправлено" });
+    } catch (error) {
+      console.error("Resend verification error:", error);
+      res.status(500).json({ success: false, message: "Не удалось отправить письмо" });
+    }
+  });
+
+  app.get("/api/auth/verify-email", async (req, res) => {
+    try {
+      const token = String(req.query.token || "");
+      if (!token || token.length < 16) {
+        res.status(400).send(
+          `<html><body style="font-family:sans-serif;padding:32px;text-align:center;">
+            <h2>Недействительная ссылка</h2>
+            <p>Токен подтверждения отсутствует или повреждён.</p>
+            <a href="/profile">Вернуться в профиль</a>
+          </body></html>`,
+        );
+        return;
+      }
+      // Ищем пользователя с таким токеном
+      const { db } = await import("./db");
+      const { users } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      const result = await db.select().from(users).where(eq(users.emailVerificationToken, token));
+      const user = result[0];
+      if (!user) {
+        res.status(400).send(
+          `<html><body style="font-family:sans-serif;padding:32px;text-align:center;">
+            <h2>Ссылка устарела</h2>
+            <p>Попробуйте запросить новое письмо из профиля.</p>
+            <a href="/profile">Вернуться в профиль</a>
+          </body></html>`,
+        );
+        return;
+      }
+      await storage.updateUser(user.id, {
+        isEmailVerified: true,
+        emailVerificationToken: null,
+      });
+      res.send(
+        `<html><body style="font-family:sans-serif;padding:32px;text-align:center;">
+          <h2 style="color:#059669;">✓ Email подтверждён</h2>
+          <p>Спасибо! Теперь вы можете вернуться в профиль.</p>
+          <a href="/profile" style="display:inline-block;margin-top:16px;background:#2563eb;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Перейти в профиль</a>
+        </body></html>`,
+      );
+    } catch (error) {
+      console.error("Verify email error:", error);
+      res.status(500).send("Internal error");
+    }
+  });
+
+  // ───── Upload avatar (отдельный endpoint для удобства) ─────
+  app.post("/api/auth/avatar", rateLimiters.general, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+      const { avatar } = req.body ?? {};
+      if (avatar === null || avatar === "") {
+        await storage.updateUser(user.id, { avatar: null, updatedAt: new Date() });
+        res.json({ success: true, avatar: null });
+        return;
+      }
+      if (typeof avatar !== "string") {
+        res.status(400).json({ success: false, message: "Неверный формат аватара" });
+        return;
+      }
+      if (avatar.length > 10_000_000) {
+        res.status(413).json({ success: false, message: "Аватар слишком большой" });
+        return;
+      }
+      const isDataUrl = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(avatar);
+      const isHttpUrl = /^https?:\/\//i.test(avatar);
+      if (!isDataUrl && !isHttpUrl) {
+        res.status(400).json({ success: false, message: "Аватар должен быть data:image/... или URL" });
+        return;
+      }
+      const updated = await storage.updateUser(user.id, { avatar, updatedAt: new Date() });
+      res.json({ success: true, avatar: updated?.avatar || avatar });
+    } catch (error) {
+      console.error("Avatar upload error:", error);
+      res.status(500).json({ success: false, message: "Не удалось загрузить аватар" });
+    }
+  });
+
+  // ───── User-initiated order cancel (удобный отдельный endpoint) ─────
+  app.post("/api/orders/:id/cancel", rateLimiters.general, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        res.status(401).json({ success: false, message: "Not authenticated" });
+        return;
+      }
+      const order = await storage.getOrder(req.params.id);
+      if (!order) {
+        res.status(404).json({ success: false, message: "Заказ не найден" });
+        return;
+      }
+      const isAdmin = user.role === "admin" || user.role === "superadmin";
+      if (!isAdmin && order.userId !== user.id) {
+        res.status(403).json({ success: false, message: "Это не ваш заказ" });
+        return;
+      }
+      if (order.paymentStatus !== "pending") {
+        res.status(400).json({
+          success: false,
+          message: "Можно отменить только заказ со статусом 'Ожидает оплаты'",
+        });
+        return;
+      }
+      const updated = await storage.updateOrderStatus(req.params.id, "cancelled");
+      res.json({ success: true, order: updated });
+    } catch (error) {
+      console.error("Cancel order error:", error);
+      res.status(500).json({ success: false, message: "Не удалось отменить заказ" });
+    }
+  });
+
+
+  // Admin: Update product stock
+  app.patch("/api/admin/products/:id/stock", requireAdmin, async (req, res) => {
+    try {
+      const stockSchema = z.object({
+        stock: z.number().int().min(0).max(1_000_000),
+      });
+      const parsed = stockSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Некорректное значение склада", errors: parsed.error.issues });
         return;
       }
 
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      const product = await storage.getProduct(req.params.id);
-      if (!product) {
+      const updated = await storage.updateProductInfo(req.params.id, { stock: parsed.data.stock });
+      if (!updated) {
         res.status(404).json({ success: false, message: "Product not found" });
         return;
       }
 
-      const { stock } = req.body;
-      if (typeof stock !== "number") {
-        res.status(400).json({ success: false, message: "Invalid stock value" });
-        return;
-      }
-
-      product.stock = stock;
-
-      // Clear products cache to ensure updated stock is immediately available
       cache.delete('products');
       cache.delete('products-active');
 
-      res.json({
-        success: true,
-        product,
-      });
+      res.json({ success: true, product: updated });
     } catch (error) {
       console.error("Update stock error:", error);
       res.status(500).json({ success: false, message: "Failed to update stock" });
@@ -2382,40 +2851,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: Get user by ID with orders
-  app.get("/api/admin/users/:userId", async (req, res) => {
-    try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const admin = await storage.getUserById(payload.userId);
-      if (!admin || (admin.role !== "admin" && admin.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      const user = await storage.getUserById(req.params.userId);
-      if (!user) {
-        res.status(404).json({ success: false, message: "User not found" });
-        return;
-      }
-
-      const orders = await storage.getUserOrders(req.params.userId);
-      res.json({ user, orders });
-    } catch (error) {
-      console.error("Get user details error:", error);
-      res.status(500).json({ success: false, message: "Failed to get user details" });
-    }
-  });
+  // (ранее был дубликат `/api/admin/users/:userId` — удалён.
+  //  Express всё равно не доходил до второй декларации, а сейчас
+  //  единственный rich-endpoint — `/api/admin/users/:id` ниже.)
 
   // Admin: Get order details
   app.get("/api/admin/orders/:id", async (req, res) => {
@@ -2455,33 +2893,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Update product price
-  app.patch("/api/admin/products/:id/price", async (req, res) => {
+  app.patch("/api/admin/products/:id/price", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
+      const priceSchema = z.object({
+        price: z.union([z.string(), z.number()])
+          .transform(v => String(v))
+          .refine(v => /^\d+(\.\d{1,2})?$/.test(v), "Invalid price format")
+          .refine(v => Number(v) >= 0 && Number(v) < 1_000_000_000, "Price out of range"),
+      });
+      const parsed = priceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Некорректная цена", errors: parsed.error.issues });
         return;
       }
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      const product = await storage.updateProductPrice(req.params.id, req.body.price);
+      const product = await storage.updateProductPrice(req.params.id, parsed.data.price);
       if (!product) {
         res.status(404).json({ success: false, message: "Product not found" });
         return;
       }
 
-      // Clear products cache to ensure updated price is immediately available
       cache.delete('products');
       cache.delete('products-active');
 
@@ -2493,29 +2924,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Update product info
-  app.patch("/api/admin/products/:id", async (req, res) => {
+  app.patch("/api/admin/products/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
+      // SECURITY: валидация через Zod — не доверяем произвольному телу
+      const parsed = adminUpdateProductSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          message: "Некорректные данные товара",
+          errors: parsed.error.issues,
+        });
         return;
       }
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      console.log(`📝 [PATCH /api/admin/products/${req.params.id}] Updating product`);
 
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      console.log(`📝 [PATCH /api/admin/products/${req.params.id}] Updating product with:`, JSON.stringify(req.body, null, 2));
-
-      const product = await storage.updateProductInfo(req.params.id, req.body);
+      const product = await storage.updateProductInfo(req.params.id, parsed.data);
       if (!product) {
         res.status(404).json({ success: false, message: "Product not found" });
         return;
@@ -2556,95 +2980,190 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get admin dashboard stats
-  app.get("/api/admin/stats", async (req, res) => {
+  app.get("/api/admin/stats", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
+      // ---------- Период ----------
+      // Поддерживаем три варианта:
+      //   ?days=30               — быстрый выбор пресета (1/7/30/90/365)
+      //   ?from=YYYY-MM-DD&to=.. — произвольный диапазон
+      //   без параметров         — 30 последних дней
+      // ВАЖНО: ограничиваем days сверху (≤ 730), чтобы админ не забил API.
+      const parseDate = (v: unknown): Date | null => {
+        if (typeof v !== "string" || !v) return null;
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d;
+      };
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const now = new Date();
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
+      let to = parseDate(req.query.to) || endOfToday;
+      let from = parseDate(req.query.from);
+      if (from) {
+        from.setHours(0, 0, 0, 0);
+      } else {
+        const rawDays = Number(req.query.days);
+        const days = Number.isFinite(rawDays) && rawDays > 0 ? Math.min(Math.trunc(rawDays), 730) : 30;
+        from = new Date(to);
+        from.setDate(from.getDate() - (days - 1));
+        from.setHours(0, 0, 0, 0);
       }
+      if (from > to) {
+        const tmp = from;
+        from = to;
+        to = tmp;
+      }
+      const totalDays = Math.min(
+        730,
+        Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1),
+      );
 
-      const orders = await storage.getAllOrders();
-      const contacts = await storage.getContactSubmissions();
-      const allUsers = await storage.getAllUsers();
-      
-      // Ensure allUsers is an array
+      const [orders, contacts, allUsers, promoCodes, allProducts] = await Promise.all([
+        storage.getAllOrders().catch(() => []),
+        storage.getContactSubmissions().catch(() => []),
+        storage.getAllUsers().catch(() => []),
+        storage.getPromoCodes().catch(() => []),
+        storage.getProducts().catch(() => []),
+      ]);
+
       const usersArray = Array.isArray(allUsers) ? allUsers : [];
-      
-      // Calculate user activity by day (last 30 days)
-      const days = 30;
-      const userActivityByDay: { date: string; registrations: number; logins: number }[] = [];
-      const today = new Date();
-      
-      for (let i = days - 1; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
-        
-        // Count registrations for this day
-        const registrations = usersArray.filter((u: any) => {
-          if (!u || !u.createdAt) return false;
-          try {
-            const userDate = new Date(u.createdAt).toISOString().split('T')[0];
-            return userDate === dateStr;
-          } catch {
-            return false;
-          }
-        }).length;
-        
-        // Count logins for this day (users who logged in on this day)
-        const logins = usersArray.filter((u: any) => {
-          if (!u || !u.lastLoginAt) return false;
-          try {
-            const loginDate = new Date(u.lastLoginAt).toISOString().split('T')[0];
-            return loginDate === dateStr;
-          } catch {
-            return false;
-          }
-        }).length;
-        
-        userActivityByDay.push({ date: dateStr, registrations, logins });
-      }
-      
-      // Ensure orders and contacts are arrays
       const ordersArray = Array.isArray(orders) ? orders : [];
       const contactsArray = Array.isArray(contacts) ? contacts : [];
-      
-      // Calculate totals
-      const totalRevenue = ordersArray
-        .filter((o: any) => o && (o.paymentStatus === 'completed' || o.paymentStatus === 'paid'))
-        .reduce((sum: number, o: any) => {
-          const amount = o?.finalAmount || 0;
-          const parsed = typeof amount === 'string' 
-            ? parseFloat(amount.replace(/[^\d.-]/g, '')) || 0
-            : parseFloat(String(amount)) || 0;
-          return sum + parsed;
-        }, 0);
-      
+      const promosArray = Array.isArray(promoCodes) ? promoCodes : [];
+      const productsArray = Array.isArray(allProducts) ? allProducts : [];
+
+      const toDateKey = (d: Date) => d.toISOString().slice(0, 10);
+      const isoFrom = toDateKey(from);
+      const isoTo = toDateKey(to);
+      const inRange = (raw: unknown): string | null => {
+        if (!raw) return null;
+        try {
+          const d = new Date(raw as any);
+          if (isNaN(d.getTime())) return null;
+          const key = toDateKey(d);
+          if (key < isoFrom || key > isoTo) return null;
+          return key;
+        } catch {
+          return null;
+        }
+      };
+
+      // ---------- Агрегация по дням ----------
+      const daily: Record<string, {
+        date: string;
+        registrations: number;
+        logins: number;
+        orders: number;
+        revenue: number;
+        contacts: number;
+      }> = {};
+      for (let i = 0; i < totalDays; i++) {
+        const d = new Date(from);
+        d.setDate(d.getDate() + i);
+        const key = toDateKey(d);
+        daily[key] = { date: key, registrations: 0, logins: 0, orders: 0, revenue: 0, contacts: 0 };
+      }
+
+      const toMoney = (v: unknown): number => {
+        if (v == null) return 0;
+        const parsed = typeof v === "string"
+          ? parseFloat(v.replace(/[^\d.-]/g, ""))
+          : parseFloat(String(v));
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+
+      for (const u of usersArray) {
+        if (!u) continue;
+        const regKey = inRange(u.createdAt);
+        if (regKey && daily[regKey]) daily[regKey].registrations += 1;
+        const loginKey = inRange(u.lastLoginAt);
+        if (loginKey && daily[loginKey]) daily[loginKey].logins += 1;
+      }
+
+      let revenueTotal = 0;
+      let ordersPaid = 0;
+      const productSales: Record<string, { productId: string; name: string; count: number; revenue: number }> = {};
+      for (const rawOrder of ordersArray) {
+        if (!rawOrder) continue;
+        const o = rawOrder as Record<string, any>;
+        const key = inRange(o.createdAt);
+        if (!key || !daily[key]) continue;
+        daily[key].orders += 1;
+        const status = String(o.paymentStatus || "").toLowerCase();
+        if (status === "paid" || status === "completed" || status === "delivered") {
+          const amount = toMoney(o.finalAmount ?? o.amount);
+          daily[key].revenue += amount;
+          revenueTotal += amount;
+          ordersPaid += 1;
+          const pid = String(o.productId || o.productSku || o.productName || "unknown");
+          const existing = productSales[pid];
+          if (existing) {
+            existing.count += 1;
+            existing.revenue += amount;
+          } else {
+            productSales[pid] = {
+              productId: pid,
+              name: String(o.productName || o.productTitle || pid),
+              count: 1,
+              revenue: amount,
+            };
+          }
+        }
+      }
+
+      for (const c of contactsArray) {
+        if (!c) continue;
+        const key = inRange(c.createdAt);
+        if (key && daily[key]) daily[key].contacts += 1;
+      }
+
+      const daysArray = Object.values(daily);
+      const topProducts = Object.values(productSales)
+        .sort((a, b) => b.revenue - a.revenue || b.count - a.count)
+        .slice(0, 10);
+
+      // ---------- Глобальные показатели (не зависят от периода) ----------
+      const totalRevenueAllTime = ordersArray
+        .filter((o: any) => {
+          const s = String(o?.paymentStatus || "").toLowerCase();
+          return s === "paid" || s === "completed" || s === "delivered";
+        })
+        .reduce((sum: number, o: any) => sum + toMoney(o?.finalAmount ?? o?.amount), 0);
+
+      const activeProducts = productsArray.filter((p: any) => p && p.isActive !== false).length;
+      const outOfStock = productsArray.filter((p: any) => p && Number(p.stock ?? 0) <= 0).length;
+
       res.json({
         success: true,
+        period: { from: isoFrom, to: isoTo, days: totalDays },
         stats: {
+          // legacy-поля, которые читает старый фронт:
           totalUsers: usersArray.length,
           totalOrders: ordersArray.length,
           totalContacts: contactsArray.length,
-          pendingOrders: ordersArray.filter((o: any) => o && o.paymentStatus === 'pending').length,
-          completedOrders: ordersArray.filter((o: any) => o && (o.paymentStatus === 'completed' || o.paymentStatus === 'paid')).length,
-          totalRevenue: totalRevenue,
-          activePromoCodes: (await storage.getPromoCodes()).filter((p: any) => p && p.isActive && (!p.expiresAt || new Date(p.expiresAt) > new Date())).length,
-          userActivityByDay: userActivityByDay,
-        }
+          pendingOrders: ordersArray.filter((o: any) => o && String(o.paymentStatus).toLowerCase() === "pending").length,
+          completedOrders: ordersArray.filter((o: any) => {
+            const s = String(o?.paymentStatus || "").toLowerCase();
+            return s === "paid" || s === "completed" || s === "delivered";
+          }).length,
+          totalRevenue: totalRevenueAllTime,
+          activePromoCodes: promosArray.filter((p: any) => p && p.isActive && (!p.expiresAt || new Date(p.expiresAt) > new Date())).length,
+          userActivityByDay: daysArray.map(d => ({ date: d.date, registrations: d.registrations, logins: d.logins })),
+
+          // новые поля — агрегаты по выбранному периоду:
+          activityByDay: daysArray,
+          periodRevenue: revenueTotal,
+          periodOrders: ordersPaid,
+          periodRegistrations: daysArray.reduce((s, d) => s + d.registrations, 0),
+          periodLogins: daysArray.reduce((s, d) => s + d.logins, 0),
+          periodContacts: daysArray.reduce((s, d) => s + d.contacts, 0),
+          topProducts,
+
+          // общие показатели каталога
+          totalProducts: productsArray.length,
+          activeProducts,
+          outOfStockProducts: outOfStock,
+        },
       });
     } catch (error) {
       console.error("Error fetching stats:", error);
@@ -2653,33 +3172,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Create Product
-  app.post("/api/admin/products", async (req, res) => {
+  app.post("/api/admin/products", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
+      // SECURITY: строгая валидация всех полей
+      const parsed = adminCreateProductSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          message: "Некорректные данные товара",
+          errors: parsed.error.issues,
+        });
         return;
       }
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
+      // Проверка уникальности ID
+      const existing = await storage.getProduct(parsed.data.id);
+      if (existing) {
+        res.status(409).json({ success: false, message: `Товар с ID "${parsed.data.id}" уже существует` });
         return;
       }
 
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
+      const product = await storage.createProduct(parsed.data);
 
-      const product = await storage.createProduct(req.body);
-      
-      // Clear products cache to ensure new product is immediately available
       cache.delete('products');
       cache.delete('products-active');
       console.log(`✅ [POST /api/admin/products] Product ${product.id} created, cache cleared`);
-      
+
       res.status(201).json({ success: true, product });
     } catch (error) {
       console.error("Create product error:", error);
@@ -2688,39 +3206,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Delete Products
-  app.delete("/api/admin/products", async (req, res) => {
+  app.delete("/api/admin/products", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
+      const idsSchema = z.object({
+        ids: z.array(z.string().min(1).max(64)).min(1).max(100),
+      });
+      const parsed = idsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Некорректный список ID", errors: parsed.error.issues });
         return;
       }
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const deleted = await storage.deleteProducts(parsed.data.ids);
 
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      const { ids } = req.body;
-      if (!ids || !Array.isArray(ids)) {
-        res.status(400).json({ success: false, message: "Invalid product IDs" });
-        return;
-      }
-
-      const deleted = await storage.deleteProducts(ids);
-      
-      // Clear products cache to ensure deleted products are immediately removed
       cache.delete('products');
       cache.delete('products-active');
       console.log(`✅ [DELETE /api/admin/products] Deleted ${deleted} products, cache cleared`);
-      
+
       res.json({ success: true, deleted });
     } catch (error) {
       console.error("Delete products error:", error);
@@ -2758,33 +3260,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get User by ID
-  app.get("/api/admin/users/:id", async (req, res) => {
+  app.get("/api/admin/users/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
       const targetUser = await storage.getUserById(req.params.id);
       if (!targetUser) {
         res.status(404).json({ success: false, message: "User not found" });
         return;
       }
 
-      res.json({ success: true, user: targetUser });
+      // SECURITY: никогда не возвращаем хеш пароля, даже админу.
+      const {
+        password: _pwd,
+        passwordHash: _pwh,
+        ...safeUser
+      } = (targetUser as any) || {};
+
+      // Параллельно тянем всё, что может пригодиться. Ошибки отдельных
+      // источников не ломают ответ — возвращаем пустые массивы.
+      const [orders, favorites, notifications, consents, allContacts] = await Promise.all([
+        storage.getUserOrders(req.params.id).catch(() => []),
+        storage.getUserFavorites(req.params.id).catch(() => []),
+        storage.getAllNotifications(req.params.id).catch(() => []),
+        storage.getUserConsents(req.params.id).catch(() => []),
+        storage.getContactSubmissions().catch(() => []),
+      ]);
+
+      const contactSubmissions = Array.isArray(allContacts)
+        ? allContacts.filter((c: any) => {
+            if (!c) return false;
+            if (c.userId && c.userId === req.params.id) return true;
+            if (safeUser?.email && c.email && String(c.email).toLowerCase() === String(safeUser.email).toLowerCase()) return true;
+            return false;
+          })
+        : [];
+
+      // Небольшой дайджест по заказам — чтобы админ сразу видел ценность клиента.
+      const ordersArray = Array.isArray(orders) ? orders : [];
+      const paidOrders = ordersArray.filter((o: any) => {
+        const s = String(o?.paymentStatus || "").toLowerCase();
+        return s === "paid" || s === "completed" || s === "delivered";
+      });
+      const toMoney = (v: unknown): number => {
+        if (v == null) return 0;
+        const parsed = typeof v === "string"
+          ? parseFloat(v.replace(/[^\d.-]/g, ""))
+          : parseFloat(String(v));
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+      const totalSpent = paidOrders.reduce((sum: number, o: any) => sum + toMoney(o?.finalAmount ?? o?.amount), 0);
+
+      res.json({
+        success: true,
+        user: safeUser,
+        orders: ordersArray,
+        favorites: Array.isArray(favorites) ? favorites : [],
+        notifications: Array.isArray(notifications) ? notifications : [],
+        consents: Array.isArray(consents) ? consents : [],
+        contactSubmissions,
+        summary: {
+          totalOrders: ordersArray.length,
+          paidOrders: paidOrders.length,
+          totalSpent,
+          favoritesCount: Array.isArray(favorites) ? favorites.length : 0,
+          unreadNotifications: Array.isArray(notifications)
+            ? notifications.filter((n: any) => !n?.read && !n?.isRead).length
+            : 0,
+          lastLoginAt: safeUser?.lastLoginAt || null,
+          registeredAt: safeUser?.createdAt || null,
+        },
+      });
     } catch (error) {
       console.error("Get user error:", error);
       res.status(500).json({ success: false, message: "Failed to get user" });

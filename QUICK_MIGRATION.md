@@ -47,3 +47,7 @@ psql -U loaddevice_user -d loaddevice_db -c "\dt commercial_proposal_files"
 
 **Подробная инструкция:** см. `HOSTING_MIGRATION_GUIDE.md`
 
+
+
+
+

@@ -62,6 +62,46 @@ export const insertProductSchema = createInsertSchema(products).omit({
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
 
+/**
+ * SECURITY: строгая схема для POST /api/admin/products.
+ * Валидирует абсолютно все поля, чтобы злоумышленник не мог передать
+ * произвольный JSON (например, со сломанным price или images).
+ */
+export const adminCreateProductSchema = z.object({
+  id: z.string()
+    .min(2, "ID должен содержать минимум 2 символа")
+    .max(64, "ID слишком длинный")
+    .regex(/^[a-z0-9][a-z0-9-_]*$/i, "ID: латиница, цифры, дефис, подчёркивание"),
+  name: z.string().min(2, "Название слишком короткое").max(200, "Название слишком длинное"),
+  description: z.string().min(1, "Описание обязательно").max(5000, "Описание слишком длинное"),
+  price: z.union([z.string(), z.number()])
+    .transform(v => String(v))
+    .refine(v => /^\d+(\.\d{1,2})?$/.test(v), "Цена должна быть числом с не более чем 2 знаками после запятой")
+    .refine(v => Number(v) >= 0 && Number(v) < 1_000_000_000, "Цена вне диапазона"),
+  currency: z.enum(["RUB", "USD", "EUR"]).default("RUB"),
+  sku: z.string().min(1, "Артикул обязателен").max(100, "Артикул слишком длинный"),
+  // До 200 КБ — с запасом для богатого JSON-формата specsGroups (табы/блоки).
+  specifications: z.string().min(1, "Характеристики обязательны").max(200_000, "Слишком длинные характеристики"),
+  stock: z.number().int().min(0, "Склад не может быть отрицательным").max(1_000_000, "Слишком большой склад"),
+  category: z.string().max(100).optional().nullable(),
+  // base64 data-URL или обычный URL. Лимит учитывает, что base64 раздувает
+  // размер в ~1.33 раза (5 МБ файл ≈ 6.7 МБ текста), плюс data:...;base64,
+  imageUrl: z.string().max(10_000_000).optional().nullable(),
+  images: z.union([
+    z.array(z.string().max(10_000_000)).max(30, "Максимум 30 изображений"),
+    z.string().max(100_000_000), // уже JSON-сериализованная строка
+  ]).optional().nullable(),
+  isActive: z.boolean().optional().default(true),
+});
+export type AdminCreateProductInput = z.infer<typeof adminCreateProductSchema>;
+
+/**
+ * SECURITY: все поля опциональные — это PATCH.
+ * Но если поле пришло — оно должно быть валидным.
+ */
+export const adminUpdateProductSchema = adminCreateProductSchema.partial().omit({ id: true });
+export type AdminUpdateProductInput = z.infer<typeof adminUpdateProductSchema>;
+
 export const promoCodes = pgTable("promo_codes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   code: text("code").notNull().unique(),

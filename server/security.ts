@@ -105,13 +105,32 @@ export function isValidMimeType(mimeType: string | null, allowedTypes: string[])
 
 /**
  * Gets client IP address from request
+ *
+ * SECURITY: заголовки X-Forwarded-For / X-Real-IP подделываются клиентом.
+ * Доверяем им ТОЛЬКО если приложение действительно стоит за reverse-proxy
+ * (переменная окружения TRUST_PROXY=true). Иначе — всегда реальный remoteAddress,
+ * иначе любой клиент сможет обойти rate limiting и подделать логи.
+ *
  * @param req - Express request object
  * @returns IP address
  */
 export function getClientIp(req: any): string {
+  const trustProxy = process.env.TRUST_PROXY === 'true';
+
+  if (trustProxy) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.length > 0) {
+      // Берём самый левый IP (изначальный клиент)
+      return forwarded.split(',')[0]?.trim() || 'unknown';
+    }
+    const realIp = req.headers['x-real-ip'];
+    if (typeof realIp === 'string' && realIp.length > 0) {
+      return realIp.trim();
+    }
+  }
+
   return (
-    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-    req.headers['x-real-ip'] ||
+    req.ip ||
     req.connection?.remoteAddress ||
     req.socket?.remoteAddress ||
     'unknown'

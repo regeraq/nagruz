@@ -59,67 +59,76 @@ app.use(express.urlencoded({ extended: false, limit: '15mb' }));
 // CSRF protection: Generate tokens for GET requests
 app.use(csrfToken);
 
-// CORS configuration for both development and production
-// In production, requests come from the same origin, but we still need CORS headers
-// for proper browser handling of credentials and preflight requests
+// CORS configuration
+// SECURITY: в spec нельзя одновременно Access-Control-Allow-Origin: * и
+// Access-Control-Allow-Credentials: true. Всегда отвечаем конкретным origin.
 app.use((req, res, next) => {
-  // Get origin from request or default to same-origin
-  const origin = req.headers.origin || req.headers.host || '*';
-  
-  // Allow same-origin and localhost for development
-  const allowedOrigins = isDevelopment 
-    ? ['*']
-    : [origin]; // In production, allow the requesting origin (same-origin policy)
-  
   const requestOrigin = req.headers.origin;
-  if (isDevelopment || !requestOrigin || allowedOrigins.includes(requestOrigin)) {
-    res.header('Access-Control-Allow-Origin', isDevelopment ? '*' : (requestOrigin || '*'));
+
+  if (isDevelopment) {
+    // В dev отражаем origin запроса (это безопасно, т.к. dev-сервер доступен только локально)
+    if (requestOrigin) res.header('Access-Control-Allow-Origin', requestOrigin);
+    res.header('Vary', 'Origin');
+  } else {
+    // В проде: same-origin или whitelist через ALLOWED_ORIGINS=https://a.ru,https://b.ru
+    const allowList = (process.env.ALLOWED_ORIGINS || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (requestOrigin && (allowList.length === 0 || allowList.includes(requestOrigin))) {
+      res.header('Access-Control-Allow-Origin', requestOrigin);
+      res.header('Vary', 'Origin');
+    }
   }
-  
+
   res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, Cache-Control');
   res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle preflight requests
+
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
     return;
   }
-  
+
   next();
 });
 
 // Security headers
 app.use((req, res, next) => {
-  // Prevent clickjacking
   res.setHeader('X-Frame-Options', 'DENY');
-  // Prevent MIME type sniffing
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  // XSS protection
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  // Referrer policy
+  // SECURITY: X-XSS-Protection в современных браузерах отключён и может
+  // создавать XS-Leak. Правильное значение по OWASP — 0.
+  res.setHeader('X-XSS-Protection', '0');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  
-  // Content Security Policy
-  // Allow same-origin, inline scripts/styles for React/Vite, and external APIs
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)');
+
+  // Content Security Policy: в dev нужен 'unsafe-eval' для Vite HMR,
+  // в production он опасен и убирается.
+  const scriptSrc = isDevelopment
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : "script-src 'self' 'unsafe-inline'";
+
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // unsafe-eval needed for Vite in dev
+    scriptSrc,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
+    "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     "connect-src 'self' https://api.resend.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
+    "object-src 'none'",
   ].join('; ');
   res.setHeader('Content-Security-Policy', csp);
-  
-  // Strict Transport Security (HSTS) - only in production with HTTPS
+
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
-  
+
   next();
 });
 

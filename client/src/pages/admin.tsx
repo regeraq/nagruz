@@ -29,6 +29,15 @@ import { ru } from "date-fns/locale/ru";
 import { apiRequest } from "@/lib/queryClient";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar } from "recharts";
+import { SpecGroupsEditor } from "@/components/admin/spec-groups-editor";
+import { UserDetailDialog } from "@/components/admin/user-detail-dialog";
+import { ContentManager } from "@/components/admin/content-manager";
+import {
+  parseSpecGroups,
+  serializeSpecGroups,
+  buildDefaultSpecGroups,
+  type ProductSpecGroups,
+} from "@shared/specs";
 
 export default function Admin() {
   const [, setLocation] = useLocation();
@@ -70,6 +79,8 @@ export default function Admin() {
   const [selectedProductForImages, setSelectedProductForImages] = useState<string | null>(null);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<any>(null);
   const [newImageUrl, setNewImageUrl] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [showUserDetail, setShowUserDetail] = useState(false);
   
   // Full product editing state
   const [showEditProduct, setShowEditProduct] = useState(false);
@@ -89,6 +100,35 @@ export default function Admin() {
   const [editProductImages, setEditProductImages] = useState<string[]>([]);
   const [newEditImageUrl, setNewEditImageUrl] = useState("");
   const [uploadingEditImage, setUploadingEditImage] = useState(false);
+  // Structured spec editor for EDIT dialog
+  const [editSpecsStructured, setEditSpecsStructured] = useState<Array<{ key: string; value: string }>>([]);
+  const [editSpecsMode, setEditSpecsMode] = useState<'showcase' | 'structured' | 'raw'>('structured');
+  const [editSpecGroups, setEditSpecGroups] = useState<ProductSpecGroups | null>(null);
+
+  // CREATE product: fully controlled state for nicer UX (+ gallery + structured specs)
+  const emptyCreateForm = {
+    id: "",
+    sku: "",
+    name: "",
+    category: "",
+    description: "",
+    price: "",
+    currency: "RUB",
+    stock: "0",
+    specifications: "",
+    imageUrl: "",
+    isActive: true,
+  };
+  const [createProductForm, setCreateProductForm] = useState<typeof emptyCreateForm>(emptyCreateForm);
+  const [createProductImages, setCreateProductImages] = useState<string[]>([]);
+  const [newCreateImageUrl, setNewCreateImageUrl] = useState("");
+  const [uploadingCreateImage, setUploadingCreateImage] = useState(false);
+  const [createSpecsStructured, setCreateSpecsStructured] = useState<Array<{ key: string; value: string }>>([
+    { key: "Мощность", value: "" },
+    { key: "Напряжение", value: "" },
+  ]);
+  const [createSpecsMode, setCreateSpecsMode] = useState<'showcase' | 'structured' | 'raw'>('structured');
+  const [createSpecGroups, setCreateSpecGroups] = useState<ProductSpecGroups | null>(null);
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   const [notificationForm, setNotificationForm] = useState({
     userId: "all",
@@ -309,13 +349,35 @@ export default function Admin() {
     refetchInterval: 60000, // Refresh every minute
   });
 
+  // Период для аналитики.
+  // `days` — пресет (7/30/90/365); `custom` — пара from/to.
+  // Бэкенд принимает ?days=N или ?from=&to=, но не обе разом.
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<{
+    mode: "preset" | "custom";
+    days: number;
+    from: string;
+    to: string;
+  }>(() => ({ mode: "preset", days: 30, from: "", to: "" }));
+
+  const statsQueryParams = useMemo(() => {
+    if (analyticsPeriod.mode === "custom" && analyticsPeriod.from && analyticsPeriod.to) {
+      const params = new URLSearchParams();
+      params.set("from", analyticsPeriod.from);
+      params.set("to", analyticsPeriod.to);
+      return params.toString();
+    }
+    const params = new URLSearchParams();
+    params.set("days", String(analyticsPeriod.days));
+    return params.toString();
+  }, [analyticsPeriod]);
+
   // Fetch admin stats (including userActivityByDay)
-  const { data: statsData = {} as any } = useQuery({
-    queryKey: ["/api/admin/stats"],
+  const { data: statsData = {} as any, isFetching: isFetchingStats } = useQuery({
+    queryKey: ["/api/admin/stats", statsQueryParams],
     queryFn: async () => {
       const token = localStorage.getItem("accessToken");
       if (!token) throw new Error("Not authenticated");
-      const res = await fetch("/api/admin/stats", {
+      const res = await fetch(`/api/admin/stats?${statsQueryParams}`, {
         headers: { Authorization: `Bearer ${token}` },
         credentials: "include",
       });
@@ -332,8 +394,20 @@ export default function Admin() {
   const siteContactsItems = siteContactsData?.contacts || [];
   const promoCodes = promoCodesData?.promoCodes || [];
   const stats = statsData?.stats || {};
+  const statsPeriod = (statsData?.period as { from?: string; to?: string; days?: number } | undefined) || {};
   const userActivityByDay = stats.userActivityByDay || [];
+  const activityByDay = (stats.activityByDay as Array<{
+    date: string; registrations: number; logins: number; orders: number; revenue: number; contacts: number;
+  }> | undefined) || [];
   const totalRevenue = stats.totalRevenue || 0;
+  const periodRevenue = Number(stats.periodRevenue || 0);
+  const periodOrders = Number(stats.periodOrders || 0);
+  const periodRegistrations = Number(stats.periodRegistrations || 0);
+  const periodLogins = Number(stats.periodLogins || 0);
+  const periodContacts = Number(stats.periodContacts || 0);
+  const topProducts = (stats.topProducts as Array<{
+    productId: string; name: string; count: number; revenue: number;
+  }> | undefined) || [];
 
   // Filter users by search term
   const users = allUsers.filter((u: any) => {
@@ -401,11 +475,11 @@ export default function Admin() {
       return res.json();
     },
     onSuccess: () => {
-      // Invalidate queries without await to make UI responsive immediately
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
       setShowCreateProduct(false);
-      toast({ title: "Товар создан" });
+      resetCreateProductForm();
+      toast({ title: "Товар создан", description: "Новый товар успешно добавлен в каталог" });
     },
     onError: (error: any) => {
       toast({ title: "Ошибка", description: error.message, variant: "destructive" });
@@ -814,6 +888,17 @@ export default function Admin() {
       isActive: product.isActive ?? true,
     });
     setEditProductImages(images);
+    const existingGroups = parseSpecGroups(product.specifications || "");
+    const parsedSpecs = parseSpecsText(product.specifications || "");
+    setEditSpecsStructured(parsedSpecs.length > 0 ? parsedSpecs : [{ key: "", value: "" }]);
+    if (existingGroups) {
+      // Если уже сохранено богатое представление — открываем редактор-витрину.
+      setEditSpecGroups(existingGroups);
+      setEditSpecsMode('showcase');
+    } else {
+      setEditSpecGroups(null);
+      setEditSpecsMode('structured');
+    }
     setShowEditProduct(true);
   };
 
@@ -852,6 +937,74 @@ export default function Admin() {
   // Remove image from edit form
   const removeEditImage = (index: number) => {
     setEditProductImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // ========== CREATE product: image helpers ==========
+  const handleCreateImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: "Ошибка", description: "Можно загружать только изображения", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Файл слишком большой", description: "Максимум 5 МБ", variant: "destructive" });
+      return;
+    }
+    setUploadingCreateImage(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setCreateProductImages(prev => [...prev, base64]);
+      setUploadingCreateImage(false);
+      e.target.value = '';
+    };
+    reader.onerror = () => {
+      toast({ title: "Ошибка", description: "Не удалось прочитать файл", variant: "destructive" });
+      setUploadingCreateImage(false);
+    };
+    reader.readAsDataURL(file);
+  };
+  const addCreateImageByUrl = () => {
+    const url = newCreateImageUrl.trim();
+    if (!url) return;
+    setCreateProductImages(prev => [...prev, url]);
+    setNewCreateImageUrl("");
+  };
+  const removeCreateImage = (index: number) => {
+    setCreateProductImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // ========== Structured specifications helpers ==========
+  // Parse "key: value" lines into array of pairs; drop blank pairs
+  const parseSpecsText = (text: string): Array<{ key: string; value: string }> => {
+    if (!text) return [];
+    return text
+      .split('\n')
+      .map(line => {
+        const idx = line.indexOf(':');
+        if (idx <= 0) return null;
+        const key = line.slice(0, idx).trim();
+        const value = line.slice(idx + 1).trim();
+        if (!key) return null;
+        return { key, value };
+      })
+      .filter((x): x is { key: string; value: string } => !!x);
+  };
+  const serializeSpecs = (pairs: Array<{ key: string; value: string }>): string => {
+    return pairs
+      .filter(p => p.key.trim() || p.value.trim())
+      .map(p => `${p.key.trim()}: ${p.value.trim()}`)
+      .join('\n');
+  };
+
+  const resetCreateProductForm = () => {
+    setCreateProductForm(emptyCreateForm);
+    setCreateProductImages([]);
+    setNewCreateImageUrl("");
+    setCreateSpecsStructured([{ key: "Мощность", value: "" }, { key: "Напряжение", value: "" }]);
+    setCreateSpecsMode('structured');
+    setCreateSpecGroups(null);
   };
 
   // Save privacy policy settings (operator data)
@@ -1143,7 +1296,120 @@ export default function Admin() {
                     </div>
                   </CardContent>
                 </Card>
-            
+
+                {/* Выбор периода аналитики.
+                   Пресеты + произвольный диапазон. */}
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <CardContent className="p-4 sm:p-5 space-y-3">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="w-4 h-4" />
+                        <span>
+                          Период аналитики:{" "}
+                          {statsPeriod.from && statsPeriod.to ? (
+                            <strong className="text-foreground">
+                              {format(new Date(statsPeriod.from), "dd.MM.yyyy", { locale: ru })} — {format(new Date(statsPeriod.to), "dd.MM.yyyy", { locale: ru })}
+                            </strong>
+                          ) : (
+                            <strong className="text-foreground">—</strong>
+                          )}
+                          {statsPeriod.days ? ` · ${statsPeriod.days} дн.` : ""}
+                          {isFetchingStats && <span className="ml-2 animate-pulse">обновление…</span>}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { label: "7 дней", value: 7 },
+                          { label: "30 дней", value: 30 },
+                          { label: "90 дней", value: 90 },
+                          { label: "365 дней", value: 365 },
+                        ].map((preset) => (
+                          <Button
+                            key={preset.value}
+                            size="sm"
+                            variant={
+                              analyticsPeriod.mode === "preset" && analyticsPeriod.days === preset.value
+                                ? "default"
+                                : "outline"
+                            }
+                            onClick={() =>
+                              setAnalyticsPeriod({ mode: "preset", days: preset.value, from: "", to: "" })
+                            }
+                          >
+                            {preset.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Произвольный диапазон. */}
+                    <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                      <div className="flex-1 grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">С</Label>
+                          <Input
+                            type="date"
+                            value={analyticsPeriod.from}
+                            max={analyticsPeriod.to || undefined}
+                            onChange={(e) =>
+                              setAnalyticsPeriod((prev) => ({ ...prev, from: e.target.value, mode: "custom" }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">По</Label>
+                          <Input
+                            type="date"
+                            value={analyticsPeriod.to}
+                            min={analyticsPeriod.from || undefined}
+                            onChange={(e) =>
+                              setAnalyticsPeriod((prev) => ({ ...prev, to: e.target.value, mode: "custom" }))
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!analyticsPeriod.from || !analyticsPeriod.to}
+                          onClick={() => setAnalyticsPeriod((prev) => ({ ...prev, mode: "custom" }))}
+                        >
+                          Применить
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setAnalyticsPeriod({ mode: "preset", days: 30, from: "", to: "" })
+                          }
+                        >
+                          Сброс
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Быстрые показатели за выбранный период. */}
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                  {[
+                    { label: "Выручка за период", value: `${Number(periodRevenue).toLocaleString("ru-RU")} ₽`, color: "from-emerald-500 to-teal-600" },
+                    { label: "Оплаченных заказов", value: String(periodOrders), color: "from-amber-500 to-orange-600" },
+                    { label: "Регистраций", value: String(periodRegistrations), color: "from-blue-500 to-indigo-600" },
+                    { label: "Входов", value: String(periodLogins), color: "from-cyan-500 to-sky-600" },
+                    { label: "Заявок", value: String(periodContacts), color: "from-fuchsia-500 to-pink-600" },
+                  ].map((m) => (
+                    <Card key={m.label} className="border-0 shadow-md">
+                      <CardContent className="p-4">
+                        <div className={`w-8 h-1 rounded bg-gradient-to-r ${m.color} mb-2`} />
+                        <p className="text-xs text-muted-foreground">{m.label}</p>
+                        <p className="text-lg font-bold truncate">{m.value}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
                 {/* Modern Stats Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Products Card */}
@@ -1448,6 +1714,161 @@ export default function Admin() {
               </Card>
             )}
 
+            {/* Выручка и заказы по дням (period-based) */}
+            {activityByDay.length > 0 && (
+              <div className="grid lg:grid-cols-2 gap-4">
+                <Card className="border-0 shadow-xl overflow-hidden">
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
+                        <DollarSign className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">Выручка по дням</CardTitle>
+                        <CardDescription>Сумма оплаченных заказов</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer
+                      config={{
+                        revenue: { label: "Выручка, ₽", color: "#10B981" },
+                      }}
+                      className="min-h-[240px] w-full"
+                    >
+                      <AreaChart data={activityByDay} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                        <defs>
+                          <linearGradient id="gradientRevenue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#10B981" stopOpacity={0.45} />
+                            <stop offset="100%" stopColor="#10B981" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
+                        <XAxis
+                          dataKey="date"
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(v) => format(new Date(v), "dd.MM", { locale: ru })}
+                          style={{ fontSize: 11 }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis
+                          tickLine={false}
+                          axisLine={false}
+                          style={{ fontSize: 11 }}
+                          tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
+                          width={42}
+                        />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              labelFormatter={(v) => format(new Date(v), "dd MMM yyyy", { locale: ru })}
+                              formatter={(value) => [`${Number(value).toLocaleString("ru-RU")} ₽`, "Выручка"]}
+                            />
+                          }
+                        />
+                        <Area
+                          dataKey="revenue"
+                          type="monotone"
+                          stroke="#10B981"
+                          strokeWidth={2.5}
+                          fill="url(#gradientRevenue)"
+                          dot={false}
+                          activeDot={{ r: 5 }}
+                        />
+                      </AreaChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-xl overflow-hidden">
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600">
+                        <ShoppingCart className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">Заказы и заявки по дням</CardTitle>
+                        <CardDescription>Количество заказов и контактных обращений</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer
+                      config={{
+                        orders: { label: "Заказы", color: "#F59E0B" },
+                        contacts: { label: "Заявки", color: "#8B5CF6" },
+                      }}
+                      className="min-h-[240px] w-full"
+                    >
+                      <BarChart data={activityByDay} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
+                        <XAxis
+                          dataKey="date"
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(v) => format(new Date(v), "dd.MM", { locale: ru })}
+                          style={{ fontSize: 11 }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis tickLine={false} axisLine={false} style={{ fontSize: 11 }} width={30} allowDecimals={false} />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              labelFormatter={(v) => format(new Date(v), "dd MMM yyyy", { locale: ru })}
+                            />
+                          }
+                        />
+                        <Bar dataKey="orders" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="contacts" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Топ товаров по выручке. */}
+            {topProducts.length > 0 && (
+              <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600">
+                      <TrendingUp className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">Топ товаров за период</CardTitle>
+                      <CardDescription>Сортировка по выручке оплаченных заказов</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>#</TableHead>
+                        <TableHead>Товар</TableHead>
+                        <TableHead className="text-right">Заказов</TableHead>
+                        <TableHead className="text-right">Выручка</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {topProducts.map((p, idx) => (
+                        <TableRow key={p.productId}>
+                          <TableCell className="font-mono text-xs text-muted-foreground">{idx + 1}</TableCell>
+                          <TableCell className="font-medium">{p.name || p.productId}</TableCell>
+                          <TableCell className="text-right">{p.count}</TableCell>
+                          <TableCell className="text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                            {Number(p.revenue).toLocaleString("ru-RU")} ₽
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Recent Orders - Modern Design */}
             <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
@@ -1574,119 +1995,424 @@ export default function Admin() {
                           Удалить ({selectedProducts.size})
                         </Button>
                       )}
-                    <Dialog open={showCreateProduct} onOpenChange={setShowCreateProduct}>
+                    <Dialog open={showCreateProduct} onOpenChange={(open) => {
+                      setShowCreateProduct(open);
+                      if (!open) resetCreateProductForm();
+                    }}>
                       <DialogTrigger asChild>
                         <Button>
                           <Plus className="w-4 h-4 mr-2" />
                           Добавить товар
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
                         <DialogHeader>
-                          <DialogTitle>Создать новый товар</DialogTitle>
+                          <DialogTitle className="text-xl">Создание нового товара</DialogTitle>
                           <DialogDescription>
-                            Заполните все обязательные поля для создания нового товара.
+                            Заполните данные вручную. Все поля, отмеченные <span className="text-red-500 font-semibold">*</span>, обязательны.
                           </DialogDescription>
                         </DialogHeader>
                         <form
                           onSubmit={(e) => {
                             e.preventDefault();
-                            const formData = new FormData(e.currentTarget);
+                            const id = createProductForm.id.trim();
+                            if (!/^[a-z0-9][a-z0-9-_]*$/i.test(id)) {
+                              toast({ title: "Некорректный ID", description: "ID должен содержать только латиницу, цифры, дефис и подчёркивание.", variant: "destructive" });
+                              return;
+                            }
+                            const priceNum = parseFloat(createProductForm.price);
+                            if (isNaN(priceNum) || priceNum < 0) {
+                              toast({ title: "Некорректная цена", variant: "destructive" });
+                              return;
+                            }
+                            const stockNum = parseInt(createProductForm.stock, 10);
+                            if (isNaN(stockNum) || stockNum < 0) {
+                              toast({ title: "Некорректное количество", variant: "destructive" });
+                              return;
+                            }
+                            const specs =
+                              createSpecsMode === 'showcase' && createSpecGroups
+                                ? serializeSpecGroups(createSpecGroups)
+                                : createSpecsMode === 'structured'
+                                  ? serializeSpecs(createSpecsStructured)
+                                  : createProductForm.specifications;
+                            if (!specs.trim()) {
+                              toast({ title: "Укажите хотя бы одну характеристику", variant: "destructive" });
+                              return;
+                            }
                             createProduct.mutate({
-                              id: formData.get("id"),
-                              name: formData.get("name"),
-                              description: formData.get("description"),
-                              price: parseFloat(formData.get("price") as string),
-                              sku: formData.get("sku"),
-                              specifications: formData.get("specifications"),
-                              stock: parseInt(formData.get("stock") as string),
-                              category: formData.get("category") || "",
-                              imageUrl: formData.get("imageUrl") || "",
-                              isActive: true,
-                              currency: formData.get("currency") || "RUB",
+                              id,
+                              sku: createProductForm.sku.trim(),
+                              name: createProductForm.name.trim(),
+                              description: createProductForm.description.trim(),
+                              price: priceNum.toFixed(2),
+                              currency: createProductForm.currency,
+                              stock: stockNum,
+                              category: createProductForm.category.trim() || null,
+                              specifications: specs,
+                              imageUrl: createProductForm.imageUrl.trim() || (createProductImages[0] ?? null),
+                              images: createProductImages,
+                              isActive: createProductForm.isActive,
                             });
                           }}
+                          className="space-y-6"
                         >
-                          <div className="space-y-6">
-                            {/* Basic Info */}
-                            <div className="space-y-4">
-                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Основная информация</h3>
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label>ID товара *</Label>
-                                  <Input name="id" required placeholder="Уникальный идентификатор (напр. nu-100)" />
-                                  <p className="text-xs text-muted-foreground mt-1">Латиница, цифры, дефисы</p>
-                                </div>
-                                <div>
-                                  <Label>Артикул (SKU) *</Label>
-                                  <Input name="sku" required placeholder="НУ-100-2024" />
-                                </div>
+                          {/* Basic Info */}
+                          <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide border-b pb-2">1. Основная информация</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label>ID товара <span className="text-red-500">*</span></Label>
+                                <Input
+                                  value={createProductForm.id}
+                                  onChange={(e) => setCreateProductForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '-') }))}
+                                  required
+                                  placeholder="nu-100"
+                                  autoComplete="off"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">Латиница, цифры, дефисы. Пример: <code>nu-100</code></p>
                               </div>
                               <div>
-                                <Label>Название товара *</Label>
-                                <Input name="name" required placeholder="Например: Нагрузочное устройство НУ-100" />
+                                <Label>Артикул (SKU) <span className="text-red-500">*</span></Label>
+                                <Input
+                                  value={createProductForm.sku}
+                                  onChange={(e) => {
+                                    const sku = e.target.value;
+                                    setCreateProductForm(f => ({
+                                      ...f,
+                                      sku,
+                                      // автозаполнение ID, если он ещё пуст
+                                      id: f.id || sku.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+                                    }));
+                                  }}
+                                  required
+                                  placeholder="НУ-100-2024"
+                                />
                               </div>
+                            </div>
+                            <div>
+                              <Label>Название <span className="text-red-500">*</span></Label>
+                              <Input
+                                value={createProductForm.name}
+                                onChange={(e) => setCreateProductForm(f => ({ ...f, name: e.target.value }))}
+                                required
+                                placeholder="Нагрузочное устройство НУ-100"
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
                                 <Label>Категория</Label>
-                                <Input name="category" placeholder="Нагрузочные устройства" />
-                              </div>
-                              <div>
-                                <Label>Описание *</Label>
-                                <Textarea name="description" required rows={3} placeholder="Подробное описание товара..." />
-                              </div>
-                            </div>
-                            
-                            {/* Pricing */}
-                            <div className="space-y-4">
-                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Цена и наличие</h3>
-                              <div className="grid grid-cols-3 gap-4">
-                                <div>
-                                  <Label>Цена *</Label>
-                                  <Input name="price" type="number" step="0.01" min="0" required placeholder="0.00" />
-                                </div>
-                                <div>
-                                  <Label>Валюта</Label>
-                                  <select name="currency" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                                    <option value="RUB">₽ RUB</option>
-                                    <option value="USD">$ USD</option>
-                                    <option value="EUR">€ EUR</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <Label>Количество *</Label>
-                                  <Input name="stock" type="number" min="0" defaultValue="0" required />
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Specifications */}
-                            <div className="space-y-4">
-                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Характеристики</h3>
-                              <div>
-                                <Label>Технические характеристики *</Label>
-                                <Textarea 
-                                  name="specifications" 
-                                  required 
-                                  rows={5}
-                                  placeholder="Мощность: 100 кВт&#10;Напряжение: 220-400 В&#10;Ступени: 20&#10;..."
-                                  className="font-mono text-sm"
+                                <Input
+                                  value={createProductForm.category}
+                                  onChange={(e) => setCreateProductForm(f => ({ ...f, category: e.target.value }))}
+                                  placeholder="Нагрузочные устройства"
                                 />
-                                <p className="text-xs text-muted-foreground mt-1">Каждая характеристика с новой строки</p>
+                              </div>
+                              <div className="flex items-center gap-3 pt-6">
+                                <Checkbox
+                                  id="create-active"
+                                  checked={createProductForm.isActive}
+                                  onCheckedChange={(checked) => setCreateProductForm(f => ({ ...f, isActive: !!checked }))}
+                                />
+                                <Label htmlFor="create-active" className="cursor-pointer">Показывать на сайте сразу</Label>
                               </div>
                             </div>
-                            
-                            {/* Image */}
-                            <div className="space-y-4">
-                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Изображение</h3>
+                            <div>
+                              <Label>Описание <span className="text-red-500">*</span></Label>
+                              <Textarea
+                                value={createProductForm.description}
+                                onChange={(e) => setCreateProductForm(f => ({ ...f, description: e.target.value }))}
+                                required
+                                rows={3}
+                                placeholder="Подробное описание товара..."
+                              />
+                            </div>
+                          </div>
+
+                          {/* Pricing */}
+                          <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide border-b pb-2">2. Цена и наличие</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                               <div>
-                                <Label>URL основного изображения</Label>
-                                <Input name="imageUrl" placeholder="https://example.com/image.jpg" />
-                                <p className="text-xs text-muted-foreground mt-1">Дополнительные изображения можно добавить после создания товара</p>
+                                <Label>Цена <span className="text-red-500">*</span></Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={createProductForm.price}
+                                  onChange={(e) => setCreateProductForm(f => ({ ...f, price: e.target.value }))}
+                                  required
+                                  placeholder="0.00"
+                                />
+                              </div>
+                              <div>
+                                <Label>Валюта</Label>
+                                <Select
+                                  value={createProductForm.currency}
+                                  onValueChange={(v) => setCreateProductForm(f => ({ ...f, currency: v }))}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="RUB">₽ Рубли (RUB)</SelectItem>
+                                    <SelectItem value="USD">$ Доллары (USD)</SelectItem>
+                                    <SelectItem value="EUR">€ Евро (EUR)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <Label>Количество на складе <span className="text-red-500">*</span></Label>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  value={createProductForm.stock}
+                                  onChange={(e) => setCreateProductForm(f => ({ ...f, stock: e.target.value }))}
+                                  required
+                                />
                               </div>
                             </div>
                           </div>
-                          <DialogFooter className="mt-6">
-                            <Button type="button" variant="outline" onClick={() => setShowCreateProduct(false)}>
+
+                          {/* Specifications with structured editor */}
+                          <div className="space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b pb-2">
+                              <div>
+                                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                                  3. Характеристики <span className="text-red-500">*</span>
+                                </h3>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  <b>Витрина</b> — вкладки «Общие / AC / DC» на главной, <b>Структура</b> — «Ключ: значение», <b>Текст</b> — произвольно.
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs">
+                                <button
+                                  type="button"
+                                  className={`px-3 py-1 rounded ${createSpecsMode === 'showcase' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
+                                  onClick={() => {
+                                    if (!createSpecGroups) {
+                                      setCreateSpecGroups(
+                                        buildDefaultSpecGroups(
+                                          createProductForm.name || "товара",
+                                          createProductForm.specifications,
+                                        ),
+                                      );
+                                    }
+                                    setCreateSpecsMode('showcase');
+                                  }}
+                                >Витрина</button>
+                                <button
+                                  type="button"
+                                  className={`px-3 py-1 rounded ${createSpecsMode === 'structured' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
+                                  onClick={() => {
+                                    if (createSpecsMode === 'raw') {
+                                      setCreateSpecsStructured(parseSpecsText(createProductForm.specifications) || []);
+                                    }
+                                    if (createSpecsMode === 'showcase' && createSpecGroups) {
+                                      const flat: Array<{ key: string; value: string }> = [];
+                                      for (const tab of createSpecGroups.tabs) {
+                                        for (const block of tab.blocks) {
+                                          for (const row of block.rows) {
+                                            if (row.label || row.value) flat.push({ key: row.label, value: row.value });
+                                          }
+                                        }
+                                      }
+                                      if (flat.length) setCreateSpecsStructured(flat);
+                                      setCreateProductForm(f => ({ ...f, specifications: flat.length ? serializeSpecs(flat) : f.specifications }));
+                                    }
+                                    setCreateSpecsMode('structured');
+                                  }}
+                                >Структура</button>
+                                <button
+                                  type="button"
+                                  className={`px-3 py-1 rounded ${createSpecsMode === 'raw' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
+                                  onClick={() => {
+                                    if (createSpecsMode === 'structured') {
+                                      setCreateProductForm(f => ({ ...f, specifications: serializeSpecs(createSpecsStructured) }));
+                                    }
+                                    if (createSpecsMode === 'showcase' && createSpecGroups) {
+                                      setCreateProductForm(f => ({ ...f, specifications: serializeSpecGroups(createSpecGroups) }));
+                                    }
+                                    setCreateSpecsMode('raw');
+                                  }}
+                                >Текст</button>
+                              </div>
+                            </div>
+                            {createSpecsMode === 'showcase' ? (
+                              <div className="space-y-3">
+                                {createSpecGroups ? (
+                                  <SpecGroupsEditor
+                                    value={createSpecGroups}
+                                    onChange={(next) => {
+                                      setCreateSpecGroups(next);
+                                      setCreateProductForm(f => ({ ...f, specifications: serializeSpecGroups(next) }));
+                                    }}
+                                  />
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                      const def = buildDefaultSpecGroups(
+                                        createProductForm.name || "товара",
+                                        createProductForm.specifications,
+                                      );
+                                      setCreateSpecGroups(def);
+                                      setCreateProductForm(f => ({ ...f, specifications: serializeSpecGroups(def) }));
+                                    }}
+                                  >
+                                    <Plus className="w-4 h-4 mr-1" /> Создать витринные вкладки
+                                  </Button>
+                                )}
+                              </div>
+                            ) : createSpecsMode === 'structured' ? (
+                              <div className="space-y-2">
+                                {createSpecsStructured.map((pair, idx) => (
+                                  <div key={idx} className="flex gap-2">
+                                    <Input
+                                      placeholder="Название (напр. Мощность)"
+                                      value={pair.key}
+                                      onChange={(e) => {
+                                        const copy = [...createSpecsStructured];
+                                        copy[idx] = { ...copy[idx], key: e.target.value };
+                                        setCreateSpecsStructured(copy);
+                                      }}
+                                      className="flex-1"
+                                    />
+                                    <Input
+                                      placeholder="Значение (напр. 100 кВт)"
+                                      value={pair.value}
+                                      onChange={(e) => {
+                                        const copy = [...createSpecsStructured];
+                                        copy[idx] = { ...copy[idx], value: e.target.value };
+                                        setCreateSpecsStructured(copy);
+                                      }}
+                                      className="flex-1"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setCreateSpecsStructured(prev => prev.filter((_, i) => i !== idx))}
+                                      title="Удалить строку"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setCreateSpecsStructured(prev => [...prev, { key: "", value: "" }])}
+                                >
+                                  <Plus className="w-4 h-4 mr-1" /> Добавить характеристику
+                                </Button>
+                              </div>
+                            ) : (
+                              <Textarea
+                                value={createProductForm.specifications}
+                                onChange={(e) => setCreateProductForm(f => ({ ...f, specifications: e.target.value }))}
+                                rows={8}
+                                placeholder="Мощность: 100 кВт&#10;Напряжение: 220-400 В&#10;Ступени: 20"
+                                className="font-mono text-sm"
+                              />
+                            )}
+                            {createSpecsMode !== 'showcase' && (
+                              <p className="text-xs text-muted-foreground">
+                                Формат: <code>Название: значение</code>. Каждая характеристика с новой строки.
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Images gallery */}
+                          <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide border-b pb-2">4. Изображения</h3>
+                            <div>
+                              <Label>URL основного изображения</Label>
+                              <Input
+                                value={createProductForm.imageUrl}
+                                onChange={(e) => setCreateProductForm(f => ({ ...f, imageUrl: e.target.value }))}
+                                placeholder="https://example.com/image.jpg"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">Если оставить пустым, будет использовано первое изображение из галереи.</p>
+                            </div>
+
+                            {createProductImages.length > 0 && (
+                              <div>
+                                <Label className="mb-2 block">Галерея ({createProductImages.length})</Label>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                  {createProductImages.map((img, index) => (
+                                    <div key={index} className="relative group">
+                                      <img
+                                        src={img}
+                                        alt={`Изображение ${index + 1}`}
+                                        className="w-full h-24 object-cover rounded-lg border"
+                                        onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }}
+                                      />
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="destructive"
+                                        className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => removeCreateImage(index)}
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                      <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                                        {index + 1}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="space-y-3">
+                              <div className="flex gap-2">
+                                <Input
+                                  value={newCreateImageUrl}
+                                  onChange={(e) => setNewCreateImageUrl(e.target.value)}
+                                  placeholder="URL ещё одного изображения"
+                                  className="flex-1"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={addCreateImageByUrl}
+                                  disabled={!newCreateImageUrl.trim()}
+                                >
+                                  <Plus className="h-4 w-4 mr-1" /> Добавить
+                                </Button>
+                              </div>
+                              <div>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleCreateImageUpload}
+                                  className="hidden"
+                                  id="create-image-upload"
+                                  disabled={uploadingCreateImage}
+                                />
+                                <label htmlFor="create-image-upload">
+                                  <Button type="button" variant="outline" asChild disabled={uploadingCreateImage}>
+                                    <span className="cursor-pointer">
+                                      <Upload className="h-4 w-4 mr-2" />
+                                      {uploadingCreateImage ? "Загрузка..." : "Загрузить файл (до 5 МБ)"}
+                                    </span>
+                                  </Button>
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+
+                          <DialogFooter className="mt-6 gap-2 sm:gap-0">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setShowCreateProduct(false);
+                                resetCreateProductForm();
+                              }}
+                            >
                               Отмена
                             </Button>
                             <Button type="submit" disabled={createProduct.isPending}>
@@ -2056,21 +2782,185 @@ export default function Admin() {
                     
                     {/* Specifications Section */}
                     <div className="space-y-4">
-                      <h3 className="text-lg font-semibold border-b pb-2">Технические характеристики</h3>
-                      
-                      <div>
-                        <Label htmlFor="edit-specifications">Характеристики *</Label>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b pb-2">
+                        <div>
+                          <h3 className="text-lg font-semibold">Технические характеристики</h3>
+                          <p className="text-xs text-muted-foreground">
+                            <b>Витрина</b> — редактор того, что видят покупатели на сайте (вкладки «Общие / AC / DC», списки индикаторов).
+                            <br />
+                            <b>Структура</b> — плоский список «Ключ: значение».
+                            <br />
+                            <b>Текст</b> — свободный формат.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <button
+                            type="button"
+                            className={`px-3 py-1 rounded ${editSpecsMode === 'showcase' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
+                            onClick={() => {
+                              if (!editSpecGroups) {
+                                setEditSpecGroups(
+                                  buildDefaultSpecGroups(
+                                    editingFullProduct.name || "товара",
+                                    editingFullProduct.specifications,
+                                  ),
+                                );
+                              }
+                              setEditSpecsMode('showcase');
+                            }}
+                          >Витрина</button>
+                          <button
+                            type="button"
+                            className={`px-3 py-1 rounded ${editSpecsMode === 'structured' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
+                            onClick={() => {
+                              if (editSpecsMode === 'raw') {
+                                setEditSpecsStructured(parseSpecsText(editingFullProduct.specifications) || [{ key: "", value: "" }]);
+                              }
+                              if (editSpecsMode === 'showcase' && editSpecGroups) {
+                                // при переходе из витрины переносим пары «параметр-значение» в плоский список
+                                const flat: Array<{ key: string; value: string }> = [];
+                                for (const tab of editSpecGroups.tabs) {
+                                  for (const block of tab.blocks) {
+                                    for (const row of block.rows) {
+                                      if (row.label || row.value) flat.push({ key: row.label, value: row.value });
+                                    }
+                                  }
+                                }
+                                if (flat.length > 0) setEditSpecsStructured(flat);
+                                setEditingFullProduct({
+                                  ...editingFullProduct,
+                                  specifications: flat.length ? serializeSpecs(flat) : editingFullProduct.specifications,
+                                });
+                              }
+                              setEditSpecsMode('structured');
+                            }}
+                          >Структура</button>
+                          <button
+                            type="button"
+                            className={`px-3 py-1 rounded ${editSpecsMode === 'raw' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
+                            onClick={() => {
+                              if (editSpecsMode === 'structured') {
+                                setEditingFullProduct({ ...editingFullProduct, specifications: serializeSpecs(editSpecsStructured) });
+                              }
+                              if (editSpecsMode === 'showcase' && editSpecGroups) {
+                                setEditingFullProduct({ ...editingFullProduct, specifications: serializeSpecGroups(editSpecGroups) });
+                              }
+                              setEditSpecsMode('raw');
+                            }}
+                          >Текст</button>
+                        </div>
+                      </div>
+
+                      {editSpecsMode === 'showcase' ? (
+                        <div className="space-y-3">
+                          {editSpecGroups ? (
+                            <>
+                              <SpecGroupsEditor
+                                value={editSpecGroups}
+                                onChange={(next) => {
+                                  setEditSpecGroups(next);
+                                  setEditingFullProduct({ ...editingFullProduct, specifications: serializeSpecGroups(next) });
+                                }}
+                              />
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    if (!confirm("Сбросить характеристики к дефолтному шаблону?")) return;
+                                    const def = buildDefaultSpecGroups(editingFullProduct.name || "товара");
+                                    setEditSpecGroups(def);
+                                    setEditingFullProduct({ ...editingFullProduct, specifications: serializeSpecGroups(def) });
+                                  }}
+                                >
+                                  Сбросить к шаблону
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                const def = buildDefaultSpecGroups(
+                                  editingFullProduct.name || "товара",
+                                  editingFullProduct.specifications,
+                                );
+                                setEditSpecGroups(def);
+                                setEditingFullProduct({ ...editingFullProduct, specifications: serializeSpecGroups(def) });
+                              }}
+                            >
+                              <Plus className="w-4 h-4 mr-1" /> Создать витринные вкладки
+                            </Button>
+                          )}
+                        </div>
+                      ) : editSpecsMode === 'structured' ? (
+                        <div className="space-y-2">
+                          {editSpecsStructured.map((pair, idx) => (
+                            <div key={idx} className="flex gap-2">
+                              <Input
+                                placeholder="Название (напр. Мощность)"
+                                value={pair.key}
+                                onChange={(e) => {
+                                  const copy = [...editSpecsStructured];
+                                  copy[idx] = { ...copy[idx], key: e.target.value };
+                                  setEditSpecsStructured(copy);
+                                  setEditingFullProduct({ ...editingFullProduct, specifications: serializeSpecs(copy) });
+                                }}
+                                className="flex-1"
+                              />
+                              <Input
+                                placeholder="Значение (напр. 100 кВт)"
+                                value={pair.value}
+                                onChange={(e) => {
+                                  const copy = [...editSpecsStructured];
+                                  copy[idx] = { ...copy[idx], value: e.target.value };
+                                  setEditSpecsStructured(copy);
+                                  setEditingFullProduct({ ...editingFullProduct, specifications: serializeSpecs(copy) });
+                                }}
+                                className="flex-1"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  const copy = editSpecsStructured.filter((_, i) => i !== idx);
+                                  setEditSpecsStructured(copy);
+                                  setEditingFullProduct({ ...editingFullProduct, specifications: serializeSpecs(copy) });
+                                }}
+                                title="Удалить строку"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditSpecsStructured(prev => [...prev, { key: "", value: "" }])}
+                          >
+                            <Plus className="w-4 h-4 mr-1" /> Добавить характеристику
+                          </Button>
+                        </div>
+                      ) : (
                         <Textarea
                           id="edit-specifications"
                           value={editingFullProduct.specifications}
                           onChange={(e) => setEditingFullProduct({ ...editingFullProduct, specifications: e.target.value })}
                           required
                           rows={6}
-                          placeholder="Введите характеристики товара. Рекомендуется формат:&#10;Мощность: 100 кВт&#10;Напряжение: 220-400 В&#10;и т.д."
+                          placeholder="Мощность: 100 кВт&#10;Напряжение: 220-400 В"
                           className="font-mono text-sm"
                         />
-                        <p className="text-xs text-muted-foreground mt-1">Каждая характеристика с новой строки</p>
-                      </div>
+                      )}
+                      {editSpecsMode !== 'showcase' && (
+                        <p className="text-xs text-muted-foreground">
+                          Формат: <code>Название: значение</code>. Каждая характеристика с новой строки.
+                        </p>
+                      )}
                     </div>
                     
                     {/* Images Section */}
@@ -2274,6 +3164,17 @@ export default function Admin() {
                           <div className="flex gap-2">
                             <Button
                               size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedUserId(user.id);
+                                setShowUserDetail(true);
+                              }}
+                              title="Полная карточка"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
                               variant="outline"
                               onClick={() => blockUser.mutate({ id: user.id, blocked: !user.isBlocked })}
                             >
@@ -2396,6 +3297,7 @@ export default function Admin() {
                       <TableHead>Имя</TableHead>
                       <TableHead>Роль</TableHead>
                       <TableHead>Дата создания</TableHead>
+                      <TableHead className="w-12 text-right">Детали</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2409,6 +3311,19 @@ export default function Admin() {
                           </Badge>
                         </TableCell>
                         <TableCell>{format(new Date(admin.createdAt), "dd.MM.yyyy HH:mm", { locale: ru })}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedUserId(admin.id);
+                              setShowUserDetail(true);
+                            }}
+                            title="Полная карточка"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -3013,127 +3928,16 @@ export default function Admin() {
                       </div>
                       <div>
                         <CardTitle className="text-xl">Управление контентом сайта</CardTitle>
-                        <CardDescription>Редактирование текстов и описаний на сайте</CardDescription>
+                        <CardDescription>
+                          Готовые поля для каждой страницы + произвольные ключи. Правки применяются сразу.
+                        </CardDescription>
                       </div>
                     </div>
                   </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Ключ контента</Label>
-                    <Input
-                      value={contentKey}
-                      onChange={(e) => setContentKey(e.target.value)}
-                      placeholder="Например: main-description"
-                    />
-                  </div>
-                  <div>
-                    <Label>Страница</Label>
-                    <Input
-                      value={contentPage}
-                      onChange={(e) => setContentPage(e.target.value)}
-                      placeholder="Например: home"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Раздел</Label>
-                  <Input
-                    value={contentSection}
-                    onChange={(e) => setContentSection(e.target.value)}
-                    placeholder="Например: hero"
-                  />
-                </div>
-                <div>
-                  <Label>Содержимое</Label>
-                  <Textarea
-                    value={contentValue}
-                    onChange={(e) => setContentValue(e.target.value)}
-                    placeholder="Введите текст..."
-                    rows={5}
-                  />
-                </div>
-                <Button
-                  onClick={async () => {
-                    if (!contentKey || !contentValue) {
-                      toast({ title: "Ошибка", description: "Заполните ключ и содержимое", variant: "destructive" });
-                      return;
-                    }
-                    try {
-                      const token = localStorage.getItem("accessToken");
-                      const res = await fetch(`/api/admin/content/${contentKey}`, {
-                        method: "PUT",
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ value: contentValue, page: contentPage, section: contentSection }),
-                      });
-                      if (!res.ok) throw new Error("Failed to save content");
-                      toast({ title: "Успешно", description: "Контент сохранен" });
-                      queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
-                      setContentKey("");
-                      setContentValue("");
-                      setContentPage("");
-                      setContentSection("");
-                    } catch (error: any) {
-                      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
-                    }
-                  }}
-                >
-                  Сохранить контент
-                </Button>
-
-                <div className="mt-6">
-                  <Label>Существующий контент</Label>
-                  <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
-                    {siteContentItems.map((item: any) => (
-                      <div key={item.key} className="p-3 border rounded-lg flex justify-between items-center">
-                        <div>
-                          <div className="font-semibold">{item.key}</div>
-                          <div className="text-sm text-muted-foreground">{item.value?.substring(0, 50)}...</div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setContentKey(item.key);
-                              setContentValue(item.value);
-                              setContentPage(item.page || "");
-                              setContentSection(item.section || "");
-                            }}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={async () => {
-                              if (!confirm("Удалить контент?")) return;
-                              try {
-                                const token = localStorage.getItem("accessToken");
-                                const res = await fetch(`/api/admin/content/${item.key}`, {
-                                  method: "DELETE",
-                                  headers: { Authorization: `Bearer ${token}` },
-                                });
-                                if (!res.ok) throw new Error("Failed to delete");
-                                toast({ title: "Успешно", description: "Контент удален" });
-                                queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
-                              } catch (error: any) {
-                                toast({ title: "Ошибка", description: error.message, variant: "destructive" });
-                              }
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  <CardContent>
+                    <ContentManager items={siteContentItems} />
+                  </CardContent>
+                </Card>
               </div>
             )}
 
@@ -4199,6 +5003,16 @@ export default function Admin() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Полная карточка пользователя: открывается из users/admins. */}
+      <UserDetailDialog
+        userId={selectedUserId}
+        open={showUserDetail}
+        onOpenChange={(open) => {
+          setShowUserDetail(open);
+          if (!open) setSelectedUserId(null);
+        }}
+      />
     </div>
   );
 }

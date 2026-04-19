@@ -22,7 +22,8 @@ import {
   CreditCard, MapPin, Calendar, TrendingUp, Award, LogOut,
   Eye, EyeOff, Mail, Phone, Lock, ChevronRight, Sparkles,
   Download, FileText, AlertTriangle, CheckCheck, Star, Zap,
-  Activity, BarChart3, Crown, Gift
+  Activity, BarChart3, Crown, Gift, Upload, RotateCcw, Ban,
+  Monitor, Smartphone, ShieldCheck, FileCheck2, Send, RefreshCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
@@ -38,7 +39,37 @@ interface UserData {
   role: string;
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
+  isBlocked?: boolean;
+  lastLoginAt?: string | null;
+  updatedAt?: string | null;
   createdAt: string;
+}
+
+interface SessionInfo {
+  id: string;
+  tokenPreview: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+interface ConsentInfo {
+  id: string;
+  consentType: string;
+  isConsented: boolean;
+  consentText: string;
+  consentedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+interface NotificationPreferences {
+  orders: boolean;
+  promotions: boolean;
+  news: boolean;
+  email: boolean;
+  push: boolean;
 }
 
 interface Product {
@@ -75,11 +106,17 @@ export default function Profile() {
   const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   
-  // Notification settings
-  const [notifyOrders, setNotifyOrders] = useState(true);
-  const [notifyPromotions, setNotifyPromotions] = useState(false);
-  const [notifyNews, setNotifyNews] = useState(true);
-  
+  // Avatar upload
+  const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  // Cancel order
+  const [cancelOrderDialog, setCancelOrderDialog] = useState<{ open: boolean; id: string | null }>({
+    open: false,
+    id: null,
+  });
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -161,6 +198,73 @@ export default function Profile() {
   });
 
   const commercialProposals = commercialProposalsData?.proposals || [];
+
+  // Sessions (active devices)
+  const { data: sessionsData } = useQuery<{ success: boolean; sessions: SessionInfo[] }>({
+    queryKey: ["/api/auth/sessions"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) return { success: false, sessions: [] };
+      const res = await fetch("/api/auth/sessions", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) return { success: false, sessions: [] };
+      return res.json();
+    },
+    enabled: !!userData,
+  });
+  const sessions: SessionInfo[] = sessionsData?.sessions || [];
+
+  // Personal data consents (152-ФЗ)
+  const { data: consentsData } = useQuery<{ success: boolean; consents: ConsentInfo[] }>({
+    queryKey: ["/api/auth/consents"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) return { success: false, consents: [] };
+      const res = await fetch("/api/auth/consents", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) return { success: false, consents: [] };
+      return res.json();
+    },
+    enabled: !!userData,
+  });
+  const consents: ConsentInfo[] = consentsData?.consents || [];
+
+  // Notification preferences
+  const { data: prefsData } = useQuery<{ success: boolean; preferences: NotificationPreferences }>({
+    queryKey: ["/api/auth/notification-preferences"],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        return {
+          success: false,
+          preferences: { orders: true, promotions: false, news: true, email: true, push: false },
+        };
+      }
+      const res = await fetch("/api/auth/notification-preferences", {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) {
+        return {
+          success: false,
+          preferences: { orders: true, promotions: false, news: true, email: true, push: false },
+        };
+      }
+      return res.json();
+    },
+    enabled: !!userData,
+  });
+  const notifPrefs: NotificationPreferences = prefsData?.preferences || {
+    orders: true,
+    promotions: false,
+    news: true,
+    email: true,
+    push: false,
+  };
 
   // Calculate profile completion percentage
   const profileCompletion = useMemo(() => {
@@ -561,6 +665,283 @@ export default function Profile() {
     },
   });
 
+  // Upload avatar
+  const uploadAvatar = useMutation({
+    mutationFn: async (dataUrl: string | null) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/auth/avatar", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ avatar: dataUrl }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Ошибка загрузки аватара");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setAvatarDialogOpen(false);
+      setAvatarPreview(null);
+      toast({ title: "Аватар обновлён", description: "Изменения сохранены" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Ошибка", description: e.message, variant: "destructive" });
+    },
+  });
+
+  // Resend verification email
+  const resendVerification = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Не удалось отправить письмо");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Письмо отправлено",
+        description: `Проверьте ${userData?.email || "свою почту"}`,
+      });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Ошибка", description: e.message, variant: "destructive" });
+    },
+  });
+
+  // Cancel order
+  const cancelOrder = useMutation({
+    mutationFn: async (orderId: string) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(`/api/orders/${orderId}/cancel`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Не удалось отменить заказ");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/user"] });
+      setCancelOrderDialog({ open: false, id: null });
+      toast({ title: "Заказ отменён", description: "Статус заказа обновлён" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Ошибка", description: e.message, variant: "destructive" });
+    },
+  });
+
+  // Repeat order
+  const repeatOrder = useMutation({
+    mutationFn: async (order: any) => {
+      if (!userData) throw new Error("Нет данных пользователя");
+      const token = localStorage.getItem("accessToken");
+      let customerName = "Покупатель";
+      const fn = (userData.firstName || "").trim();
+      const ln = (userData.lastName || "").trim();
+      const full = `${fn} ${ln}`.trim();
+      if (full.length >= 2) customerName = full;
+      else {
+        const local = userData.email.split("@")[0] || "";
+        if (local.length >= 2) customerName = local;
+      }
+      const phone = (userData.phone || "").replace(/\D/g, "").length >= 10
+        ? userData.phone!
+        : "+7 (900) 000-00-00";
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          productId: order.productId,
+          productPrice: order.productPrice,
+          quantity: order.quantity || 1,
+          totalAmount: order.totalAmount,
+          discountAmount: "0",
+          finalAmount: order.finalAmount,
+          paymentMethod: order.paymentMethod || "Банковская карта",
+          customerName,
+          customerEmail: userData.email,
+          customerPhone: phone,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Не удалось повторить заказ");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/user"] });
+      toast({
+        title: "Заказ создан",
+        description: `Новый заказ #${data?.order?.id?.slice(0, 8) || ""}`,
+      });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Ошибка", description: e.message, variant: "destructive" });
+    },
+  });
+
+  // Revoke single session
+  const revokeSession = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(`/api/auth/sessions/${sessionId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Не удалось завершить сессию");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/sessions"] });
+      toast({ title: "Сессия завершена", description: "Устройство разлогинено" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка", description: "Не удалось завершить сессию", variant: "destructive" });
+    },
+  });
+
+  // Revoke all sessions
+  const revokeAllSessions = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/auth/sessions/revoke-all", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Не удалось завершить сессии");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/sessions"] });
+      toast({
+        title: "Все сессии завершены",
+        description: "Требуется повторный вход на всех устройствах",
+      });
+      // Сразу же выкидываем отсюда — токены на сервере удалены
+      setTimeout(() => handleLogout(), 1500);
+    },
+    onError: () => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось завершить сессии",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Revoke consent
+  const revokeConsent = useMutation({
+    mutationFn: async (consentType: string) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(
+        `/api/auth/consents/${encodeURIComponent(consentType)}/revoke`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Не удалось отозвать согласие");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/consents"] });
+      toast({ title: "Согласие отозвано", description: "Изменения сохранены" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Ошибка", description: e.message, variant: "destructive" });
+    },
+  });
+
+  // Update notification preferences
+  const updatePrefs = useMutation({
+    mutationFn: async (prefs: Partial<NotificationPreferences>) => {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/auth/notification-preferences", {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(prefs),
+      });
+      if (!res.ok) throw new Error("Не удалось сохранить настройки");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.setQueryData(["/api/auth/notification-preferences"], data);
+    },
+    onError: () => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось сохранить настройки уведомлений",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Avatar file handler
+  const handleAvatarFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Неверный формат",
+        description: "Выберите изображение (PNG, JPG, WebP и т.п.)",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "Файл слишком большой",
+        description: "Максимум 5 МБ",
+        variant: "destructive",
+      });
+      return;
+    }
+    setAvatarUploading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        setAvatarPreview(result);
+      }
+      setAvatarUploading(false);
+    };
+    reader.onerror = () => {
+      setAvatarUploading(false);
+      toast({
+        title: "Ошибка чтения файла",
+        description: "Попробуйте другой файл",
+        variant: "destructive",
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Export user data as JSON
   const handleExportData = () => {
     if (!userData) return;
@@ -633,7 +1014,7 @@ export default function Profile() {
 
     const csvContent = [
       headers.join(";"),
-      ...rows.map(row => row.join(";")),
+      ...rows.map((row: (string | number)[]) => row.join(";")),
     ].join("\n");
 
     // Add BOM for proper UTF-8 encoding in Excel
@@ -848,9 +1229,28 @@ export default function Profile() {
                     {getUserInitials()}
                   </AvatarFallback>
                 </Avatar>
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 sm:w-8 sm:h-8 bg-emerald-500 rounded-full border-4 border-white flex items-center justify-center shadow-lg">
-                  <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-                </div>
+                {/* Edit avatar button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAvatarPreview(userData.avatar || null);
+                    setAvatarDialogOpen(true);
+                  }}
+                  className="absolute -bottom-1 -left-1 w-7 h-7 sm:w-9 sm:h-9 bg-white/90 hover:bg-white text-slate-900 rounded-full border-2 border-white flex items-center justify-center shadow-lg transition hover:scale-110"
+                  title="Изменить аватар"
+                  data-testid="button-edit-avatar"
+                >
+                  <Edit2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                </button>
+                {/* Verified badge — only if email verified */}
+                {userData.isEmailVerified && (
+                  <div
+                    className="absolute -bottom-1 -right-1 w-6 h-6 sm:w-8 sm:h-8 bg-emerald-500 rounded-full border-4 border-white flex items-center justify-center shadow-lg"
+                    title="Email подтверждён"
+                  >
+                    <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                  </div>
+                )}
               </div>
               
               {/* User Info */}
@@ -1320,6 +1720,32 @@ export default function Profile() {
                         </div>
                       </div>
                     </div>
+                    {userData.lastLoginAt && (
+                      <div className="p-4 rounded-xl bg-gradient-to-br from-cyan-50 to-sky-50 dark:from-cyan-950/30 dark:to-sky-950/30">
+                        <div className="flex items-center gap-3">
+                          <Clock className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Последний вход</p>
+                            <p className="font-semibold">
+                              {formatDistanceToNow(new Date(userData.lastLoginAt), { locale: ru, addSuffix: true })}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {userData.updatedAt && (
+                      <div className="p-4 rounded-xl bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-950/30 dark:to-gray-950/30">
+                        <div className="flex items-center gap-3">
+                          <RefreshCw className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Обновлён</p>
+                            <p className="font-semibold">
+                              {formatDistanceToNow(new Date(userData.updatedAt), { locale: ru, addSuffix: true })}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1442,6 +1868,58 @@ export default function Profile() {
                                     {parseFloat(order.finalAmount).toLocaleString('ru-RU')} ₽
                                   </p>
                                 </div>
+                              </div>
+
+                              {/* Per-order actions */}
+                              <div className="flex flex-wrap gap-2 mt-4">
+                                {order.paymentStatus === "pending" && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setCancelOrderDialog({ open: true, id: order.id })
+                                    }
+                                    className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                    data-testid={`button-cancel-order-${order.id.slice(0, 6)}`}
+                                  >
+                                    <Ban className="w-4 h-4 mr-1" />
+                                    Отменить
+                                  </Button>
+                                )}
+                                {(order.paymentStatus === "delivered" ||
+                                  order.paymentStatus === "paid" ||
+                                  order.paymentStatus === "cancelled") && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => repeatOrder.mutate(order)}
+                                    disabled={repeatOrder.isPending}
+                                    data-testid={`button-repeat-order-${order.id.slice(0, 6)}`}
+                                  >
+                                    <RotateCcw className="w-4 h-4 mr-1" />
+                                    Повторить заказ
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const promise = navigator.clipboard?.writeText?.(order.id);
+                                    if (promise && typeof promise.then === "function") {
+                                      promise.then(
+                                        () =>
+                                          toast({
+                                            title: "ID скопирован",
+                                            description: "Номер заказа в буфере обмена",
+                                          }),
+                                        () => {},
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <FileText className="w-4 h-4 mr-1" />
+                                  Копировать ID
+                                </Button>
                               </div>
                             </CardContent>
                           </Card>
@@ -1853,7 +2331,9 @@ export default function Profile() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div className="p-4 rounded-xl bg-muted/30">
                         <p className="text-xs text-muted-foreground mb-1">ID аккаунта</p>
-                        <p className="font-mono text-sm">{userData.id.slice(0, 12)}...</p>
+                        <p className="font-mono text-sm" title={userData.id}>
+                          {userData.id.slice(0, 12)}...
+                        </p>
                       </div>
                       <div className="p-4 rounded-xl bg-muted/30">
                         <p className="text-xs text-muted-foreground mb-1">Дата создания</p>
@@ -1863,7 +2343,220 @@ export default function Profile() {
                         <p className="text-xs text-muted-foreground mb-1">Роль в системе</p>
                         <p className="font-medium capitalize">{userData.role === 'admin' ? 'Администратор' : 'Пользователь'}</p>
                       </div>
+                      {userData.lastLoginAt && (
+                        <div className="p-4 rounded-xl bg-muted/30">
+                          <p className="text-xs text-muted-foreground mb-1">Последний вход</p>
+                          <p className="font-medium">
+                            {format(new Date(userData.lastLoginAt), "d MMMM yyyy, HH:mm", { locale: ru })}
+                          </p>
+                        </div>
+                      )}
+                      {!userData.isEmailVerified && (
+                        <div className="sm:col-span-2 lg:col-span-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                            <div>
+                              <p className="font-medium">Email не подтверждён</p>
+                              <p className="text-sm text-muted-foreground">
+                                Подтверждение защитит аккаунт и откроет доступ ко всем функциям
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => resendVerification.mutate()}
+                            disabled={resendVerification.isPending}
+                            className="bg-gradient-to-r from-amber-500 to-orange-500"
+                            data-testid="button-resend-verification"
+                          >
+                            <Send className="w-4 h-4 mr-1" />
+                            {resendVerification.isPending ? "Отправка..." : "Отправить письмо"}
+                          </Button>
+                        </div>
+                      )}
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* Active sessions / devices */}
+                <Card className="lg:col-span-2 border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+                  <CardHeader>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-xl flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-500 flex items-center justify-center">
+                            <Monitor className="w-4 h-4 text-white" />
+                          </div>
+                          Активные сессии
+                        </CardTitle>
+                        <CardDescription>
+                          Устройства, на которых выполнен вход в ваш аккаунт
+                        </CardDescription>
+                      </div>
+                      {sessions.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => revokeAllSessions.mutate()}
+                          disabled={revokeAllSessions.isPending}
+                          className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                          data-testid="button-revoke-all-sessions"
+                        >
+                          <LogOut className="w-4 h-4 mr-1" />
+                          Выйти отовсюду
+                        </Button>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {sessions.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Monitor className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                        <p>Нет активных сессий</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {sessions.map((s) => {
+                          const ua = s.userAgent || "";
+                          const isMobile = /mobile|android|iphone|ipad/i.test(ua);
+                          const DeviceIcon = isMobile ? Smartphone : Monitor;
+                          const browser = ua.match(/(chrome|firefox|safari|edge|opera)/i)?.[0] || "Браузер";
+                          const os = ua.match(/(windows|mac|linux|android|ios|iphone)/i)?.[0] || "";
+                          return (
+                            <div
+                              key={s.id}
+                              className="flex items-start justify-between gap-3 p-4 rounded-xl border border-border bg-muted/20"
+                              data-testid={`session-${s.id.slice(0, 6)}`}
+                            >
+                              <div className="flex items-start gap-3 min-w-0 flex-1">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
+                                  <DeviceIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium capitalize truncate">
+                                    {browser}
+                                    {os && <span className="text-muted-foreground"> · {os}</span>}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {s.ipAddress || "IP скрыт"} · Создана{" "}
+                                    {formatDistanceToNow(new Date(s.createdAt), {
+                                      locale: ru,
+                                      addSuffix: true,
+                                    })}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Истекает{" "}
+                                    {format(new Date(s.expiresAt), "d MMMM yyyy", { locale: ru })}
+                                    {s.tokenPreview && ` · ...${s.tokenPreview}`}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => revokeSession.mutate(s.id)}
+                                disabled={revokeSession.isPending}
+                                className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 flex-shrink-0"
+                                data-testid={`button-revoke-session-${s.id.slice(0, 6)}`}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Personal data consents (152-ФЗ) */}
+                <Card className="lg:col-span-2 border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+                  <CardHeader>
+                    <CardTitle className="text-xl flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+                        <FileCheck2 className="w-4 h-4 text-white" />
+                      </div>
+                      Согласия на обработку данных
+                    </CardTitle>
+                    <CardDescription>
+                      Ваши согласия согласно 152-ФЗ. Любое согласие (кроме базового) можно отозвать.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {consents.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <FileCheck2 className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                        <p>Согласия ещё не сохранены</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {consents.map((c) => {
+                          const typeLabels: Record<string, string> = {
+                            registration: "Регистрация и обработка ПД",
+                            marketing: "Маркетинговая рассылка",
+                            analytics: "Аналитика и метрика",
+                            third_party: "Передача третьим лицам",
+                            cookies: "Cookies",
+                          };
+                          const isBase = c.consentType === "registration";
+                          return (
+                            <div
+                              key={c.id}
+                              className="flex items-start justify-between gap-3 p-4 rounded-xl border border-border bg-muted/20"
+                              data-testid={`consent-${c.consentType}`}
+                            >
+                              <div className="flex items-start gap-3 min-w-0 flex-1">
+                                <div
+                                  className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                    c.isConsented
+                                      ? "bg-emerald-100 dark:bg-emerald-900/30"
+                                      : "bg-slate-100 dark:bg-slate-900/30"
+                                  }`}
+                                >
+                                  {c.isConsented ? (
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                                  ) : (
+                                    <XCircle className="w-5 h-5 text-slate-500" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium">
+                                    {typeLabels[c.consentType] || c.consentType}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                                    {c.consentText}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {c.isConsented && c.consentedAt
+                                      ? `Согласие дано ${format(new Date(c.consentedAt), "d MMMM yyyy", { locale: ru })}`
+                                      : c.revokedAt
+                                        ? `Отозвано ${format(new Date(c.revokedAt), "d MMMM yyyy", { locale: ru })}`
+                                        : "Не дано"}
+                                  </p>
+                                </div>
+                              </div>
+                              {c.isConsented && !isBase && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => revokeConsent.mutate(c.consentType)}
+                                  disabled={revokeConsent.isPending}
+                                  className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 flex-shrink-0"
+                                  data-testid={`button-revoke-consent-${c.consentType}`}
+                                >
+                                  Отозвать
+                                </Button>
+                              )}
+                              {isBase && (
+                                <Badge variant="outline" className="flex-shrink-0">
+                                  Базовое
+                                </Badge>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -1891,7 +2584,11 @@ export default function Profile() {
                           <p className="text-sm text-muted-foreground">Уведомления об изменениях статуса</p>
                         </div>
                       </div>
-                      <Switch checked={notifyOrders} onCheckedChange={setNotifyOrders} />
+                      <Switch
+                        checked={notifPrefs.orders}
+                        onCheckedChange={(v) => updatePrefs.mutate({ orders: v })}
+                        disabled={updatePrefs.isPending}
+                      />
                     </div>
 
                     <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30">
@@ -1902,7 +2599,11 @@ export default function Profile() {
                           <p className="text-sm text-muted-foreground">Информация о специальных предложениях</p>
                         </div>
                       </div>
-                      <Switch checked={notifyPromotions} onCheckedChange={setNotifyPromotions} />
+                      <Switch
+                        checked={notifPrefs.promotions}
+                        onCheckedChange={(v) => updatePrefs.mutate({ promotions: v })}
+                        disabled={updatePrefs.isPending}
+                      />
                     </div>
 
                     <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30">
@@ -1913,7 +2614,45 @@ export default function Profile() {
                           <p className="text-sm text-muted-foreground">Обновления и важные события</p>
                         </div>
                       </div>
-                      <Switch checked={notifyNews} onCheckedChange={setNotifyNews} />
+                      <Switch
+                        checked={notifPrefs.news}
+                        onCheckedChange={(v) => updatePrefs.mutate({ news: v })}
+                        disabled={updatePrefs.isPending}
+                      />
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30">
+                      <div className="flex items-center gap-3">
+                        <Mail className="w-5 h-5 text-blue-500" />
+                        <div>
+                          <p className="font-medium">Email-уведомления</p>
+                          <p className="text-sm text-muted-foreground">
+                            Отправлять на {userData.email}
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={notifPrefs.email}
+                        onCheckedChange={(v) => updatePrefs.mutate({ email: v })}
+                        disabled={updatePrefs.isPending}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30">
+                      <div className="flex items-center gap-3">
+                        <Bell className="w-5 h-5 text-amber-500" />
+                        <div>
+                          <p className="font-medium">Push-уведомления</p>
+                          <p className="text-sm text-muted-foreground">В браузере (скоро)</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={notifPrefs.push}
+                        onCheckedChange={(v) => updatePrefs.mutate({ push: v })}
+                        disabled={updatePrefs.isPending}
+                      />
                     </div>
                   </CardContent>
                 </Card>
@@ -2224,6 +2963,132 @@ export default function Profile() {
               disabled={deleteAccount.isPending || deleteConfirmText.toLowerCase() !== "удалить"}
             >
               {deleteAccount.isPending ? "Удаление..." : "Удалить аккаунт"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Avatar upload dialog */}
+      <Dialog
+        open={avatarDialogOpen}
+        onOpenChange={(open) => {
+          setAvatarDialogOpen(open);
+          if (!open) setAvatarPreview(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5 text-blue-500" />
+              Изменить аватар
+            </DialogTitle>
+            <DialogDescription>
+              Загрузите изображение (PNG, JPG, WebP — до 5 МБ)
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-center">
+              <Avatar className="w-32 h-32 border-4 border-muted">
+                <AvatarImage src={avatarPreview || userData?.avatar || undefined} className="object-cover" />
+                <AvatarFallback className="text-3xl bg-gradient-to-br from-blue-400 to-indigo-500 text-white">
+                  {getUserInitials()}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="avatar-file" className="cursor-pointer">
+                <div className="flex items-center justify-center gap-2 h-11 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition">
+                  <Upload className="w-4 h-4" />
+                  <span className="text-sm">Выбрать файл</span>
+                </div>
+                <input
+                  id="avatar-file"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleAvatarFile(f);
+                    e.target.value = "";
+                  }}
+                />
+              </Label>
+              <p className="text-xs text-muted-foreground text-center">
+                Допустимые форматы: PNG, JPG, WebP, GIF
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 flex-wrap sm:flex-nowrap">
+            {userData?.avatar && (
+              <Button
+                variant="outline"
+                onClick={() => uploadAvatar.mutate(null)}
+                disabled={uploadAvatar.isPending}
+                className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                data-testid="button-remove-avatar"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Удалить
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setAvatarDialogOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              onClick={() => {
+                if (avatarPreview && avatarPreview !== userData?.avatar) {
+                  uploadAvatar.mutate(avatarPreview);
+                }
+              }}
+              disabled={
+                !avatarPreview ||
+                avatarPreview === userData?.avatar ||
+                uploadAvatar.isPending ||
+                avatarUploading
+              }
+              className="bg-gradient-to-r from-blue-600 to-indigo-600"
+              data-testid="button-save-avatar"
+            >
+              <Save className="w-4 h-4 mr-1" />
+              {uploadAvatar.isPending ? "Сохранение..." : "Сохранить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Order Confirmation Dialog */}
+      <Dialog
+        open={cancelOrderDialog.open}
+        onOpenChange={(open) => !open && setCancelOrderDialog({ open: false, id: null })}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Ban className="w-5 h-5" />
+              Отменить заказ?
+            </DialogTitle>
+            <DialogDescription>
+              Отмена возможна только для заказов, ожидающих оплаты. После отмены заказ нельзя
+              восстановить.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setCancelOrderDialog({ open: false, id: null })}
+            >
+              Нет, оставить
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => cancelOrderDialog.id && cancelOrder.mutate(cancelOrderDialog.id)}
+              disabled={cancelOrder.isPending || !cancelOrderDialog.id}
+              data-testid="button-confirm-cancel-order"
+            >
+              {cancelOrder.isPending ? "Отмена..." : "Да, отменить"}
             </Button>
           </DialogFooter>
         </DialogContent>

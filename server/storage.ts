@@ -120,6 +120,33 @@ export class DrizzleStorage implements IStorage {
     return true;
   }
 
+  async getUserSessions(userId: string) {
+    return await db.select()
+      .from(sessions)
+      .where(eq(sessions.userId, userId))
+      .orderBy(desc(sessions.createdAt));
+  }
+
+  async deleteUserSessions(userId: string, exceptId?: string) {
+    if (exceptId) {
+      // Удаляем все кроме указанной
+      const existing = await this.getUserSessions(userId);
+      const toDelete = existing.filter(s => s.id !== exceptId);
+      for (const s of toDelete) {
+        await db.delete(sessions).where(eq(sessions.id, s.id));
+      }
+      return toDelete.length;
+    }
+    const existing = await this.getUserSessions(userId);
+    await db.delete(sessions).where(eq(sessions.userId, userId));
+    return existing.length;
+  }
+
+  async getSessionById(id: string) {
+    const result = await db.select().from(sessions).where(eq(sessions.id, id));
+    return result[0] || null;
+  }
+
   async getAllNotifications(userId: string) {
     return await db.select().from(notifications)
       .where(eq(notifications.userId, userId))
@@ -418,8 +445,9 @@ export class DrizzleStorage implements IStorage {
       return null;
     }
     
-    // isActive is integer (1 or 0), not boolean
-    const isActive = promo.isActive === 1 || promo.isActive === true;
+    // isActive может приходить и как boolean, и как integer (1/0) из драйвера pg
+    const rawActive = promo.isActive as unknown;
+    const isActive = rawActive === true || rawActive === 1 || rawActive === "1" || rawActive === "t" || rawActive === "true";
     if (!isActive) {
       console.log(`❌ [validatePromoCode] Promo code "${normalizedCode}" is not active (isActive: ${promo.isActive})`);
       return null;

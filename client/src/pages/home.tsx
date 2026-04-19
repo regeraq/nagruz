@@ -20,6 +20,7 @@ import { Navigation } from "@/components/navigation";
 import { PowerGauge } from "@/components/power-gauge";
 import { useRealtimeValidation, ValidationIcon, ValidationMessage, validationRules } from "@/components/form-validation";
 import { insertContactSubmissionSchema, type InsertContactSubmission, type Product } from "@shared/schema";
+import { parseSpecGroups, type ProductSpecGroups } from "@shared/specs";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
@@ -299,27 +300,59 @@ export default function Home() {
     return products.find((p: Product) => p.id === selectedDevice);
   }, [products, selectedDevice]);
 
+  // Парсим богатую структуру характеристик из поля specifications.
+  // Если JSON — используем её и при рендере секции, и при отображении мощности.
+  const specGroups: ProductSpecGroups | null = useMemo(
+    () => parseSpecGroups(currentProductForDevice?.specifications),
+    [currentProductForDevice?.specifications],
+  );
+
   const device = useMemo(() => {
     if (currentProductForDevice) {
+      // Если есть богатая структура — берём мощность/напряжение из неё,
+      // иначе парсим старую текстовую (первая строка = мощность, вторая = ступени).
+      const findRow = (labels: string[]): string | undefined => {
+        if (!specGroups) return undefined;
+        for (const tab of specGroups.tabs) {
+          for (const block of tab.blocks) {
+            for (const row of block.rows) {
+              const lbl = row.label.toLowerCase();
+              if (labels.some(l => lbl.includes(l))) return row.value || undefined;
+            }
+          }
+        }
+        return undefined;
+      };
+
+      const rawSpec = currentProductForDevice.specifications || "";
+      const isJsonSpec = rawSpec.trim().startsWith("{");
+      const fallbackFirstLine = !isJsonSpec ? rawSpec.split(/\r?\n|,/)[0]?.trim() : "";
+      const fallbackSecondLine = !isJsonSpec ? rawSpec.split(/\r?\n|,/)[1]?.trim() : "";
+
+      const power = findRow(["мощность"]) || fallbackFirstLine || "—";
+      const steps = findRow(["ступен"]) || fallbackSecondLine || "—";
+      const acVoltage = findRow(["напряжение ac", "переменного тока", "230", "400"]) || "230–400 В";
+      const dcVoltage = findRow(["напряжение dc", "постоянного тока", "110", "220"]) || "110–220 В";
+
       return {
         name: currentProductForDevice.name,
-        power: currentProductForDevice.specifications?.split(',')[0] || "—",
-        steps: currentProductForDevice.specifications?.split(',')[1]?.trim() || "—",
+        power,
+        steps,
         voltage: "AC/DC",
         minVoltage: "230-400 В / 110-220 В",
-        maxPower: currentProductForDevice.specifications?.split(',')[0] || "—",
-        frequency: "50 Гц",
-        phases: "3",
-        cosφ: "0.99",
-        cooling: "Воздушное принудительное",
+        maxPower: power,
+        frequency: findRow(["частота"]) || "50 Гц",
+        phases: findRow(["фаз"]) || "3",
+        cosφ: findRow(["cos", "коэффициент мощност"]) || "0.99",
+        cooling: findRow(["охлажден"]) || "Воздушное принудительное",
         description: currentProductForDevice.description || "",
-        powerRange: currentProductForDevice.specifications?.split(',')[0] || "—",
-        acVoltage: "230–400 В",
-        dcVoltage: "110–220 В"
+        powerRange: power,
+        acVoltage,
+        dcVoltage,
       };
     }
     return (devices[selectedDevice as keyof typeof devices] || devices["nu-100"]);
-  }, [currentProductForDevice, selectedDevice]);
+  }, [currentProductForDevice, selectedDevice, specGroups]);
 
   // Update page title and Open Graph meta tags when device changes
   useEffect(() => {
@@ -834,173 +867,231 @@ export default function Home() {
               Характеристики
             </Badge>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-specifications">
-              Технические характеристики
+              {specGroups?.heading || "Технические характеристики"}
             </h2>
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto" data-testid="text-specifications-desc">
-              Полная спецификация нагрузочного устройства {device.name}
+              {specGroups?.subheading || `Полная спецификация нагрузочного устройства ${device.name}`}
             </p>
           </div>
-          <Tabs defaultValue="general" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-8" data-testid="tabs-specifications">
-              <TabsTrigger value="general" data-testid="tab-general">Общие</TabsTrigger>
-              <TabsTrigger value="ac" data-testid="tab-ac">Блок AC</TabsTrigger>
-              <TabsTrigger value="dc" data-testid="tab-dc">Блок DC</TabsTrigger>
-            </TabsList>
 
-            <TabsContent value="general" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Общие параметры</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {[
-                    { label: "Суммарная мощность", value: device.powerRange + " ±10%" },
-                    { label: "Режим работы", value: "Непрерывный" },
-                    { label: "Частота (AC)", value: "50 Гц ±1%" },
-                    { label: "Фазность", value: "3 фазы" },
-                    { label: "Условия эксплуатации", value: "Улица/помещение, +1...+40 °C" },
-                    { label: "Влажность", value: "До 80% при 25 °С" },
-                    { label: "Охлаждение", value: "Воздушное принудительное" },
-                    { label: "Защита", value: "Перегрев, отсутствие охлаждения, перегрузка, КЗ" },
-                  ].map((spec, idx) => (
-                    <div 
-                      key={idx} 
-                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border last:border-0"
-                      data-testid={`spec-general-${idx}`}
-                    >
-                      <span className="text-sm font-medium text-muted-foreground mb-1 sm:mb-0">{spec.label}</span>
-                      <span className="font-mono text-sm font-semibold">{spec.value}</span>
-                    </div>
+          {specGroups && specGroups.tabs.length > 0 ? (
+            <Tabs defaultValue={specGroups.tabs[0].id} className="w-full">
+              <TabsList
+                className="grid w-full mb-8"
+                style={{ gridTemplateColumns: `repeat(${specGroups.tabs.length}, minmax(0, 1fr))` }}
+                data-testid="tabs-specifications"
+              >
+                {specGroups.tabs.map((tab) => (
+                  <TabsTrigger key={tab.id} value={tab.id} data-testid={`tab-${tab.id}`}>
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              {specGroups.tabs.map((tab) => (
+                <TabsContent key={tab.id} value={tab.id} className="space-y-4">
+                  {tab.blocks.map((block, bIdx) => (
+                    <Card key={bIdx}>
+                      <CardHeader>
+                        <CardTitle>{block.title}</CardTitle>
+                        {block.description ? (
+                          <CardDescription>{block.description}</CardDescription>
+                        ) : null}
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {block.rows.length > 0 && (
+                          <div className="space-y-0">
+                            {block.rows.map((row, rIdx) => (
+                              <div
+                                key={rIdx}
+                                className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border last:border-0"
+                                data-testid={`spec-${tab.id}-${bIdx}-${rIdx}`}
+                              >
+                                <span className="text-sm font-medium text-muted-foreground mb-1 sm:mb-0">
+                                  {row.label}
+                                </span>
+                                <span className="font-mono text-sm font-semibold break-words">
+                                  {row.value || "—"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {block.indicators && block.indicators.length > 0 && (
+                          <ul className="space-y-2 text-sm pt-2">
+                            {block.indicators.map((item, iIdx) => (
+                              <li
+                                key={iIdx}
+                                className="flex items-start gap-2"
+                                data-testid={`indicator-${tab.id}-${bIdx}-${iIdx}`}
+                              >
+                                <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </CardContent>
+                    </Card>
                   ))}
-                </CardContent>
-              </Card>
+                </TabsContent>
+              ))}
+            </Tabs>
+          ) : (
+            <Tabs defaultValue="general" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-8" data-testid="tabs-specifications">
+                <TabsTrigger value="general" data-testid="tab-general">Общие</TabsTrigger>
+                <TabsTrigger value="ac" data-testid="tab-ac">Блок AC</TabsTrigger>
+                <TabsTrigger value="dc" data-testid="tab-dc">Блок DC</TabsTrigger>
+              </TabsList>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Габариты и масса (каждый блок)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {[
-                    { label: "Размеры", value: "1400 × 1100 × 1400 мм" },
-                    { label: "Масса", value: "До 350 кг" },
-                    { label: "Питание", value: "220 В ±10%" },
-                  ].map((spec, idx) => (
-                    <div 
-                      key={idx} 
-                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border last:border-0"
-                      data-testid={`spec-dimensions-${idx}`}
-                    >
-                      <span className="text-sm font-medium text-muted-foreground mb-1 sm:mb-0">{spec.label}</span>
-                      <span className="font-mono text-sm font-semibold">{spec.value}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="ac" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Блок переменного тока (AC)</CardTitle>
-                  <CardDescription>Параметры работы с трёхфазным переменным током</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {[
-                    { label: "Напряжение", value: device.acVoltage },
-                    { label: "Частота", value: "50 Гц ±1%" },
-                    { label: "Коэффициент мощности", value: "cos φ ≥ 0.99" },
-                  ].map((spec, idx) => (
-                    <div 
-                      key={idx} 
-                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border last:border-0"
-                      data-testid={`spec-ac-${idx}`}
-                    >
-                      <span className="text-sm font-medium text-muted-foreground mb-1 sm:mb-0">{spec.label}</span>
-                      <span className="font-mono text-sm font-semibold">{spec.value}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Индикация параметров AC</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2 text-sm">
+              <TabsContent value="general" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Общие параметры</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     {[
-                      "Линейное и фазное напряжение",
-                      "Токи по фазам (A, B, C)",
-                      "Активная, реактивная и полная мощность по фазам",
-                      "Углы между фазами",
-                      "Коэффициент мощности cos φ",
-                      "Гармоники 2–63 порядка",
-                      "Счётчики активной и реактивной мощности",
-                    ].map((item, idx) => (
-                      <li 
-                        key={idx} 
-                        className="flex items-start gap-2"
-                        data-testid={`indicator-ac-${idx}`}
+                      { label: "Суммарная мощность", value: device.powerRange + " ±10%" },
+                      { label: "Режим работы", value: "Непрерывный" },
+                      { label: "Частота (AC)", value: "50 Гц ±1%" },
+                      { label: "Фазность", value: "3 фазы" },
+                      { label: "Условия эксплуатации", value: "Улица/помещение, +1...+40 °C" },
+                      { label: "Влажность", value: "До 80% при 25 °С" },
+                      { label: "Охлаждение", value: "Воздушное принудительное" },
+                      { label: "Защита", value: "Перегрев, отсутствие охлаждения, перегрузка, КЗ" },
+                    ].map((spec, idx) => (
+                      <div
+                        key={idx}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border last:border-0"
+                        data-testid={`spec-general-${idx}`}
                       >
-                        <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                        <span>{item}</span>
-                      </li>
+                        <span className="text-sm font-medium text-muted-foreground mb-1 sm:mb-0">{spec.label}</span>
+                        <span className="font-mono text-sm font-semibold">{spec.value}</span>
+                      </div>
                     ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                  </CardContent>
+                </Card>
 
-            <TabsContent value="dc" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Блок постоянного тока (DC)</CardTitle>
-                  <CardDescription>Параметры работы с постоянным током</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {[
-                    { label: "Напряжение", value: "110–220 В" },
-                    { label: "Режим работы", value: "Непрерывный" },
-                  ].map((spec, idx) => (
-                    <div 
-                      key={idx} 
-                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border last:border-0"
-                      data-testid={`spec-dc-${idx}`}
-                    >
-                      <span className="text-sm font-medium text-muted-foreground mb-1 sm:mb-0">{spec.label}</span>
-                      <span className="font-mono text-sm font-semibold">{spec.value}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Индикация параметров DC</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2 text-sm">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Габариты и масса (каждый блок)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     {[
-                      "Напряжение постоянного тока",
-                      "Сила тока",
-                      "Мощность",
-                      "Счётчики потреблённой энергии",
-                    ].map((item, idx) => (
-                      <li 
-                        key={idx} 
-                        className="flex items-start gap-2"
-                        data-testid={`indicator-dc-${idx}`}
+                      { label: "Размеры", value: "1400 × 1100 × 1400 мм" },
+                      { label: "Масса", value: "До 350 кг" },
+                      { label: "Питание", value: "220 В ±10%" },
+                    ].map((spec, idx) => (
+                      <div
+                        key={idx}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border last:border-0"
+                        data-testid={`spec-dimensions-${idx}`}
                       >
-                        <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                        <span>{item}</span>
-                      </li>
+                        <span className="text-sm font-medium text-muted-foreground mb-1 sm:mb-0">{spec.label}</span>
+                        <span className="font-mono text-sm font-semibold">{spec.value}</span>
+                      </div>
                     ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-          
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="ac" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Блок переменного тока (AC)</CardTitle>
+                    <CardDescription>Параметры работы с трёхфазным переменным током</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {[
+                      { label: "Напряжение", value: device.acVoltage },
+                      { label: "Частота", value: "50 Гц ±1%" },
+                      { label: "Коэффициент мощности", value: "cos φ ≥ 0.99" },
+                    ].map((spec, idx) => (
+                      <div
+                        key={idx}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border last:border-0"
+                        data-testid={`spec-ac-${idx}`}
+                      >
+                        <span className="text-sm font-medium text-muted-foreground mb-1 sm:mb-0">{spec.label}</span>
+                        <span className="font-mono text-sm font-semibold">{spec.value}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Индикация параметров AC</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2 text-sm">
+                      {[
+                        "Линейное и фазное напряжение",
+                        "Токи по фазам (A, B, C)",
+                        "Активная, реактивная и полная мощность по фазам",
+                        "Углы между фазами",
+                        "Коэффициент мощности cos φ",
+                        "Гармоники 2–63 порядка",
+                        "Счётчики активной и реактивной мощности",
+                      ].map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-2" data-testid={`indicator-ac-${idx}`}>
+                          <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="dc" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Блок постоянного тока (DC)</CardTitle>
+                    <CardDescription>Параметры работы с постоянным током</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {[
+                      { label: "Напряжение", value: "110–220 В" },
+                      { label: "Режим работы", value: "Непрерывный" },
+                    ].map((spec, idx) => (
+                      <div
+                        key={idx}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border last:border-0"
+                        data-testid={`spec-dc-${idx}`}
+                      >
+                        <span className="text-sm font-medium text-muted-foreground mb-1 sm:mb-0">{spec.label}</span>
+                        <span className="font-mono text-sm font-semibold">{spec.value}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Индикация параметров DC</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2 text-sm">
+                      {[
+                        "Напряжение постоянного тока",
+                        "Сила тока",
+                        "Мощность",
+                        "Счётчики потреблённой энергии",
+                      ].map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-2" data-testid={`indicator-dc-${idx}`}>
+                          <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          )}
+
           <div className="flex justify-center mt-12 animate-fade-up">
             <Button 
               size="lg" 

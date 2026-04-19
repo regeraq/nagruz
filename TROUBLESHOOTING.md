@@ -161,3 +161,7 @@ chmod +x ~/check-files.sh
 2. Проверьте статус БД: `sudo systemctl status postgresql`
 3. Проверьте использование ресурсов: `free -h && df -h`
 
+
+
+
+
