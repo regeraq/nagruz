@@ -10,23 +10,23 @@ import { Factory, Users, Award, Target, Shield, Zap } from "lucide-react";
 export default function About() {
   return (
     <div className="min-h-screen pt-20">
-      <div className="max-w-7xl mx-auto px-6 md:px-8 py-12">
-        <Breadcrumbs items={[{ label: "О нас" }]} className="mb-8" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-10 md:py-12">
+        <Breadcrumbs items={[{ label: "О нас" }]} className="mb-6 sm:mb-8" />
 
-        <div className="text-center mb-16 animate-fade-up">
-          <Badge variant="secondary" className="mb-4">
+        <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
+          <Badge variant="secondary" className="mb-3 sm:mb-4">
             О компании
           </Badge>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2">
             Надёжный партнёр в энергетике
           </h1>
-          <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+          <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2">
             Мы специализируемся на поставке профессионального испытательного оборудования
             для крупных промышленных заказчиков
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-12 mb-16">
+        <div className="grid md:grid-cols-2 gap-4 sm:gap-6 md:gap-8 lg:gap-12 mb-10 sm:mb-12 md:mb-16">
           <Card className="scroll-animate">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -73,10 +73,10 @@ export default function About() {
           </Card>
         </div>
 
-        <Separator className="my-16" />
+        <Separator className="my-10 sm:my-12 md:my-16" />
 
-        <div className="mb-16">
-          <h2 className="text-3xl font-bold mb-8 text-center">Наша история</h2>
+        <div className="mb-10 sm:mb-12 md:mb-16">
+          <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-center">Наша история</h2>
           <div className="max-w-4xl mx-auto">
             <Card className="scroll-animate">
               <CardContent className="pt-6">
@@ -100,11 +100,11 @@ export default function About() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8 mb-16">
+        <div className="grid sm:grid-cols-3 gap-4 sm:gap-6 md:gap-8 mb-10 sm:mb-12 md:mb-16">
           <Card className="text-center scroll-animate">
             <CardHeader>
-              <div className="text-5xl font-bold text-primary mb-2">15+</div>
-              <CardTitle>Лет опыта</CardTitle>
+              <div className="text-3xl sm:text-4xl md:text-5xl font-bold text-primary mb-2">15+</div>
+              <CardTitle className="text-base sm:text-lg">Лет опыта</CardTitle>
             </CardHeader>
             <CardContent>
               <CardDescription>
@@ -115,8 +115,8 @@ export default function About() {
 
           <Card className="text-center scroll-animate">
             <CardHeader>
-              <div className="text-5xl font-bold text-primary mb-2">500+</div>
-              <CardTitle>Проектов</CardTitle>
+              <div className="text-3xl sm:text-4xl md:text-5xl font-bold text-primary mb-2">500+</div>
+              <CardTitle className="text-base sm:text-lg">Проектов</CardTitle>
             </CardHeader>
             <CardContent>
               <CardDescription>
@@ -127,8 +127,8 @@ export default function About() {
 
           <Card className="text-center scroll-animate">
             <CardHeader>
-              <div className="text-5xl font-bold text-primary mb-2">50+</div>
-              <CardTitle>Отраслей</CardTitle>
+              <div className="text-3xl sm:text-4xl md:text-5xl font-bold text-primary mb-2">50+</div>
+              <CardTitle className="text-base sm:text-lg">Отраслей</CardTitle>
             </CardHeader>
             <CardContent>
               <CardDescription>
@@ -138,13 +138,13 @@ export default function About() {
           </Card>
         </div>
 
-        <Separator className="my-16" />
+        <Separator className="my-10 sm:my-12 md:my-16" />
 
         <div>
-          <h2 className="text-3xl font-bold mb-8 text-center">Наши клиенты</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-center">Наши клиенты</h2>
           <Card className="scroll-animate">
             <CardContent className="pt-6">
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
                 <div>
                   <h3 className="font-semibold mb-3">Ключевые отрасли:</h3>
                   <ul className="space-y-2 text-muted-foreground">

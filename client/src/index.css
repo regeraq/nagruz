@@ -7,62 +7,63 @@
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
-/* MODERN 2025 LIGHT MODE */
+/* MODERN 2025 LIGHT MODE - Soft, low-glare, high-contrast */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(15, 23, 42, .10);
+  --badge-outline: rgba(15, 23, 42, .06);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
-  --background: 210 42% 98%;
-  --foreground: 220 22% 10%;
-  --border: 210 18% 90%;
+  --elevate-1: rgba(15, 23, 42, .035);
+  --elevate-2: rgba(15, 23, 42, .075);
+  --background: 220 24% 97%;
+  --foreground: 222 28% 11%;
+  --border: 220 16% 86%;
   --card: 0 0% 100%;
-  --card-foreground: 220 22% 10%;
-  --card-border: 210 14% 93%;
-  --sidebar: 210 32% 96%;
-  --sidebar-foreground: 220 22% 12%;
-  --sidebar-border: 210 18% 90%;
-  --sidebar-primary: 210 100% 50%;
+  --card-foreground: 222 28% 11%;
+  --card-border: 220 16% 90%;
+  --sidebar: 220 22% 95%;
+  --sidebar-foreground: 222 28% 13%;
+  --sidebar-border: 220 16% 86%;
+  --sidebar-primary: 214 95% 48%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 210 14% 93%;
-  --sidebar-accent-foreground: 220 22% 12%;
-  --sidebar-ring: 210 100% 50%;
+  --sidebar-accent: 220 18% 92%;
+  --sidebar-accent-foreground: 222 28% 13%;
+  --sidebar-ring: 214 95% 48%;
   --popover: 0 0% 100%;
-  --popover-foreground: 220 22% 12%;
-  --popover-border: 210 14% 93%;
-  --primary: 210 100% 52%;
+  --popover-foreground: 222 28% 13%;
+  --popover-border: 220 16% 90%;
+  --primary: 214 95% 48%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 210 14% 93%;
-  --secondary-foreground: 220 22% 12%;
-  --muted: 210 12% 92%;
-  --muted-foreground: 220 12% 42%;
-  --accent: 195 88% 52%;
+  --secondary: 220 18% 93%;
+  --secondary-foreground: 222 28% 13%;
+  --muted: 220 18% 93%;
+  --muted-foreground: 222 14% 36%;
+  --accent: 199 85% 46%;
   --accent-foreground: 0 0% 100%;
-  --destructive: 0 84% 52%;
+  --destructive: 0 78% 50%;
   --destructive-foreground: 0 0% 100%;
-  --input: 210 12% 93%;
-  --ring: 210 100% 52%;
-  --tech-blue: 210 100% 52%;
-  --tech-blue-light: 210 100% 96%;
-  --tech-cyan: 195 88% 52%;
-  --chart-1: 210 100% 52%;
-  --chart-2: 195 88% 48%;
-  --chart-3: 142 72% 42%;
-  --chart-4: 280 62% 52%;
-  --chart-5: 43 88% 58%;
+  --input: 220 18% 94%;
+  --ring: 214 95% 48%;
+  --tech-blue: 214 95% 48%;
+  --tech-blue-light: 214 95% 94%;
+  --tech-cyan: 199 85% 46%;
+  --chart-1: 214 95% 48%;
+  --chart-2: 199 85% 44%;
+  --chart-3: 142 65% 38%;
+  --chart-4: 268 60% 52%;
+  --chart-5: 38 92% 50%;
   --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
-  --radius: .5rem;
-  --shadow-2xs: 0px 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-xs: 0px 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-sm: 0px 1px 2px rgba(0, 0, 0, 0.05), 0px 1px 3px rgba(0, 0, 0, 0.1);
-  --shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0px 4px 6px -1px rgba(0, 0, 0, 0.1), 0px 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0px 10px 15px -3px rgba(0, 0, 0, 0.1), 0px 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-xl: 0px 20px 25px -5px rgba(0, 0, 0, 0.1), 0px 10px 10px -5px rgba(0, 0, 0, 0.04);
-  --shadow-2xl: 0px 25px 50px -12px rgba(0, 0, 0, 0.25);
+  --radius: .625rem;
+  /* Layered, softer shadows for modern 2025 depth */
+  --shadow-2xs: 0px 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-xs: 0px 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-sm: 0px 1px 2px rgba(15, 23, 42, 0.04), 0px 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow: 0px 2px 4px -1px rgba(15, 23, 42, 0.06), 0px 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0px 4px 10px -2px rgba(15, 23, 42, 0.07), 0px 2px 4px -1px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0px 12px 24px -6px rgba(15, 23, 42, 0.10), 0px 4px 8px -2px rgba(15, 23, 42, 0.05);
+  --shadow-xl: 0px 24px 40px -12px rgba(15, 23, 42, 0.14), 0px 8px 16px -4px rgba(15, 23, 42, 0.06);
+  --shadow-2xl: 0px 32px 64px -16px rgba(15, 23, 42, 0.22);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
@@ -843,18 +844,92 @@
       -webkit-overflow-scrolling: touch;
     }
   }
+
+  /* ====== MODERN MOBILE REFINEMENTS (2025) ====== */
+
+  /* Hero min-height: prevent over-tall hero on small phones */
+  @media (max-width: 640px) {
+    section#hero.min-h-screen,
+    section[id="hero"].min-h-screen {
+      min-height: 86vh;
+      min-height: 86dvh;
+    }
+  }
+
+  /* Reduce hover lift on touch devices - prevents sticky hover */
+  @media (hover: none) {
+    .hover-fade-up-animation:hover,
+    .card-hover:hover,
+    .hover\:card-lift:hover {
+      transform: none !important;
+      animation: none !important;
+    }
+    .scroll-animate-arrow:hover .animated-arrow {
+      animation: none !important;
+    }
+  }
+
+  /* Active (tap) feedback on touch devices */
+  @media (hover: none) {
+    button:active:not(:disabled),
+    [role="button"]:active,
+    a:active {
+      transform: scale(0.97);
+      transition: transform 0.1s ease-out;
+    }
+  }
+
+  /* Mobile typography: tighter line-height for large headlines */
+  @media (max-width: 640px) {
+    h1, h2, h3 {
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+    }
+    h1 { letter-spacing: -0.02em; }
+  }
+
+  /* Balanced text wrap on narrow screens */
+  h1, h2, h3, .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Cards on mobile: subtler border + better tap area, cleaner radii */
+  @media (max-width: 640px) {
+    .shadcn-card,
+    [class*="rounded-xl"].border,
+    [class*="rounded-2xl"].border {
+      border-radius: 0.875rem;
+    }
+  }
+
+  /* Improve mobile form controls spacing and breathing room */
+  @media (max-width: 640px) {
+    form .space-y-6 > * + * { margin-top: 1rem; }
+    form .space-y-4 > * + * { margin-top: 0.75rem; }
+  }
+
+  /* Bottom spacing for floating CTAs / scroll-to-top */
+  @media (max-width: 640px) {
+    .scroll-to-top-btn {
+      bottom: calc(1rem + env(safe-area-inset-bottom, 0)) !important;
+      right: 1rem !important;
+    }
+  }
 }
 
 /* MODERN 2025 BACKGROUNDS */
 body {
-  /* Light mode: Clean neutral background */
-  background: hsl(0, 0%, 99%) !important;
+  /* Light mode: Soft neutral with subtle blue-violet mesh for depth and reduced glare */
+  background:
+    radial-gradient(ellipse at 15% 10%, hsla(214, 95%, 70%, 0.07) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 90%, hsla(199, 85%, 65%, 0.05) 0%, transparent 55%),
+    linear-gradient(180deg, hsl(220, 26%, 97.5%) 0%, hsl(220, 22%, 95.5%) 100%) !important;
   background-attachment: fixed !important;
   min-height: 100vh !important;
   position: relative;
 }
 
-/* Light mode no texture overlay */
+/* Light mode: very subtle floating accents for depth */
 body::before {
   content: "";
   position: fixed;
@@ -862,9 +937,12 @@ body::before {
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: none;
+  background-image:
+    radial-gradient(circle at 20% 30%, hsla(214, 95%, 60%, 0.04) 0%, transparent 45%),
+    radial-gradient(circle at 80% 70%, hsla(268, 60%, 60%, 0.03) 0%, transparent 45%);
   pointer-events: none;
   z-index: 0;
+  animation: meshMove 24s ease-in-out infinite alternate;
 }
 
 html.dark body {
@@ -1150,15 +1228,17 @@ html.dark body::before {
 
 /* Glass morphism effect for profile cards */
 .glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px) saturate(1.1);
+  -webkit-backdrop-filter: blur(20px) saturate(1.1);
+  border: 1px solid hsl(var(--card-border));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px -4px rgba(15, 23, 42, 0.06);
 }
 
 .dark .glass-card {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px -4px rgba(0, 0, 0, 0.4);
 }
 
 /* Skeleton shimmer for loading states */

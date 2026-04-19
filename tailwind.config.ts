@@ -6,9 +6,9 @@ export default {
   theme: {
     extend: {
       borderRadius: {
-        lg: ".5625rem", /* 9px */
-        md: ".375rem", /* 6px */
-        sm: ".1875rem", /* 3px */
+        lg: ".75rem",    /* 12px - modern cards */
+        md: ".5rem",     /* 8px  - inputs, buttons */
+        sm: ".3125rem",  /* 5px  - small badges */
       },
       colors: {
         background: "hsl(var(--background) / <alpha-value>)",

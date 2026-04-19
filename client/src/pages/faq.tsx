@@ -98,23 +98,23 @@ export default function FAQ() {
 
   return (
     <div className="min-h-screen pt-20">
-      <div className="max-w-4xl mx-auto px-6 md:px-8 py-12">
-        <Breadcrumbs items={[{ label: "Помощь" }]} className="mb-8" />
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-10 md:py-12">
+        <Breadcrumbs items={[{ label: "Помощь" }]} className="mb-6 sm:mb-8" />
 
-        <div className="text-center mb-16 animate-fade-up">
-          <Badge variant="secondary" className="mb-4">
+        <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
+          <Badge variant="secondary" className="mb-3 sm:mb-4">
             Помощь
           </Badge>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-3">
-            <HelpCircle className="h-10 w-10 text-primary" />
-            Часто задаваемые вопросы
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 px-2">
+            <HelpCircle className="h-7 w-7 sm:h-9 sm:w-9 md:h-10 md:w-10 text-primary flex-shrink-0" />
+            <span>Часто задаваемые вопросы</span>
           </h1>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-base sm:text-lg text-muted-foreground px-2">
             Найдите ответы на популярные вопросы о нашем оборудовании
           </p>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {categories.map((category) => {
             const categoryItems = faqData.filter((item) => item.category === category);
             return (
@@ -145,7 +145,7 @@ export default function FAQ() {
           })}
         </div>
 
-        <Card className="mt-12 scroll-animate bg-primary/5 border-primary/20">
+        <Card className="mt-8 sm:mt-10 md:mt-12 scroll-animate bg-primary/5 border-primary/20">
           <CardContent className="pt-6">
             <div className="text-center">
               <h3 className="font-semibold mb-2">Не нашли ответ на свой вопрос?</h3>
