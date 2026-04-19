@@ -391,29 +391,30 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
         onClick={onClose}
       />
 
-      <div className="relative w-full sm:max-w-3xl max-h-[90vh] sm:max-h-[95vh] overflow-hidden bg-gradient-to-br from-white via-slate-50 to-blue-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/20 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-white/20 dark:border-slate-700/50">
+      <div className="relative w-full sm:max-w-3xl h-[100dvh] sm:h-auto sm:max-h-[92vh] flex flex-col overflow-hidden bg-gradient-to-br from-white via-slate-50 to-blue-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/20 sm:rounded-2xl shadow-2xl border border-white/20 dark:border-slate-700/50">
         {/* Header */}
-        <div className="sticky top-0 z-20 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 dark:from-blue-700 dark:via-indigo-700 dark:to-violet-700 p-3 sm:p-6">
+        <div className="flex-shrink-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 dark:from-blue-700 dark:via-indigo-700 dark:to-violet-700 px-3 sm:px-6 pt-3 sm:pt-5 pb-3 sm:pb-5 safe-area-top">
           <div className="flex items-center justify-between gap-2 sm:gap-3">
-            <div className="flex items-center gap-2 sm:gap-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+              <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                <ShoppingBag className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
               </div>
-              <div className="min-w-0">
-                <h2 className="text-lg sm:text-2xl font-bold text-white truncate">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base sm:text-2xl font-bold text-white truncate">
                   Оформление заказа
                 </h2>
                 <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1">
-                  <div className="flex items-center gap-1 sm:gap-1.5">
-                    <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/70" />
-                    <span className={`text-xs sm:text-sm font-medium ${timeLeft < 60 ? "text-red-200" : "text-white/80"}`}>
+                  <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+                    <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-white/70 flex-shrink-0" />
+                    <span className={`text-[11px] sm:text-sm font-medium tabular-nums ${timeLeft < 60 ? "text-red-200" : "text-white/80"}`}>
                       {formatTime(timeLeft)}
                     </span>
                   </div>
                   {isLoggedIn && (
-                    <Badge className="bg-white/20 text-white border-0 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5">
-                      <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" />
-                      Авторизован
+                    <Badge className="bg-white/20 text-white border-0 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 flex-shrink min-w-0 truncate">
+                      <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1 flex-shrink-0" />
+                      <span className="hidden xs:inline sm:inline">Авторизован</span>
+                      <span className="xs:hidden sm:hidden">OK</span>
                     </Badge>
                   )}
                 </div>
@@ -423,15 +424,15 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-white hover:bg-white/20 rounded-full h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
+              className="text-white hover:bg-white/20 rounded-full h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
           </div>
 
           {/* Step Progress */}
-          <div className="mt-4 sm:mt-6">
-            <div className="flex items-center justify-between mb-2">
+          <div className="mt-3 sm:mt-5">
+            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
               {STEPS.map((step, index) => {
                 const Icon = step.icon;
                 const isActive = index === currentStepIndex;
@@ -439,22 +440,30 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 const isSuccess = paymentStatus === "success" && step.key === "confirm";
                 
                 return (
-                  <div key={step.key} className="flex items-center">
-                    <div className={`
-                      flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full transition-all duration-300
-                      ${isSuccess ? "bg-emerald-500 scale-110" : ""}
-                      ${isActive && !isSuccess ? "bg-white text-blue-600 scale-110 shadow-lg" : ""}
-                      ${isCompleted ? "bg-white/30 text-white" : ""}
-                      ${!isActive && !isCompleted && !isSuccess ? "bg-white/10 text-white/50" : ""}
-                    `}>
-                      {isCompleted || isSuccess ? (
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5" />
-                      ) : (
-                        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-                      )}
+                  <div key={step.key} className="flex items-center flex-1 last:flex-none min-w-0">
+                    <div className="flex flex-col items-center gap-1 sm:gap-1.5 min-w-0">
+                      <div className={`
+                        flex items-center justify-center w-7 h-7 sm:w-10 sm:h-10 rounded-full transition-all duration-300 flex-shrink-0
+                        ${isSuccess ? "bg-emerald-500 scale-110" : ""}
+                        ${isActive && !isSuccess ? "bg-white text-blue-600 scale-110 shadow-lg" : ""}
+                        ${isCompleted ? "bg-white/30 text-white" : ""}
+                        ${!isActive && !isCompleted && !isSuccess ? "bg-white/10 text-white/50" : ""}
+                      `}>
+                        {isCompleted || isSuccess ? (
+                          <Check className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                        ) : (
+                          <Icon className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                        )}
+                      </div>
+                      <span className={`
+                        text-[9px] sm:text-[11px] font-medium leading-tight text-center truncate max-w-[60px] sm:max-w-none
+                        ${isActive ? "text-white" : "text-white/60"}
+                      `}>
+                        {step.label}
+                      </span>
                     </div>
                     {index < STEPS.length - 1 && (
-                      <div className={`hidden sm:block w-8 md:w-12 h-0.5 mx-1 sm:mx-2 transition-all duration-300 ${
+                      <div className={`flex-1 h-0.5 mx-1 sm:mx-2 -mt-4 sm:-mt-5 transition-all duration-300 ${
                         isCompleted ? "bg-white/60" : "bg-white/20"
                       }`} />
                     )}
@@ -462,44 +471,44 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 );
               })}
             </div>
-            <Progress value={progressPercent} className="h-1 bg-white/20 [&>div]:bg-white" />
+            <Progress value={progressPercent} className="h-1 bg-white/20 [&>div]:bg-white mt-2" />
           </div>
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(90vh-180px)] sm:max-h-[calc(95vh-200px)] p-3 sm:p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-6">
           {/* Step 1: Product */}
           {currentStep === "product" && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-4 sm:space-y-6 animate-fade-in">
               {/* User Quick Card (if logged in) */}
               {isLoggedIn && (
                 <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-4">
-                      <Avatar className="w-14 h-14 border-2 border-white shadow-md">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-center gap-3 sm:gap-4">
+                      <Avatar className="w-11 h-11 sm:w-14 sm:h-14 border-2 border-white shadow-md flex-shrink-0">
                         <AvatarImage src={user?.avatar || undefined} />
-                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-500 text-white font-bold">
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-500 text-white font-bold text-sm">
                           {getUserInitials()}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-lg truncate">
+                        <p className="font-semibold text-sm sm:text-lg truncate">
                           {user?.firstName || user?.email?.split('@')[0]}
                         </p>
-                        <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="secondary" className="text-xs">
-                            <Heart className="w-3 h-3 mr-1" />
+                        <p className="text-xs sm:text-sm text-muted-foreground truncate">{user?.email}</p>
+                        <div className="flex items-center gap-1.5 sm:gap-2 mt-1 flex-wrap">
+                          <Badge variant="secondary" className="text-[10px] sm:text-xs">
+                            <Heart className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
                             {favorites.length} в избранном
                           </Badge>
                           {recentOrders.length > 0 && (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-[10px] sm:text-xs">
                               {recentOrders.length} заказов
                             </Badge>
                           )}
                         </div>
                       </div>
-                      <div className="hidden sm:flex flex-col items-end gap-1">
+                      <div className="hidden sm:flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="text-xs text-muted-foreground">Данные заполнены</span>
                         <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                       </div>
@@ -510,22 +519,22 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
               {/* Product Card */}
               <Card className="border-0 shadow-lg overflow-hidden">
-                <div className="bg-gradient-to-r from-slate-100 to-blue-100/50 dark:from-slate-800 dark:to-blue-900/30 p-1">
-                  <Badge variant="secondary" className="text-xs">
+                <div className="bg-gradient-to-r from-slate-100 to-blue-100/50 dark:from-slate-800 dark:to-blue-900/30 px-3 sm:px-4 py-1.5">
+                  <Badge variant="secondary" className="text-[10px] sm:text-xs">
                     <Package className="w-3 h-3 mr-1" />
-                    Артикул: {product.sku}
+                    <span className="truncate max-w-[200px] sm:max-w-none">Артикул: {product.sku}</span>
                   </Badge>
                 </div>
-                <CardContent className="p-5">
-                  <div className="flex gap-4">
-                    <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center flex-shrink-0">
-                      <Package className="w-10 h-10 text-blue-500" />
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex gap-3 sm:gap-4">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center flex-shrink-0">
+                      <Package className="w-8 h-8 sm:w-10 sm:h-10 text-blue-500" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-xl mb-1">{product.name}</h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2">{product.description}</p>
-                      <div className="flex items-center gap-2 mt-3">
-                        <Badge className={`${product.stock > 5 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+                      <h3 className="font-bold text-base sm:text-xl mb-1 break-words">{product.name}</h3>
+                      <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">{product.description}</p>
+                      <div className="flex items-center gap-2 mt-2 sm:mt-3">
+                        <Badge className={`text-[10px] sm:text-xs ${product.stock > 5 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
                           {product.stock > 0 ? `В наличии: ${product.stock} шт.` : 'Нет в наличии'}
                         </Badge>
                       </div>
@@ -533,17 +542,17 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                   </div>
 
                   {/* Quantity & Price */}
-                  <div className="mt-6 p-4 rounded-xl bg-muted/50">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="mt-4 sm:mt-6 p-3 sm:p-4 rounded-xl bg-muted/50">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                       <div>
-                        <Label className="text-sm text-muted-foreground">Количество</Label>
-                        <div className="flex items-center gap-2 mt-2">
+                        <Label className="text-xs sm:text-sm text-muted-foreground">Количество</Label>
+                        <div className="flex items-center gap-2 mt-1.5 sm:mt-2">
                           <Button
                             variant="outline"
                             size="icon"
                             onClick={() => handleQuantityChange(-1)}
                             disabled={quantity <= 1}
-                            className="h-10 w-10 rounded-full"
+                            className="h-9 w-9 sm:h-10 sm:w-10 rounded-full flex-shrink-0"
                           >
                             <Minus className="w-4 h-4" />
                           </Button>
@@ -554,7 +563,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                               const maxStock = product?.stock || 99;
                               setQuantity(Math.min(maxStock, Math.max(1, parseInt(e.target.value) || 1)));
                             }}
-                            className="text-center w-16 h-10 font-bold text-lg"
+                            className="text-center w-14 sm:w-16 h-9 sm:h-10 font-bold text-base sm:text-lg"
                             min={1}
                             max={product?.stock || 99}
                           />
@@ -563,15 +572,15 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                             size="icon"
                             onClick={() => handleQuantityChange(1)}
                             disabled={quantity >= (product?.stock || 99)}
-                            className="h-10 w-10 rounded-full"
+                            className="h-9 w-9 sm:h-10 sm:w-10 rounded-full flex-shrink-0"
                           >
                             <Plus className="w-4 h-4" />
                           </Button>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm text-muted-foreground">Цена за единицу</p>
-                        <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                      <div className="text-left sm:text-right">
+                        <p className="text-xs sm:text-sm text-muted-foreground">Цена за единицу</p>
+                        <p className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent break-words">
                           {formatPrice(price)}
                         </p>
                       </div>
@@ -631,22 +640,22 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
               {/* Order Summary */}
               <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-blue-950/20 dark:via-slate-900 dark:to-indigo-950/20">
-                <CardContent className="p-5">
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
+                <CardContent className="p-4 sm:p-5">
+                  <div className="space-y-2 sm:space-y-3">
+                    <div className="flex justify-between gap-2 text-xs sm:text-sm">
                       <span className="text-muted-foreground">Сумма ({quantity} шт.)</span>
-                      <span className="font-medium">{formatPrice(totalAmount)}</span>
+                      <span className="font-medium tabular-nums text-right">{formatPrice(totalAmount)}</span>
                     </div>
                     {discount > 0 && (
-                      <div className="flex justify-between text-sm text-emerald-600 dark:text-emerald-400">
+                      <div className="flex justify-between gap-2 text-xs sm:text-sm text-emerald-600 dark:text-emerald-400">
                         <span>Скидка ({discount}%)</span>
-                        <span className="font-medium">-{formatPrice(discountAmount)}</span>
+                        <span className="font-medium tabular-nums text-right">-{formatPrice(discountAmount)}</span>
                       </div>
                     )}
                     <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold text-lg">Итого</span>
-                      <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="font-semibold text-base sm:text-lg">Итого</span>
+                      <span className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent tabular-nums text-right break-words">
                         {formatPrice(finalAmount)}
                       </span>
                     </div>
@@ -658,18 +667,18 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
           {/* Step 2: Contact Details */}
           {currentStep === "contact" && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-4 sm:space-y-6 animate-fade-in">
               {isLoggedIn && (
                 <Alert className="border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  <AlertDescription className="text-emerald-700 dark:text-emerald-300">
+                  <AlertDescription className="text-emerald-700 dark:text-emerald-300 text-xs sm:text-sm">
                     Данные заполнены автоматически из вашего профиля. Вы можете их изменить.
                   </AlertDescription>
                 </Alert>
               )}
 
               <Card className="border-0 shadow-lg">
-                <CardContent className="p-5 space-y-5">
+                <CardContent className="p-4 sm:p-5 space-y-4 sm:space-y-5">
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <User className="w-4 h-4 text-blue-500" />
@@ -742,28 +751,28 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
           {currentStep === "payment" && (
             <div className="space-y-6 animate-fade-in">
               <Card className="border-0 shadow-lg">
-                <CardContent className="p-5">
-                  <Label className="text-base font-semibold mb-4 block">Способ оплаты</Label>
+                <CardContent className="p-4 sm:p-5">
+                  <Label className="text-sm sm:text-base font-semibold mb-3 sm:mb-4 block">Способ оплаты</Label>
                   <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
                     <div className="space-y-3">
                       <div 
-                        className={`flex items-center space-x-3 p-4 border-2 rounded-xl transition-all cursor-pointer ${
+                        className={`flex items-center space-x-2 sm:space-x-3 p-3 sm:p-4 border-2 rounded-xl transition-all cursor-pointer ${
                           paymentMethod === "card" 
                             ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30" 
                             : "border-muted hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
                         }`}
                         onClick={() => setPaymentMethod("card")}
                       >
-                        <RadioGroupItem value="card" id="card" />
-                        <Label htmlFor="card" className="flex-1 flex items-center gap-3 cursor-pointer">
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
-                            <CreditCard className="w-5 h-5 text-white" />
+                        <RadioGroupItem value="card" id="card" className="flex-shrink-0" />
+                        <Label htmlFor="card" className="flex-1 flex items-center gap-2 sm:gap-3 cursor-pointer min-w-0">
+                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center flex-shrink-0">
+                            <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                           </div>
-                          <div className="flex-1">
-                            <span className="font-medium">Банковская карта</span>
-                            <p className="text-xs text-muted-foreground">Visa, Mastercard, МИР</p>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium text-sm sm:text-base block truncate">Банковская карта</span>
+                            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">Visa, Mastercard, МИР</p>
                           </div>
-                          <div className="flex gap-1.5 items-center">
+                          <div className="hidden sm:flex gap-1.5 items-center flex-shrink-0">
                             <SiVisa className="w-8 h-5 opacity-60" />
                             <SiMastercard className="w-8 h-5 opacity-60" />
                             <MirLogo className="w-8 h-5 opacity-60" />
@@ -772,21 +781,21 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                       </div>
 
                       <div 
-                        className={`flex items-center space-x-3 p-4 border-2 rounded-xl transition-all cursor-pointer ${
+                        className={`flex items-center space-x-2 sm:space-x-3 p-3 sm:p-4 border-2 rounded-xl transition-all cursor-pointer ${
                           paymentMethod === "sbp" 
                             ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30" 
                             : "border-muted hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
                         }`}
                         onClick={() => setPaymentMethod("sbp")}
                       >
-                        <RadioGroupItem value="sbp" id="sbp" />
-                        <Label htmlFor="sbp" className="flex-1 flex items-center gap-3 cursor-pointer">
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
-                            <QrCode className="w-5 h-5 text-white" />
+                        <RadioGroupItem value="sbp" id="sbp" className="flex-shrink-0" />
+                        <Label htmlFor="sbp" className="flex-1 flex items-center gap-2 sm:gap-3 cursor-pointer min-w-0">
+                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center flex-shrink-0">
+                            <QrCode className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                           </div>
-                          <div className="flex-1">
-                            <span className="font-medium">СБП (QR-код)</span>
-                            <p className="text-xs text-muted-foreground">Система быстрых платежей</p>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium text-sm sm:text-base block truncate">СБП (QR-код)</span>
+                            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">Система быстрых платежей</p>
                           </div>
                         </Label>
                       </div>
@@ -797,52 +806,52 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
               {/* Consents */}
               <Card className="border-0 shadow-lg">
-                <CardContent className="p-5 space-y-4">
-                  <Label className="text-base font-semibold">Согласия</Label>
+                <CardContent className="p-4 sm:p-5 space-y-3 sm:space-y-4">
+                  <Label className="text-sm sm:text-base font-semibold">Согласия</Label>
                   
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="space-y-2 sm:space-y-3">
+                    <div className="flex items-start gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
                       <Checkbox
                         id="consent-personal-data"
                         checked={consentPersonalData}
                         onCheckedChange={(checked) => setConsentPersonalData(checked === true)}
-                        className="mt-0.5"
+                        className="mt-0.5 flex-shrink-0"
                       />
-                      <Label htmlFor="consent-personal-data" className="text-sm leading-relaxed cursor-pointer">
+                      <Label htmlFor="consent-personal-data" className="text-xs sm:text-sm leading-relaxed cursor-pointer min-w-0">
                         Я даю согласие на обработку персональных данных <span className="text-destructive">*</span>
                       </Label>
                     </div>
 
-                    <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                    <div className="flex items-start gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
                       <Checkbox
                         id="consent-data-processing"
                         checked={consentDataProcessing}
                         onCheckedChange={(checked) => setConsentDataProcessing(checked === true)}
-                        className="mt-0.5"
+                        className="mt-0.5 flex-shrink-0"
                       />
-                      <Label htmlFor="consent-data-processing" className="text-sm leading-relaxed cursor-pointer">
+                      <Label htmlFor="consent-data-processing" className="text-xs sm:text-sm leading-relaxed cursor-pointer min-w-0 break-words">
                         Я принимаю условия{" "}
-                        <a href="/data-processing-policy" target="_blank" className="text-blue-600 hover:underline">
+                        <a href="/data-processing-policy" target="_blank" className="text-blue-600 hover:underline break-words">
                           Политики обработки данных
                         </a>{" "}
                         и{" "}
-                        <a href="/privacy-policy" target="_blank" className="text-blue-600 hover:underline">
+                        <a href="/privacy-policy" target="_blank" className="text-blue-600 hover:underline break-words">
                           Политики конфиденциальности
                         </a>{" "}
                         <span className="text-destructive">*</span>
                       </Label>
                     </div>
 
-                    <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                    <div className="flex items-start gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
                       <Checkbox
                         id="consent-public-offer"
                         checked={consentPublicOffer}
                         onCheckedChange={(checked) => setConsentPublicOffer(checked === true)}
-                        className="mt-0.5"
+                        className="mt-0.5 flex-shrink-0"
                       />
-                      <Label htmlFor="consent-public-offer" className="text-sm leading-relaxed cursor-pointer">
+                      <Label htmlFor="consent-public-offer" className="text-xs sm:text-sm leading-relaxed cursor-pointer min-w-0 break-words">
                         Я принимаю условия{" "}
-                        <a href="/public-offer" target="_blank" className="text-blue-600 hover:underline">
+                        <a href="/public-offer" target="_blank" className="text-blue-600 hover:underline break-words">
                           Публичной оферты
                         </a>{" "}
                         <span className="text-destructive">*</span>
@@ -935,25 +944,25 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
                 <>
                   {/* Order Summary */}
                   <Card className="border-0 shadow-lg overflow-hidden">
-                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4">
-                      <h3 className="text-white font-semibold text-lg">Проверьте данные заказа</h3>
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 sm:px-5 py-3 sm:py-4">
+                      <h3 className="text-white font-semibold text-base sm:text-lg">Проверьте данные заказа</h3>
                     </div>
-                    <CardContent className="p-5 space-y-4">
+                    <CardContent className="p-4 sm:p-5 space-y-4">
                       {/* Product Info */}
-                      <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/30">
-                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center">
-                          <Package className="w-7 h-7 text-blue-500" />
+                      <div className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl bg-muted/30">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center flex-shrink-0">
+                          <Package className="w-6 h-6 sm:w-7 sm:h-7 text-blue-500" />
                         </div>
-                        <div className="flex-1">
-                          <p className="font-semibold">{product.name}</p>
-                          <p className="text-sm text-muted-foreground">Количество: {quantity} шт.</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm sm:text-base truncate">{product.name}</p>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Количество: {quantity} шт.</p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent tabular-nums">
                             {formatPrice(finalAmount)}
                           </p>
                           {discount > 0 && (
-                            <p className="text-sm text-emerald-600">Скидка: {formatPrice(discountAmount)}</p>
+                            <p className="text-[11px] sm:text-sm text-emerald-600 tabular-nums">Скидка: {formatPrice(discountAmount)}</p>
                           )}
                         </div>
                       </div>
@@ -962,40 +971,40 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
                       {/* Contact Info */}
                       <div className="space-y-2">
-                        <p className="text-sm font-medium text-muted-foreground">Контактные данные</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="flex items-center gap-2 text-sm">
-                            <User className="w-4 h-4 text-blue-500" />
-                            <span>{customerName}</span>
+                        <p className="text-xs sm:text-sm font-medium text-muted-foreground">Контактные данные</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                          <div className="flex items-center gap-2 text-xs sm:text-sm min-w-0">
+                            <User className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                            <span className="truncate">{customerName}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <Mail className="w-4 h-4 text-blue-500" />
+                          <div className="flex items-center gap-2 text-xs sm:text-sm min-w-0">
+                            <Mail className="w-4 h-4 text-blue-500 flex-shrink-0" />
                             <span className="truncate">{customerEmail}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <Phone className="w-4 h-4 text-blue-500" />
-                            <span>{customerPhone}</span>
+                          <div className="flex items-center gap-2 text-xs sm:text-sm min-w-0">
+                            <Phone className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                            <span className="truncate">{customerPhone}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <CreditCard className="w-4 h-4 text-blue-500" />
-                            <span>{paymentMethod === "card" ? "Банковская карта" : "СБП"}</span>
+                          <div className="flex items-center gap-2 text-xs sm:text-sm min-w-0">
+                            <CreditCard className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                            <span className="truncate">{paymentMethod === "card" ? "Банковская карта" : "СБП"}</span>
                           </div>
                         </div>
                         {deliveryAddress && (
-                          <div className="flex items-center gap-2 text-sm mt-2">
-                            <MapPin className="w-4 h-4 text-blue-500" />
-                            <span>{deliveryAddress}</span>
+                          <div className="flex items-start gap-2 text-xs sm:text-sm mt-2 min-w-0">
+                            <MapPin className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                            <span className="break-words">{deliveryAddress}</span>
                           </div>
                         )}
                       </div>
 
                       {/* Delivery Info */}
-                      <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
-                        <div className="flex items-center gap-3">
-                          <Truck className="w-5 h-5 text-amber-600" />
-                          <div>
-                            <p className="font-medium text-amber-700 dark:text-amber-300">Информация о доставке</p>
-                            <p className="text-sm text-amber-600 dark:text-amber-400">
+                      <div className="p-3 sm:p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                        <div className="flex items-start gap-2.5 sm:gap-3">
+                          <Truck className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <p className="font-medium text-amber-700 dark:text-amber-300 text-sm sm:text-base">Информация о доставке</p>
+                            <p className="text-xs sm:text-sm text-amber-600 dark:text-amber-400">
                               Детали доставки будут согласованы с менеджером
                             </p>
                           </div>
@@ -1011,7 +1020,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
 
         {/* Footer */}
         {paymentStatus !== "success" && paymentStatus !== "error" && (
-          <div className="sticky bottom-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t p-3 sm:p-6 safe-area-bottom">
+          <div className="flex-shrink-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t px-3 sm:px-6 py-3 sm:py-4 safe-area-bottom">
             <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3">
               {currentStepIndex > 0 && (
                 <Button
