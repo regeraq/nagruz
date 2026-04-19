@@ -30,13 +30,29 @@ import { randomBytes } from "crypto";
 import commercialFilesRouter from "./api/commercial/files";
 import fileDownloadRouter from "./api/files/download";
 
-// SECURITY: API keys must be in environment variables, no hardcoded fallbacks
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const OWNER_EMAIL = process.env.OWNER_EMAIL || "rostext@gmail.com";
-const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev"; // Use verified domain for production
+// Unified email service (Yandex Postbox / Resend / noop — via EMAIL_PROVIDER env)
+import {
+  sendEmail,
+  sendEmailWithAttachment,
+  getEmailProviderStatus,
+} from "./services/email";
 
-if (!RESEND_API_KEY) {
-  console.warn("⚠️ RESEND_API_KEY not set in environment variables. Email functionality will be disabled.");
+const OWNER_EMAIL = process.env.OWNER_EMAIL || "rostext@gmail.com";
+
+{
+  const s = getEmailProviderStatus();
+  const ready = s.yandex.configured || s.resend.configured || s.provider === "noop";
+  if (!ready) {
+    console.warn(
+      `⚠️ [email] No provider configured. EMAIL_PROVIDER=${s.provider}. ` +
+        `Set YANDEX_POSTBOX_KEY_ID+YANDEX_POSTBOX_SECRET (recommended) or RESEND_API_KEY. ` +
+        `Email sending will silently fail until configured.`,
+    );
+  } else {
+    console.log(
+      `[email] provider=${s.provider}, yandex=${s.yandex.configured ? "ok" : "off"}, resend=${s.resend.configured ? "ok" : "off"}, from=${s.fromName} <${s.fromEmail}>`,
+    );
+  }
 }
 
 // Constants
@@ -50,223 +66,6 @@ const ALLOWED_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ];
 const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
-const API_TIMEOUT_MS = 10000; // 10 seconds for regular emails
-const API_TIMEOUT_WITH_ATTACHMENT_MS = 120000; // 120 seconds (2 minutes) for emails with attachments
-
-/**
- * FIXED: Email sending with timeout and better error handling
- */
-async function sendEmail(to: string, subject: string, html: string) {
-  if (!RESEND_API_KEY) {
-    console.warn("⚠️ RESEND_API_KEY not configured");
-    return { success: false, message: "Email service not configured" };
-  }
-
-  try {
-    // FIXED: Add timeout to prevent hanging requests
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
-    // Resend requires verified domain to send to external emails
-    // For production, you need to verify your domain in Resend Dashboard
-    // Test domain onboarding@resend.dev only works for the email used during Resend signup
-    const emailPayload = {
-      from: RESEND_FROM_EMAIL,
-      to,
-      subject,
-      html,
-      reply_to: OWNER_EMAIL, // Set reply-to to actual email
-    };
-
-    console.log("📧 [sendEmail] Sending email:", { to, subject, from: emailPayload.from });
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify(emailPayload),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error("❌ [sendEmail] Resend API error:", { 
-        status: response.status, 
-        statusText: response.statusText,
-        data 
-      });
-      
-      // Special handling for domain verification error
-      if (data.message && (data.message.includes("domain is not verified") || data.message.includes("You can only send testing emails"))) {
-        console.error("⚠️ [sendEmail] DOMAIN VERIFICATION REQUIRED:");
-        console.error("   Resend requires a verified domain to send to external emails.");
-        console.error("   Please verify your domain at: https://resend.com/domains");
-        console.error("   Current from email:", RESEND_FROM_EMAIL);
-        console.error("   Target email:", to);
-        console.error("   Error:", data.message);
-        console.error("   See RESEND_DOMAIN_VERIFICATION.md for instructions");
-        
-        // FIXED: Return more helpful error message
-        return { 
-          success: false, 
-          error: "Domain verification required. Please verify your domain in Resend dashboard.",
-          requiresDomainVerification: true,
-          data 
-        };
-      }
-      
-      return { success: false, error: data.message || "Failed to send email", data };
-    }
-
-    console.log("✅ [sendEmail] Email sent successfully:", { to, subject, id: data.id });
-    return { success: true, data };
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
-      console.error("⏱️ [sendEmail] Email sending timeout");
-      return { success: false, error: "Timeout" };
-    }
-    console.error("❌ [sendEmail] Error sending email:", error);
-    return { success: false, error: error.message || "Unknown error" };
-  }
-}
-
-/**
- * Send email with attachment support
- */
-async function sendEmailWithAttachment(emailData: {
-  from: string;
-  to: string;
-  subject: string;
-  html: string;
-  attachments?: Array<{
-    filename: string;
-    content: string;
-    type?: string;
-  }>;
-  reply_to?: string;
-}) {
-  if (!RESEND_API_KEY) {
-    console.warn("⚠️ RESEND_API_KEY not configured");
-    return { success: false, message: "Email service not configured" };
-  }
-
-  try {
-    const hasAttachments = !!(emailData.attachments && emailData.attachments.length > 0);
-    const timeoutMs = hasAttachments ? API_TIMEOUT_WITH_ATTACHMENT_MS : API_TIMEOUT_MS;
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    // Resend API format for attachments: content should be base64 string
-    const emailPayload: any = {
-      from: RESEND_FROM_EMAIL,
-      to: emailData.to,
-      subject: emailData.subject,
-      html: emailData.html,
-      reply_to: emailData.reply_to || OWNER_EMAIL,
-    };
-
-    // Format attachments for Resend API
-    if (hasAttachments) {
-      emailPayload.attachments = emailData.attachments!.map(att => ({
-        filename: att.filename,
-        content: att.content, // Base64 string
-      }));
-    }
-
-    const attachmentSize = hasAttachments 
-      ? emailPayload.attachments.reduce((sum: number, att: any) => sum + (att.content?.length || 0), 0)
-      : 0;
-
-    console.log("📧 [sendEmailWithAttachment] Sending email:", { 
-      to: emailData.to, 
-      subject: emailData.subject,
-      attachmentsCount: emailData.attachments?.length || 0,
-      hasAttachments,
-      attachmentSizeKB: Math.round(attachmentSize / 1024),
-      timeoutMs
-    });
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify(emailPayload),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error("❌ [sendEmailWithAttachment] Resend API error:", { 
-        status: response.status, 
-        statusText: response.statusText,
-        data,
-        payload: {
-          to: emailPayload.to,
-          subject: emailPayload.subject,
-          attachmentsCount: emailPayload.attachments?.length || 0
-        }
-      });
-      
-      // Special handling for domain verification error
-      if (data.message && (data.message.includes("domain is not verified") || data.message.includes("You can only send testing emails"))) {
-        console.error("⚠️ [sendEmailWithAttachment] DOMAIN VERIFICATION REQUIRED:");
-        console.error("   Resend requires a verified domain to send to external emails.");
-        console.error("   Please verify your domain at: https://resend.com/domains");
-        console.error("   Current from email:", RESEND_FROM_EMAIL);
-        console.error("   Target email:", emailData.to);
-        console.error("   Error:", data.message);
-        console.error("   See RESEND_DOMAIN_VERIFICATION.md for instructions");
-        
-        // FIXED: Return more helpful error message
-        return { 
-          success: false, 
-          error: "Domain verification required. Please verify your domain in Resend dashboard.",
-          requiresDomainVerification: true,
-          data 
-        };
-      }
-      
-      return { success: false, error: data.message || "Failed to send email", data };
-    }
-
-    console.log("✅ [sendEmailWithAttachment] Email sent successfully:", { 
-      to: emailData.to, 
-      subject: emailData.subject, 
-      id: data.id,
-      attachmentsCount: emailData.attachments?.length || 0
-    });
-    return { success: true, data };
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
-      // This should not happen as we handle AbortError in the try block above
-      console.error("⏱️ [sendEmailWithAttachment] Email sending timeout (unexpected)");
-      return { success: false, error: "Timeout", timeout: true };
-    }
-    
-    // Handle network errors that weren't caught in the fetch try block
-    if (error.cause?.code === 'ECONNRESET' || error.cause?.code === 'ECONNREFUSED' || error.message?.includes('fetch failed')) {
-      console.error("❌ [sendEmailWithAttachment] Network error (catch block):", {
-        code: error.cause?.code,
-        message: error.message
-      });
-      return { success: false, error: "Network error - connection reset (file may be too large)", timeout: false, networkError: true };
-    }
-    
-    console.error("❌ [sendEmailWithAttachment] Error sending email:", error);
-    return { success: false, error: error.message || "Unknown error" };
-  }
-}
 
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -683,16 +482,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         </html>
       `;
 
-      // Prepare email with attachment if file exists
+      // Prepare email with attachment if file exists.
+      // `from` is omitted - services/email.ts picks MAIL_FROM_NAME/MAIL_FROM_EMAIL from env.
       const emailData: {
-        from: string;
         to: string;
         subject: string;
         html: string;
         reply_to: string;
         attachments?: Array<{ filename: string; content: string }>;
       } = {
-        from: RESEND_FROM_EMAIL,
         to: OWNER_EMAIL,
         subject: `Новое коммерческое предложение (ID: ${submission.id}) от ${escapeHtml(validatedData.name)}`,
         html: ownerEmailHtml,
@@ -760,12 +558,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .then(result => {
             if (result.success) {
               console.log("✅ [Contact] Commercial proposal email sent successfully", {
-                id: result.data?.id,
+                id: (result.data as { id?: string } | undefined)?.id,
                 hasAttachment: !!(emailData.attachments && emailData.attachments.length > 0)
               });
             } else {
-              const isTimeout = result.timeout === true || result.error?.includes("Timeout") || result.error?.includes("timeout");
-              const isNetworkError = result.networkError === true || result.error?.includes("Network error") || result.error?.includes("connection reset");
+              const isTimeout = result.error?.includes("Timeout") || result.error?.includes("timeout");
+              const isNetworkError = result.error?.includes("Network error") || result.error?.includes("connection reset");
               console.error("❌ [Contact] Failed to send commercial proposal email:", {
                 error: result.error,
                 data: result.data,
@@ -2383,12 +2181,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(400).json({ success: false, message: "Email уже подтверждён" });
         return;
       }
-      if (!RESEND_API_KEY) {
-        res.status(503).json({
-          success: false,
-          message: "Отправка email временно недоступна. Обратитесь в поддержку.",
-        });
-        return;
+      {
+        const s = getEmailProviderStatus();
+        const ready =
+          (s.provider === "yandex" && s.yandex.configured) ||
+          (s.provider === "resend" && s.resend.configured) ||
+          s.provider === "noop";
+        if (!ready) {
+          res.status(503).json({
+            success: false,
+            message: "Отправка email временно недоступна. Обратитесь в поддержку.",
+          });
+          return;
+        }
       }
       // Генерируем безопасный токен и сохраняем его в БД
       const token = randomBytes(32).toString("hex");
@@ -2976,6 +2781,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Update product error:", error);
       res.status(500).json({ success: false, message: "Failed to update product" });
+    }
+  });
+
+  // Admin: e-mail provider diagnostics (no secrets returned)
+  app.get("/api/admin/email/status", requireAdmin, (_req, res) => {
+    res.json({ success: true, status: getEmailProviderStatus() });
+  });
+
+  // Admin: send a test e-mail via configured provider (Yandex Postbox / Resend / noop)
+  app.post("/api/admin/email/test", requireAdmin, async (req, res) => {
+    try {
+      const rawTo = typeof req.body?.to === "string" ? req.body.to.trim() : "";
+      const to = rawTo || OWNER_EMAIL;
+
+      // Minimal e-mail validation so we don't blow up the SMTP server.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+        res.status(400).json({ success: false, message: "Invalid 'to' email" });
+        return;
+      }
+
+      const subject = `[TEST] ${process.env.MAIL_FROM_NAME || "Loaddevice"} e-mail provider check`;
+      const html = `
+        <div style="font-family:system-ui,sans-serif;padding:24px;max-width:560px;margin:0 auto;">
+          <h2 style="margin:0 0 12px 0;">Тестовое письмо</h2>
+          <p>Это автоматическое тестовое письмо для проверки настройки почтового сервиса.</p>
+          <ul>
+            <li><b>Получатель:</b> ${escapeHtml(to)}</li>
+            <li><b>Провайдер:</b> ${escapeHtml(getEmailProviderStatus().provider)}</li>
+            <li><b>Время отправки:</b> ${new Date().toISOString()}</li>
+          </ul>
+          <p>Если вы получили это письмо — значит интеграция работает корректно.</p>
+        </div>
+      `;
+
+      const result = await sendEmail(to, subject, html);
+      res.status(result.success ? 200 : 502).json({
+        success: result.success,
+        provider: getEmailProviderStatus().provider,
+        to,
+        error: result.error,
+        requiresDomainVerification: result.requiresDomainVerification,
+        data: result.data,
+      });
+    } catch (error) {
+      console.error("[admin email test] error:", error);
+      res.status(500).json({ success: false, message: "Internal error" });
     }
   });
 

@@ -117,6 +117,8 @@ app.use((req, res, next) => {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
+    // NB: связь с Yandex Postbox идёт только из серверной части (SMTP),
+    // поэтому здесь ей place нет. Resend оставлен на случай EMAIL_PROVIDER=resend.
     "connect-src 'self' https://api.resend.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",

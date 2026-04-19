@@ -649,115 +649,130 @@ bash scripts/migrate-server.sh `
 
 ---
 
-## 13. Российский email-сервис: выбор, цены, интеграция
+## 13. Российский email-сервис: Yandex Cloud Postbox
 
-Сейчас код использует **Resend (США)**. Это проблема по двум причинам:
+**Статус интеграции в коде**: готова. Модуль `server/services/email.ts` поддерживает трёх провайдеров через переключатель `EMAIL_PROVIDER=yandex|resend|noop`. По умолчанию — `yandex` (Yandex Cloud Postbox). Resend оставлен как fallback; можно полностью убрать, когда Postbox отстоит 1–2 недели стабильно.
 
-1. **152-ФЗ ст. 12** — отправка писем на email = трансграничная передача персональных данных. Для США нужно отдельное согласие пользователя и уведомление Роскомнадзора. Проще — не передавать.
-2. **Санкции/блокировки** — Resend может в любой момент перестать работать с РФ-картой.
+Почему именно Yandex Postbox:
 
-### Сравнение российских сервисов для транзакционных писем (2026)
+- Дата-центры в Москве / Владимире, 152-ФЗ и 242-ФЗ (данные не выходят из РФ).
+- Pay-per-use: **первые 100 писем/сутки бесплатно** (≈ 3000/месяц), далее ~10 ₽ за 1000 писем. На ожидаемом объёме (регистрации + уведомления о заказах) — деся́тки рублей в месяц.
+- Тот же алгоритм подписи, что и у AWS SES → совместимость с любой библиотекой nodemailer/smtp/AWS SDK.
+- Подтверждение домена через DKIM прямо в консоли (три CNAME-записи).
 
-| Сервис                  | Стартовая цена                  | Где ДЦ    | API/SMTP         | Бесплатный лимит       | Для нашего объёма (до 1–5 тыс. писем/мес) |
-| ----------------------- | ------------------------------- | --------- | ---------------- | ---------------------- | --------------------------------------- |
-| **Unisender Go**        | от ~500 ₽/мес (1000 писем)      | Москва    | REST API + SMTP  | 1000 писем/мес бесплатно на старте | ⭐ **оптимально**: серверы в РФ, 152-ФЗ, API похожий на SendGrid |
-| **Yandex Cloud Postbox**| pay-per-use, ~10 ₽ / 1000 писем | Москва    | SMTP + AWS SES API | До 100 писем/сутки бесплатно | Самый дешёвый при больших объёмах; нужна привязка Yandex Cloud-аккаунта |
-| **DashaMail**           | 1750 ₽/мес (50k писем)          | Россия    | SMTP + HTTP API  | Пробный период         | Дороговато для маленьких объёмов |
-| **SendPulse (RU)**      | ~500 ₽/мес или freemium 12k/мес бесплатно | Россия | SMTP + API | 12000 писем/мес бесплатно | Хорошо для старта |
-| **MailoPost**           | от 500–1500 ₽/мес               | Россия    | SMTP + API       | Пробный период         | Меньше документации, слабее API |
-| **Mail.ru for Business**| Бесплатно для своего домена, но без API по подписке | Россия | SMTP | ограничения по лимитам | Не подходит — бесплатная версия имеет жёсткие дневные лимиты |
+### Сравнение альтернатив (на случай, если Postbox не подойдёт)
 
-### Рекомендация
+| Сервис                  | Стартовая цена                  | Где ДЦ    | API/SMTP         | Бесплатный лимит       | Когда выбирать |
+| ----------------------- | ------------------------------- | --------- | ---------------- | ---------------------- | -------------- |
+| **Yandex Cloud Postbox**| pay-per-use, ~10 ₽ / 1000 писем | Москва    | SMTP + AWS SES API | До 100 писем/сутки (≈3000/мес) бесплатно | ⭐ **выбран в проекте**: дёшево, 152-ФЗ, стабильно |
+| **Unisender Go**        | от ~500 ₽/мес (1000 писем)      | Москва    | REST API + SMTP  | 1000 писем/мес бесплатно | Если нужна детальная аналитика доставки / шаблоны из UI |
+| **SendPulse (RU)**      | freemium 12k/мес бесплатно, далее ~500 ₽/мес | Россия | SMTP + API | 12 000 писем/мес бесплатно | Если объём именно 3–12k/мес и не хочется платить |
+| **DashaMail**           | 1750 ₽/мес (50k писем)          | Россия    | SMTP + HTTP API  | Пробный период         | При объёмах 20k+/мес |
+| **Mail.ru for Business**| Бесплатно для своего домена, но без API по подписке | Россия | SMTP | жёсткие дневные лимиты | Не подходит: строгие antispam-лимиты для транзакционных |
 
-Для этого проекта **оптимум — Unisender Go**:
+### Этап 1 — подготовка в Yandex Cloud (10–20 минут)
 
-- Серверы в Москве, документирован как совместимый с 152-ФЗ.
-- REST API аналогичен SendGrid/Resend — миграция кода ~15 строк.
-- Цены: первые 1000 писем/мес бесплатно, дальше — от 500 ₽/мес за небольшие объёмы.
-- Есть SMTP-шлюз, если захочешь не трогать код (но API лучше — он даёт статусы доставки).
+1. **Регистрация и биллинг.** https://console.yandex.cloud → войти через Яндекс-аккаунт. Привязать платёжный аккаунт (карту МИР/Visa/Mastercard). Стартовый грант — 4000 ₽ на 60 дней.
+2. **Активация Postbox.** В консоли в списке сервисов найти «Postbox» (через поиск). Если предложат активировать — активировать.
+3. **Подтверждение домена отправителя.**
+    - Postbox → **«Идентичности» → «Создать идентичность»**.
+    - Тип: **«Домен»**, значение `ваш-домен.ru`. Включить **Easy DKIM**.
+    - Консоль покажет **три `CNAME`** + **TXT для SPF и DMARC**:
 
-**Запасной вариант — Yandex Cloud Postbox**, если объёмы вырастут до десятков тысяч писем в месяц.
+        | Тип   | Имя                                | Значение (пример)                           |
+        | ----- | ---------------------------------- | ------------------------------------------- |
+        | CNAME | `xxxxx._domainkey.ваш-домен.ru`    | `xxxxx.dkim.postbox.yandexcloud.net`        |
+        | CNAME | `yyyyy._domainkey.ваш-домен.ru`    | `yyyyy.dkim.postbox.yandexcloud.net`        |
+        | CNAME | `zzzzz._domainkey.ваш-домен.ru`    | `zzzzz.dkim.postbox.yandexcloud.net`        |
+        | TXT   | `@` (корень домена)                | `v=spf1 include:_spf.yandex.net ~all`       |
+        | TXT   | `_dmarc.ваш-домен.ru`              | `v=DMARC1; p=none; rua=mailto:postmaster@ваш-домен.ru` |
 
-### Пошаговая регистрация в Unisender Go
+    - В ЛК регистратора домена (Beget/REG.RU) → DNS → добавить записи в точности как показано.
+    - Через 15–60 минут в Postbox → «Проверить». Домен должен стать «Подтверждён».
 
-1. https://go.unisender.ru/ → **«Зарегистрироваться»**.
-2. Указать домен-отправитель — `ваш-домен.ru`.
-3. В ЛК открыть раздел **«Домены»** → «Проверить домен». Сервис покажет **три DNS-записи** для вставки в DNS-зону регистратора (TXT для SPF, TXT+CNAME для DKIM, TXT для DMARC).
-4. В ЛК регистратора домена (Beget/REG.RU) добавить эти три записи точь-в-точь.
-5. Вернуться в Unisender Go → «Проверить» — через 5–30 минут зелёные галочки у всех трёх.
-6. В разделе **«API и интеграции»** → создать **API-ключ** (записать, больше не покажет).
+4. **Сервисный аккаунт + статический ключ доступа.**
+    - Yandex Cloud → **«Сервисные аккаунты» → «Создать»**. Имя: `loaddevice-mailer`. Роль: **`postbox.sender`** (или `postbox.editor`, если `sender` не виден).
+    - В карточке аккаунта → **«API-ключи» → «Создать новый ключ» → «Статический ключ доступа»**.
+    - Получишь:
+        - `Идентификатор ключа (Access Key ID)` = `YCAJ...` (20 символов).
+        - `Секретный ключ (Secret Access Key)` — длинная строка. **Показывается один раз, сохрани в менеджер паролей.**
 
-### Интеграция Unisender Go в код
+5. **Выход из sandbox (позже).** По умолчанию Postbox разрешает отправку только на подтверждённые email. Для отправки клиентам: в Postbox → «Запросить выход из песочницы». Ответ обычно 1–2 рабочих дня. Пока в sandbox — отдельно подтверди свой личный email как «Идентичность → Email» для тестов.
 
-Создай файл `server/services/email-unisender.ts` (вместо/рядом с текущим Resend-сервисом):
+### Этап 2 — конфигурация на сервере
 
-```typescript
-// Минимальная обёртка над Unisender Go Web API.
-// Документация: https://godocs.unisender.ru/web-api
-import { z } from "zod";
-
-const API_URL = "https://go1.unisender.ru/ru/transactional/api/v1/email/send.json";
-
-export interface SendEmailInput {
-  to: string | string[];
-  subject: string;
-  html: string;
-  text?: string;
-  fromName?: string;
-}
-
-export async function sendEmail(input: SendEmailInput): Promise<void> {
-  const apiKey = process.env.UNISENDER_GO_API_KEY;
-  if (!apiKey) {
-    console.warn("[email] UNISENDER_GO_API_KEY not set — email skipped");
-    return;
-  }
-
-  const fromEmail  = process.env.MAIL_FROM_EMAIL || "noreply@example.ru";
-  const fromName   = input.fromName || process.env.MAIL_FROM_NAME || "Loaddevice";
-  const recipients = Array.isArray(input.to) ? input.to : [input.to];
-
-  const body = {
-    message: {
-      recipients: recipients.map((email) => ({ email })),
-      body:        { html: input.html, plaintext: input.text ?? stripHtml(input.html) },
-      subject:     input.subject,
-      from_email:  fromEmail,
-      from_name:   fromName,
-    },
-  };
-
-  const res = await fetch(API_URL, {
-    method:  "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-KEY":    apiKey,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Unisender Go error ${res.status}: ${err}`);
-  }
-}
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-}
-```
-
-В `.env` добавляем:
+В `/var/www/loaddevice/.env` добавь/обнови блок:
 
 ```env
-UNISENDER_GO_API_KEY=eyJ...
-MAIL_FROM_EMAIL=noreply@ваш-домен.ru
+EMAIL_PROVIDER=yandex
+YANDEX_POSTBOX_KEY_ID=YCAJ...        # ваш Access Key ID
+YANDEX_POSTBOX_SECRET=...            # ваш Secret Access Key
+
+MAIL_FROM_EMAIL=noreply@ваш-домен.ru # в подтверждённом домене
 MAIL_FROM_NAME=Loaddevice
+OWNER_EMAIL=owner@ваш-домен.ru       # куда приходят уведомления админу
+
+# Остальное можно не писать, будут значения по умолчанию:
+# YANDEX_POSTBOX_REGION=ru-central1
+# YANDEX_POSTBOX_HOST=postbox.cloud.yandex.net
+# YANDEX_POSTBOX_PORT=465
 ```
 
-Дальше в местах отправки (регистрация, сброс пароля, уведомление о заказе) использовать `sendEmail()` из этого модуля вместо Resend. Удобнее всего — сделать общий `server/services/email.ts`, который экспортирует один `sendEmail`, а внутри переключает провайдера через `process.env.EMAIL_PROVIDER` (`unisender` | `resend`).
+Перезапусти приложение:
 
-> Если нужно — могу отдельным шагом сделать полную миграцию Resend → Unisender Go во всех endpoint-ах, с обратной совместимостью на переходный период.
+```bash
+ssh root@ваш_сервер "cd /var/www/loaddevice && git fetch origin && git reset --hard origin/main && bash update-project.sh"
+```
+
+### Этап 3 — проверка
+
+1. Через админку сайта (или curl’ом с admin-JWT) отправь тестовое письмо:
+
+    ```bash
+    curl -X POST https://ваш-домен.ru/api/admin/email/test \
+         -H "Authorization: Bearer ВАШ_ADMIN_JWT" \
+         -H "Content-Type: application/json" \
+         -d '{"to":"свой.email@example.com"}'
+    ```
+
+    Ожидаемый ответ:
+
+    ```json
+    { "success": true, "provider": "yandex", "to": "...", "data": { "messageId": "<...@postbox.cloud.yandex.net>" } }
+    ```
+
+2. Посмотри логи приложения:
+
+    ```bash
+    pm2 logs loaddevice --lines 100 | grep -i email
+    ```
+
+    Должен быть `[email:yandex] sent`.
+
+3. Проверь статус провайдера (не отдаёт секретов):
+
+    ```bash
+    curl https://ваш-домен.ru/api/admin/email/status -H "Authorization: Bearer ВАШ_ADMIN_JWT"
+    ```
+
+### Как это устроено в коде
+
+- Вся отправка идёт через `server/services/email.ts` — одна точка входа.
+- Publish API: `sendEmail(to, subject, html)` и `sendEmailWithAttachment({ to, subject, html, attachments, reply_to })`.
+- Внутри — переключатель `EMAIL_PROVIDER`:
+    - `yandex` — nodemailer + SMTP `postbox.cloud.yandex.net:465` (TLS). SMTP-пароль вычисляется из `YANDEX_POSTBOX_SECRET` функцией `deriveYandexSmtpPassword` (стандартный AWS SigV4-производный ключ).
+    - `resend` — тот же REST-вызов Resend, что был раньше (для отката на 1 шаг).
+    - `noop` — логирует, но ничего не отправляет (dev/CI).
+
+### Типичные ошибки и их диагностика
+
+| Симптом                                                             | Причина                                                  | Решение                                                                   |
+| ------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `[email:yandex] YANDEX_POSTBOX_KEY_ID or YANDEX_POSTBOX_SECRET not set` | Не задан ключ в `.env`.                                  | Добавь, перезапусти `pm2 restart loaddevice`.                             |
+| Ответ `554` / «not verified»                                        | Домен/email отправителя не подтверждён ИЛИ аккаунт в sandbox. | Проверь идентичность в консоли Postbox, запроси выход из sandbox.         |
+| `Invalid login` / `535 Authentication Credentials Invalid`          | Неверный Access Key ID или Secret.                       | Создай ключ заново, замени в `.env`.                                      |
+| Писем нет, ошибок нет                                               | Провайдер = `noop` или letter уходит в спам.             | `/api/admin/email/status` покажет провайдера; проверь Spam/Junk на стороне получателя. |
+| Долгий таймаут на деплое                                            | Порт 465 закрыт исходящим firewall на сервере.           | `ufw allow out 465/tcp` + у провайдера хостинга проверить egress.         |
 
 ---
 
@@ -847,7 +862,7 @@ free -h                          # RAM + swap
 | 502 Bad Gateway из nginx                             | Приложение не слушает `localhost:5000`    | `pm2 status`; `curl http://localhost:5000/api/products` |
 | `vite build` убивается OOM на 1 GB VPS               | Мало RAM                                  | Добавить swap ([§5.2](#52-swap-обязательно-если-ram--2-gb)) или поднять тариф до 2 GB |
 | Сайт открывается без SSL                             | Certbot не настроил / A-запись неверна    | `sudo certbot --nginx -d домен -d www.домен`; проверить `nslookup` |
-| Email «уходят, но не доходят»                        | Не настроены SPF/DKIM/DMARC               | В DNS добавить записи, которые просит Unisender Go ([§13](#13-российский-email-сервис-выбор-цены-интеграция)) |
+| Email «уходят, но не доходят»                        | Не настроены SPF/DKIM/DMARC, либо домен не подтверждён в Postbox | В DNS добавить 3 CNAME + SPF + DMARC, показанные в консоли Postbox ([§13](#13-российский-email-сервис-yandex-cloud-postbox)) |
 | «Обновил код — на сайте не поменялось»               | Либо не закоммитил (staged, но без push), либо не перезапустил pm2 | См. [QUICK_UPDATE.md](QUICK_UPDATE.md) раздел «Если обновил — а на сайте ничего не изменилось» |
 
 ---
@@ -887,12 +902,12 @@ free -h                          # RAM + swap
 
 ### Email и 152-ФЗ
 
-- [ ] Зарегистрирован аккаунт в Unisender Go (или выбранном).
-- [ ] В DNS добавлены SPF / DKIM / DMARC.
-- [ ] Домен подтверждён в Unisender Go (зелёные галочки).
-- [ ] `.env` содержит `UNISENDER_GO_API_KEY`, `MAIL_FROM_EMAIL`.
-- [ ] Код отправки email переведён на Unisender Go.
-- [ ] Отправлено тестовое письмо (регистрация/сброс пароля) — дошло.
+- [ ] Создан сервисный аккаунт Yandex Cloud + роль `postbox.sender`, получен статический ключ.
+- [ ] В DNS добавлены 3 CNAME (DKIM) + SPF + DMARC, показанные в консоли Postbox.
+- [ ] Домен подтверждён в Yandex Postbox (статус «Подтверждён»).
+- [ ] `.env` содержит `EMAIL_PROVIDER=yandex`, `YANDEX_POSTBOX_KEY_ID`, `YANDEX_POSTBOX_SECRET`, `MAIL_FROM_EMAIL`.
+- [ ] `POST /api/admin/email/test` возвращает `success: true`, письмо пришло.
+- [ ] Запрошен выход из sandbox (если нужна рассылка на неподтверждённые email).
 - [ ] На сайте есть страницы `/privacy` и `/consent`.
 - [ ] Подана заявка в РКН как оператор ПД.
 

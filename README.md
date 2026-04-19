@@ -110,8 +110,11 @@ JWT_SECRET=...                # openssl rand -base64 48
 JWT_REFRESH_SECRET=...        # ОТДЕЛЬНЫЙ от JWT_SECRET
 CSRF_SECRET=...               # ОТДЕЛЬНЫЙ ещё один
 
-UNISENDER_GO_API_KEY=...      # после подключения Unisender Go
+EMAIL_PROVIDER=yandex         # yandex | resend | noop
+YANDEX_POSTBOX_KEY_ID=YCAJ... # из Yandex Cloud → сервисный аккаунт → статический ключ
+YANDEX_POSTBOX_SECRET=...     # секретная часть того же ключа
 MAIL_FROM_EMAIL=noreply@ваш-домен.ru
+MAIL_FROM_NAME=Loaddevice
 OWNER_EMAIL=owner@ваш-домен.ru
 
 FRONTEND_URL=https://ваш-домен.ru
