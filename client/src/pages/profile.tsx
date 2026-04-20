@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -801,49 +802,81 @@ export default function Profile() {
   // Revoke single session
   const revokeSession = useMutation({
     mutationFn: async (sessionId: string) => {
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch(`/api/auth/sessions/${sessionId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Не удалось завершить сессию");
-      return res.json();
+      // Используем общий apiRequest: он добавляет Authorization, CSRF и корректно
+      // парсит ошибки (покажет message из ответа сервера, а не общую заглушку).
+      const res = await apiRequest("DELETE", `/api/auth/sessions/${sessionId}`);
+      return (await res.json().catch(() => ({}))) as { success?: boolean; message?: string };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/sessions"] });
+    onMutate: async (sessionId: string) => {
+      // Оптимистично убираем сессию из кэша — UI реагирует мгновенно.
+      await queryClient.cancelQueries({ queryKey: ["/api/auth/sessions"] });
+      const previous = queryClient.getQueryData<{ success: boolean; sessions: SessionInfo[] }>([
+        "/api/auth/sessions",
+      ]);
+      if (previous?.sessions) {
+        queryClient.setQueryData(["/api/auth/sessions"], {
+          ...previous,
+          sessions: previous.sessions.filter((s) => s.id !== sessionId),
+        });
+      }
+      return { previous };
+    },
+    onError: (err: any, _sessionId, context) => {
+      // Откатываем оптимистичное изменение и показываем реальную причину отказа.
+      if (context?.previous) {
+        queryClient.setQueryData(["/api/auth/sessions"], context.previous);
+      }
+      toast({
+        title: "Не удалось завершить сессию",
+        description: err?.message || "Попробуйте обновить страницу и повторить",
+        variant: "destructive",
+      });
+    },
+    onSuccess: (data) => {
+      if (data?.success === false) {
+        toast({
+          title: "Не удалось завершить сессию",
+          description: data.message || "Сервер отклонил запрос",
+          variant: "destructive",
+        });
+        return;
+      }
       toast({ title: "Сессия завершена", description: "Устройство разлогинено" });
     },
-    onError: () => {
-      toast({ title: "Ошибка", description: "Не удалось завершить сессию", variant: "destructive" });
+    onSettled: () => {
+      // В любом случае синхронизируемся с сервером — на случай расхождения.
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/sessions"] });
     },
   });
 
   // Revoke all sessions
   const revokeAllSessions = useMutation({
     mutationFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch("/api/auth/sessions/revoke-all", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Не удалось завершить сессии");
-      return res.json();
+      const res = await apiRequest("POST", "/api/auth/sessions/revoke-all");
+      return (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; revoked?: number };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data?.success === false) {
+        toast({
+          title: "Не удалось завершить сессии",
+          description: data.message || "Сервер отклонил запрос",
+          variant: "destructive",
+        });
+        return;
+      }
+      queryClient.setQueryData(["/api/auth/sessions"], { success: true, sessions: [] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/sessions"] });
       toast({
         title: "Все сессии завершены",
         description: "Требуется повторный вход на всех устройствах",
       });
-      // Сразу же выкидываем отсюда — токены на сервере удалены
+      // Сразу же выкидываем отсюда — рефреш-токены на сервере удалены
       setTimeout(() => handleLogout(), 1500);
     },
-    onError: () => {
+    onError: (err: any) => {
       toast({
-        title: "Ошибка",
-        description: "Не удалось завершить сессии",
+        title: "Не удалось завершить сессии",
+        description: err?.message || "Попробуйте обновить страницу и повторить",
         variant: "destructive",
       });
     },
@@ -1236,19 +1269,19 @@ export default function Profile() {
                     setAvatarPreview(userData.avatar || null);
                     setAvatarDialogOpen(true);
                   }}
-                  className="absolute -bottom-1 -left-1 w-7 h-7 sm:w-9 sm:h-9 bg-white/90 hover:bg-white text-slate-900 rounded-full border-2 border-white flex items-center justify-center shadow-lg transition hover:scale-110"
+                  className="absolute -bottom-1 -left-1 w-8 h-8 sm:w-9 sm:h-9 aspect-square shrink-0 p-0 bg-white/90 hover:bg-white text-slate-900 rounded-full border-2 border-white flex items-center justify-center shadow-lg transition hover:scale-110 leading-none"
                   title="Изменить аватар"
                   data-testid="button-edit-avatar"
                 >
-                  <Edit2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 </button>
                 {/* Verified badge — only if email verified */}
                 {userData.isEmailVerified && (
                   <div
-                    className="absolute -bottom-1 -right-1 w-6 h-6 sm:w-8 sm:h-8 bg-emerald-500 rounded-full border-4 border-white flex items-center justify-center shadow-lg"
+                    className="absolute -bottom-1 -right-1 w-7 h-7 sm:w-8 sm:h-8 aspect-square shrink-0 bg-emerald-500 rounded-full border-[3px] border-white flex items-center justify-center shadow-lg"
                     title="Email подтверждён"
                   >
-                    <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                    <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white shrink-0" />
                   </div>
                 )}
               </div>
