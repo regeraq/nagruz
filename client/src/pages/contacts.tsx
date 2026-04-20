@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Phone, Mail, MapPin, Send, Clock, Loader2 } from "lucide-react";
+import { Phone, Mail, MapPin, Send, Clock, Loader2, MessageCircle, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +36,105 @@ export default function Contacts() {
     queryKey: ['/api/auth/me'],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
+
+  // Публичные настройки сайта (email/phone/address + SEO + 152-ФЗ)
+  const { data: settingsData } = useQuery<any>({
+    queryKey: ['/api/settings'],
+    queryFn: async () => {
+      const res = await fetch("/api/settings");
+      if (!res.ok) return { success: true, settings: [] };
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Произвольный контент (вступительный текст, часы работы и т.д.)
+  const { data: contentData } = useQuery<any>({
+    queryKey: ['/api/content'],
+    queryFn: async () => {
+      const res = await fetch("/api/content");
+      if (!res.ok) return { success: true, content: [] };
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Список контактов (соцсети, доп. email/телефоны, мессенджеры)
+  const { data: siteContactsData } = useQuery<any>({
+    queryKey: ['/api/site-contacts'],
+    queryFn: async () => {
+      const res = await fetch("/api/site-contacts");
+      if (!res.ok) return { success: true, contacts: [] };
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const settingMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of (settingsData?.settings || []) as Array<{ key: string; value?: string }>) {
+      if (s?.key && s.value != null) m.set(s.key, String(s.value));
+    }
+    return m;
+  }, [settingsData]);
+
+  const contentMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of (contentData?.content || []) as Array<{ key: string; value?: string }>) {
+      if (c?.key && c.value != null) m.set(c.key, String(c.value));
+    }
+    return m;
+  }, [contentData]);
+
+  const extraContacts = useMemo(() => {
+    const list = (siteContactsData?.contacts || []) as Array<{
+      id: string; type: string; value: string; label?: string | null; order?: number | null;
+    }>;
+    return [...list].sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [siteContactsData]);
+
+  const contactPhone = settingMap.get("contact_phone") || "";
+  const contactEmail = settingMap.get("contact_email") || "";
+  const contactAddress = settingMap.get("contact_address") || "";
+  const contactTelegram = settingMap.get("contact_telegram") || "";
+  const workingHoursMain = contentMap.get("contacts_working_hours") || settingMap.get("contact_working_hours") || "Пн-Пт: 9:00 - 18:00 МСК";
+  const introText = contentMap.get("contacts_intro") || "Мы всегда готовы ответить на ваши вопросы и помочь с выбором оборудования";
+  const mapCaption = contentMap.get("contacts_map_caption") || "";
+
+  const phoneHref = contactPhone ? `tel:${contactPhone.replace(/[^+\d]/g, "")}` : undefined;
+  const emailHref = contactEmail ? `mailto:${contactEmail}` : undefined;
+
+  function normalizeTelegram(raw: string): { handle: string; url: string } | null {
+    const v = raw.trim();
+    if (!v) return null;
+    if (v.startsWith("http://") || v.startsWith("https://")) {
+      return { handle: v.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "@").replace(/\/$/, "") || v, url: v };
+    }
+    const h = v.startsWith("@") ? v : `@${v.replace(/^t\.me\//, "")}`;
+    return { handle: h, url: `https://t.me/${h.replace(/^@/, "")}` };
+  }
+
+  function renderContactLink(type: string, value: string): { href: string; display: string } {
+    const t = (type || "").toLowerCase();
+    if (t === "email") return { href: `mailto:${value}`, display: value };
+    if (t === "phone") return { href: `tel:${value.replace(/[^+\d]/g, "")}`, display: value };
+    if (t === "telegram") {
+      const tg = normalizeTelegram(value);
+      return tg ? { href: tg.url, display: tg.handle } : { href: value, display: value };
+    }
+    if (t === "address") return { href: `https://yandex.ru/maps/?text=${encodeURIComponent(value)}`, display: value };
+    if (value.startsWith("http://") || value.startsWith("https://")) return { href: value, display: value };
+    return { href: value, display: value };
+  }
+
+  function iconForType(type: string) {
+    const t = (type || "").toLowerCase();
+    if (t === "email") return Mail;
+    if (t === "phone") return Phone;
+    if (t === "address") return MapPin;
+    if (t === "telegram") return Send;
+    return MessageCircle;
+  }
 
   useEffect(() => {
     if (userData?.success && userData?.user) {
@@ -109,83 +208,91 @@ export default function Contacts() {
           <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2">
             Свяжитесь с нами
           </h1>
-          <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2">
-            Мы всегда готовы ответить на ваши вопросы и помочь с выбором оборудования
+          <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2 whitespace-pre-line">
+            {introText}
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 mb-10 sm:mb-12 md:mb-16">
-          <Card className="scroll-animate">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Phone className="h-6 w-6 text-primary" />
+          {contactPhone && (
+            <Card className="scroll-animate">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Phone className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle>Телефон</CardTitle>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle>Телефон</CardTitle>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-lg font-semibold mb-2">+7 (495) 123-45-67</p>
-              <p className="text-sm text-muted-foreground">
-                Пн-Пт: 9:00 - 18:00 МСК
-              </p>
-              <Button variant="outline" className="mt-4 w-full" asChild>
-                <a href="tel:+74951234567">Позвонить</a>
-              </Button>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-semibold mb-2">{contactPhone}</p>
+                <p className="text-sm text-muted-foreground">{workingHoursMain}</p>
+                {phoneHref && (
+                  <Button variant="outline" className="mt-4 w-full" asChild>
+                    <a href={phoneHref}>Позвонить</a>
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-          <Card className="scroll-animate">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Mail className="h-6 w-6 text-primary" />
+          {contactEmail && (
+            <Card className="scroll-animate">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Mail className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle>Email</CardTitle>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle>Email</CardTitle>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-lg font-semibold mb-2">info@nm-100.ru</p>
-              <p className="text-sm text-muted-foreground">
-                Ответим в течение 24 часов
-              </p>
-              <Button variant="outline" className="mt-4 w-full" asChild>
-                <a href="mailto:info@nm-100.ru">Написать</a>
-              </Button>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-semibold mb-2 break-all">{contactEmail}</p>
+                <p className="text-sm text-muted-foreground">
+                  Ответим в течение 24 часов
+                </p>
+                {emailHref && (
+                  <Button variant="outline" className="mt-4 w-full" asChild>
+                    <a href={emailHref}>Написать</a>
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-          <Card className="scroll-animate">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <MapPin className="h-6 w-6 text-primary" />
+          {contactAddress && (
+            <Card className="scroll-animate">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <MapPin className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle>Адрес</CardTitle>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle>Адрес</CardTitle>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-lg font-semibold mb-2">Москва</p>
-              <p className="text-sm text-muted-foreground">
-                ул. Промышленная, д. 1
-              </p>
-              <Button variant="outline" className="mt-4 w-full" asChild>
-                <a
-                  href="https://yandex.ru/maps"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Открыть карту
-                </a>
-              </Button>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-semibold mb-2 whitespace-pre-line">{contactAddress}</p>
+                {mapCaption && (
+                  <p className="text-sm text-muted-foreground">{mapCaption}</p>
+                )}
+                <Button variant="outline" className="mt-4 w-full" asChild>
+                  <a
+                    href={`https://yandex.ru/maps/?text=${encodeURIComponent(contactAddress)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Открыть карту
+                  </a>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <Separator className="my-10 sm:my-12 md:my-16" />
@@ -196,60 +303,65 @@ export default function Contacts() {
               <CardTitle className="text-base sm:text-lg md:text-xl">Режим работы</CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
-              <div className="space-y-3 sm:space-y-4">
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-sm sm:text-base">Понедельник - Пятница</p>
-                    <p className="text-xs sm:text-sm text-muted-foreground">9:00 - 18:00 МСК</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-sm sm:text-base">Суббота - Воскресенье</p>
-                    <p className="text-xs sm:text-sm text-muted-foreground">Выходной</p>
-                  </div>
-                </div>
+              <div className="flex items-start gap-3">
+                <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0 mt-1" />
+                <p className="text-sm sm:text-base whitespace-pre-line">{workingHoursMain}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="scroll-animate">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-lg md:text-xl">Дополнительные контакты</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6">
-              <div className="space-y-3 sm:space-y-4">
-                <div className="flex items-center gap-3">
-                  <Send className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-sm sm:text-base">Telegram</p>
-                    <a
-                      href="https://t.me/nu_equipment"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs sm:text-sm text-primary hover:underline"
-                    >
-                      @nu_equipment
-                    </a>
-                  </div>
+          {(extraContacts.length > 0 || contactTelegram) && (
+            <Card className="scroll-animate">
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg md:text-xl">Дополнительные контакты</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6">
+                <div className="space-y-3 sm:space-y-4">
+                  {contactTelegram && !extraContacts.some((c) => (c.type || "").toLowerCase() === "telegram") && (() => {
+                    const tg = normalizeTelegram(contactTelegram);
+                    return tg ? (
+                      <div className="flex items-center gap-3">
+                        <Send className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm sm:text-base">Telegram</p>
+                          <a
+                            href={tg.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs sm:text-sm text-primary hover:underline break-all"
+                          >
+                            {tg.handle}
+                          </a>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
+                  {extraContacts.map((c) => {
+                    const Icon = iconForType(c.type);
+                    const { href, display } = renderContactLink(c.type, c.value);
+                    const isExternal = href.startsWith("http://") || href.startsWith("https://");
+                    return (
+                      <div key={c.id} className="flex items-center gap-3">
+                        <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm sm:text-base">{c.label || c.type}</p>
+                          <a
+                            href={href}
+                            target={isExternal ? "_blank" : undefined}
+                            rel={isExternal ? "noopener noreferrer" : undefined}
+                            className="text-xs sm:text-sm text-primary hover:underline break-all"
+                          >
+                            {display}
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex items-center gap-3">
-                  <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-sm sm:text-base">Для заказов</p>
-                    <a
-                      href="mailto:orders@nm-100.ru"
-                      className="text-xs sm:text-sm text-primary hover:underline"
-                    >
-                      orders@nm-100.ru
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <Card className="scroll-animate bg-primary/5 border-primary/20">

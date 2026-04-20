@@ -3700,10 +3700,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/settings", rateLimiters.general, async (req, res) => {
     try {
       const settings = await storage.getSiteSettings();
-      // Return only public settings (contact info, site title, and file upload setting)
-      const publicSettings = settings.filter((s: any) => 
-        ['contact_email', 'contact_phone', 'contact_address', 'contact_telegram', 'site_title', 'enable_file_upload'].includes(s.key)
-      );
+      // Публичные ключи — всё, что должно быть видно пользователям на сайте:
+      // контакты, SEO, юридические данные оператора ПД (152-ФЗ), переключатели UI.
+      const PUBLIC_KEYS = new Set<string>([
+        // контактные данные
+        "contact_email",
+        "contact_phone",
+        "contact_address",
+        "contact_telegram",
+        "contact_working_hours",
+        // брендинг / SEO
+        "site_title",
+        "site_description",
+        "seo_title",
+        "seo_description",
+        "seo_keywords",
+        // данные оператора персональных данных (152-ФЗ) — нужны в privacy/data-processing/offer
+        "operator_name",
+        "operator_inn",
+        "operator_ogrn",
+        "responsible_person",
+        // UI-флаги
+        "enable_file_upload",
+      ]);
+      const publicSettings = settings.filter((s: any) => PUBLIC_KEYS.has(s.key));
       res.json({ success: true, settings: publicSettings });
     } catch (error) {
       console.error("Get settings error:", error);
@@ -3910,6 +3930,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Delete content error:", error);
       res.status(500).json({ success: false, message: "Failed to delete content" });
+    }
+  });
+
+  // PUBLIC: Get Site Contacts (active only) — используется страницей «Контакты» и футером
+  app.get("/api/site-contacts", rateLimiters.general, async (req, res) => {
+    try {
+      const all = await storage.getAllSiteContacts();
+      const active = (all || []).filter((c: any) => c?.isActive !== false);
+      res.json({ success: true, contacts: active });
+    } catch (error) {
+      console.error("Get public site contacts error:", error);
+      res.status(500).json({ success: false, message: "Failed to get site contacts" });
     }
   });
 

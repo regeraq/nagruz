@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,23 @@ import {
 export default function Admin() {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<string>("analytics");
+  const mainContentRef = useRef<HTMLElement>(null);
+  const mobileNavScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.innerWidth < 1024) {
+      requestAnimationFrame(() => {
+        const target = mainContentRef.current;
+        if (!target) return;
+        const rect = target.getBoundingClientRect();
+        const offset = 72;
+        window.scrollTo({ top: window.scrollY + rect.top - offset, behavior: "smooth" });
+      });
+    }
+    const activeChip = mobileNavScrollRef.current?.querySelector<HTMLElement>(`[data-tab-id="${activeTab}"]`);
+    activeChip?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [activeTab]);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [showCreatePromo, setShowCreatePromo] = useState(false);
@@ -57,6 +74,8 @@ export default function Admin() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactAddress, setContactAddress] = useState("");
+  const [contactTelegram, setContactTelegram] = useState("");
+  const [contactWorkingHours, setContactWorkingHours] = useState("");
   // Privacy policy settings
   const [operatorName, setOperatorName] = useState("");
   const [operatorInn, setOperatorInn] = useState("");
@@ -448,6 +467,8 @@ export default function Admin() {
       const contactEmailSetting = settings.find((s: any) => s.key === "contact_email");
       const contactPhoneSetting = settings.find((s: any) => s.key === "contact_phone");
       const contactAddressSetting = settings.find((s: any) => s.key === "contact_address");
+      const contactTelegramSetting = settings.find((s: any) => s.key === "contact_telegram");
+      const contactWorkingHoursSetting = settings.find((s: any) => s.key === "contact_working_hours");
       const operatorNameSetting = settings.find((s: any) => s.key === "operator_name");
       const operatorInnSetting = settings.find((s: any) => s.key === "operator_inn");
       const operatorOgrnSetting = settings.find((s: any) => s.key === "operator_ogrn");
@@ -460,6 +481,8 @@ export default function Admin() {
       if (contactEmailSetting) setContactEmail(contactEmailSetting.value || "");
       if (contactPhoneSetting) setContactPhone(contactPhoneSetting.value || "");
       if (contactAddressSetting) setContactAddress(contactAddressSetting.value || "");
+      if (contactTelegramSetting) setContactTelegram(contactTelegramSetting.value || "");
+      if (contactWorkingHoursSetting) setContactWorkingHours(contactWorkingHoursSetting.value || "");
       if (operatorNameSetting) setOperatorName(operatorNameSetting.value || "");
       if (operatorInnSetting) setOperatorInn(operatorInnSetting.value || "");
       if (operatorOgrnSetting) setOperatorOgrn(operatorOgrnSetting.value || "");
@@ -715,6 +738,7 @@ export default function Admin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       toast({ title: "SEO настройки сохранены" });
     },
     onError: (error: any) => {
@@ -728,10 +752,13 @@ export default function Admin() {
       await apiRequest("PUT", "/api/admin/settings/contact_email", { value: data.email, type: "string" });
       await apiRequest("PUT", "/api/admin/settings/contact_phone", { value: data.phone, type: "string" });
       await apiRequest("PUT", "/api/admin/settings/contact_address", { value: data.address, type: "string" });
+      await apiRequest("PUT", "/api/admin/settings/contact_telegram", { value: data.telegram || "", type: "string" });
+      await apiRequest("PUT", "/api/admin/settings/contact_working_hours", { value: data.workingHours || "", type: "string" });
       return true;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       toast({ title: "Контактные данные сохранены" });
     },
     onError: (error: any) => {
@@ -1166,57 +1193,79 @@ export default function Admin() {
         <div className="absolute top-10 left-10 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-10 right-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
         
-        <div className="relative container mx-auto px-4 py-6 pt-20">
+        <div className="relative container mx-auto px-4 py-4 sm:py-6 pt-16 sm:pt-20">
           <div className="max-w-[1600px] mx-auto">
-            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 sm:gap-6">
               {/* Admin Info */}
-              <div className="flex items-center gap-4">
-                <div className="relative group">
+              <div className="flex items-center gap-3 sm:gap-4 w-full lg:w-auto">
+                <div className="relative group flex-shrink-0">
                   <div className="absolute -inset-1 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-full blur opacity-40 group-hover:opacity-60 transition duration-500" />
-                  <Avatar className="relative w-16 h-16 lg:w-20 lg:h-20 border-4 border-white/20 shadow-2xl">
+                  <Avatar className="relative w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 border-4 border-white/20 shadow-2xl">
                     <AvatarImage src={userData?.avatar || undefined} className="object-cover" />
-                    <AvatarFallback className="text-xl lg:text-2xl font-bold bg-gradient-to-br from-amber-500 to-orange-600 text-white">
+                    <AvatarFallback className="text-base sm:text-xl lg:text-2xl font-bold bg-gradient-to-br from-amber-500 to-orange-600 text-white">
                       {getUserInitials()}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
-                    <Crown className="w-3 h-3 text-white" />
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
+                    <Crown className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
                   </div>
                 </div>
-                
-                <div className="text-white">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h1 className="text-2xl lg:text-3xl font-bold">Панель управления</h1>
-                    <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 border-0 text-white text-xs">
+
+                <div className="text-white min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-0.5 sm:mb-1 flex-wrap">
+                    <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold">Панель управления</h1>
+                    <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 border-0 text-white text-[10px] sm:text-xs">
                       {userData?.role === 'superadmin' ? 'Super Admin' : 'Admin'}
                     </Badge>
                   </div>
-                  <p className="text-white/60 text-sm">
+                  <p className="text-white/60 text-xs sm:text-sm truncate">
                     {userData?.email}
                   </p>
                 </div>
-              </div>
-              
-              {/* Quick Stats */}
-              <div className="flex flex-wrap gap-3">
-                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
-                  <Package className="w-4 h-4 text-violet-400" />
-                  <span className="text-white/80 text-sm">{allProducts.length} товаров</span>
+
+                {/* Mobile quick actions */}
+                <div className="flex gap-1.5 lg:hidden flex-shrink-0">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setLocation("/")}
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm h-9 w-9"
+                    aria-label="На сайт"
+                  >
+                    <Home className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setLocation("/profile")}
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm h-9 w-9"
+                    aria-label="Профиль"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </Button>
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
-                  <Users className="w-4 h-4 text-cyan-400" />
-                  <span className="text-white/80 text-sm">{allUsers.length} пользователей</span>
+              </div>
+
+              {/* Quick Stats */}
+              <div className="flex flex-wrap gap-2 sm:gap-3">
+                <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
+                  <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-violet-400" />
+                  <span className="text-white/80 text-xs sm:text-sm">{allProducts.length} товаров</span>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
+                  <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                  <span className="text-white/80 text-xs sm:text-sm">{allUsers.length} польз.</span>
                 </div>
                 {pendingOrders > 0 && (
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/20 backdrop-blur-sm border border-amber-500/30">
-                    <AlertTriangle className="w-4 h-4 text-amber-400" />
-                    <span className="text-amber-300 text-sm">{pendingOrders} ожидают</span>
+                  <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl bg-amber-500/20 backdrop-blur-sm border border-amber-500/30">
+                    <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                    <span className="text-amber-300 text-xs sm:text-sm">{pendingOrders} ожидают</span>
                   </div>
                 )}
               </div>
-              
-              {/* Actions */}
-              <div className="flex gap-2">
+
+              {/* Desktop actions */}
+              <div className="hidden lg:flex gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setLocation("/")}
@@ -1249,11 +1298,49 @@ export default function Admin() {
         </div>
       </div>
 
+      {/* Mobile Nav: horizontal scrollable pill tabs (sticky) */}
+      <div className="lg:hidden sticky top-0 z-30 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-b border-border/40 shadow-sm">
+        <div
+          ref={mobileNavScrollRef}
+          className="flex gap-2 overflow-x-auto px-3 py-2.5 scrollbar-hide"
+          style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+        >
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                data-tab-id={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-all duration-200 ${
+                  isActive
+                    ? `bg-gradient-to-r ${item.color} text-white shadow-md`
+                    : "bg-muted/70 text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="whitespace-nowrap">{item.label}</span>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span
+                    className={`ml-0.5 px-1.5 py-0 rounded-full text-[10px] font-semibold leading-4 ${
+                      isActive ? "bg-white/25 text-white" : "bg-background text-foreground border border-border"
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="container mx-auto px-4 -mt-4 relative z-10 pb-12">
         <div className="max-w-[1600px] mx-auto">
           <div className="flex flex-col lg:flex-row gap-6">
-            {/* Modern Sidebar Navigation */}
-            <aside className="w-full lg:w-72 flex-shrink-0">
+            {/* Modern Sidebar Navigation (desktop only) */}
+            <aside className="hidden lg:block w-full lg:w-72 flex-shrink-0">
               <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl sticky top-20 overflow-hidden">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
@@ -1312,7 +1399,7 @@ export default function Admin() {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 min-w-0 space-y-6">
+            <main ref={mainContentRef} className="flex-1 min-w-0 space-y-6 scroll-mt-20">
 
             {/* Analytics Section */}
             {activeTab === "analytics" && (
@@ -1554,233 +1641,186 @@ export default function Admin() {
                   </Card>
                 </div>
 
-                {/* User Activity Chart - Modern Design */}
-                {userActivityByDay && userActivityByDay.length > 0 && (
-                  <Card className="border-0 shadow-xl overflow-hidden">
-                    <div className="relative rounded-2xl bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-slate-800/95 border border-white/10">
-                {/* Decorative Elements */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500"></div>
-                <div className="absolute top-20 right-10 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div className="absolute bottom-20 left-10 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none"></div>
-                
-                {/* Header */}
-                <div className="relative px-6 sm:px-8 pt-8 pb-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 backdrop-blur-sm border border-white/10">
-                          <BarChart3 className="w-6 h-6 text-blue-400" />
-                        </div>
-                        <div>
-                          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                            Активность пользователей
-                          </h2>
-                          <p className="text-sm text-slate-400 mt-0.5">
-                            Динамика за последние 30 дней
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Legend */}
-                    <div className="flex flex-wrap gap-4">
-                      <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10">
-                        <div className="relative">
-                          <div className="w-3 h-3 rounded-full bg-gradient-to-br from-blue-400 to-blue-600"></div>
-                          <div className="absolute inset-0 w-3 h-3 rounded-full bg-blue-500 animate-ping opacity-20"></div>
-                        </div>
-                        <span className="text-sm font-medium text-slate-300">Регистрации</span>
-                        <span className="text-lg font-bold text-blue-400">
-                          {userActivityByDay.reduce((sum: number, day: any) => sum + (day.registrations || 0), 0)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10">
-                        <div className="relative">
-                          <div className="w-3 h-3 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600"></div>
-                          <div className="absolute inset-0 w-3 h-3 rounded-full bg-emerald-500 animate-ping opacity-20"></div>
-                        </div>
-                        <span className="text-sm font-medium text-slate-300">Входы</span>
-                        <span className="text-lg font-bold text-emerald-400">
-                          {userActivityByDay.reduce((sum: number, day: any) => sum + (day.logins || 0), 0)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {/* User Activity Chart - Clean Modern Design */}
+                {userActivityByDay && userActivityByDay.length > 0 && (() => {
+                  const totalRegistrations = userActivityByDay.reduce((sum: number, day: any) => sum + (day.registrations || 0), 0);
+                  const totalLogins = userActivityByDay.reduce((sum: number, day: any) => sum + (day.logins || 0), 0);
+                  const todayReg = userActivityByDay[userActivityByDay.length - 1]?.registrations || 0;
+                  const todayLogins = userActivityByDay[userActivityByDay.length - 1]?.logins || 0;
+                  const avgReg = Math.round(totalRegistrations / userActivityByDay.length);
+                  const avgLogins = Math.round(totalLogins / userActivityByDay.length);
 
-                {/* Chart */}
-                <div className="relative px-4 sm:px-6 pb-8">
-                  <ChartContainer
-                    config={{
-                      registrations: { 
-                        label: "Регистрации", 
-                        color: "#3B82F6"
-                      },
-                      logins: { 
-                        label: "Входы", 
-                        color: "#10B981"
-                      },
-                    }}
-                    className="min-h-[350px] sm:min-h-[400px] w-full"
-                  >
-                    <AreaChart 
-                      data={userActivityByDay}
-                      margin={{ top: 20, right: 20, left: 0, bottom: 20 }}
-                    >
-                      <defs>
-                        <linearGradient id="gradientRegistrations" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.5}/>
-                          <stop offset="50%" stopColor="#3B82F6" stopOpacity={0.2}/>
-                          <stop offset="100%" stopColor="#3B82F6" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="gradientLogins" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10B981" stopOpacity={0.5}/>
-                          <stop offset="50%" stopColor="#10B981" stopOpacity={0.2}/>
-                          <stop offset="100%" stopColor="#10B981" stopOpacity={0}/>
-                        </linearGradient>
-                        <filter id="glowBlue" x="-20%" y="-20%" width="140%" height="140%">
-                          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-                          <feMerge>
-                            <feMergeNode in="coloredBlur"/>
-                            <feMergeNode in="SourceGraphic"/>
-                          </feMerge>
-                        </filter>
-                        <filter id="glowGreen" x="-20%" y="-20%" width="140%" height="140%">
-                          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-                          <feMerge>
-                            <feMergeNode in="coloredBlur"/>
-                            <feMergeNode in="SourceGraphic"/>
-                          </feMerge>
-                        </filter>
-                      </defs>
-                      <CartesianGrid 
-                        strokeDasharray="3 3" 
-                        vertical={false}
-                        stroke="rgba(255,255,255,0.05)"
-                        strokeWidth={1}
-                      />
-                      <XAxis
-                        dataKey="date"
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={16}
-                        tickFormatter={(value) => format(new Date(value), "dd.MM", { locale: ru })}
-                        style={{ fontSize: '12px', fontWeight: 500, fill: 'rgba(148, 163, 184, 0.8)' }}
-                        interval="preserveStartEnd"
-                      />
-                      <YAxis 
-                        tickLine={false} 
-                        axisLine={false} 
-                        tickMargin={12}
-                        style={{ fontSize: '12px', fontWeight: 500, fill: 'rgba(148, 163, 184, 0.8)' }}
-                        width={45}
-                      />
-                      <ChartTooltip 
-                        cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 2 }}
-                        content={<ChartTooltipContent 
-                          className="bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl px-4 py-3"
-                          labelFormatter={(value) => format(new Date(value), "dd MMMM yyyy", { locale: ru })}
-                        />} 
-                      />
-                      <Area
-                        dataKey="registrations"
-                        type="monotone"
-                        fill="url(#gradientRegistrations)"
-                        fillOpacity={1}
-                        stroke="#3B82F6"
-                        strokeWidth={3}
-                        dot={false}
-                        activeDot={{ 
-                          r: 6, 
-                          strokeWidth: 3, 
-                          fill: "#3B82F6", 
-                          stroke: "#1E3A5F",
-                          filter: "url(#glowBlue)"
-                        }}
-                        animationDuration={1200}
-                        animationBegin={0}
-                      />
-                      <Area
-                        dataKey="logins"
-                        type="monotone"
-                        fill="url(#gradientLogins)"
-                        fillOpacity={1}
-                        stroke="#10B981"
-                        strokeWidth={3}
-                        dot={false}
-                        activeDot={{ 
-                          r: 6, 
-                          strokeWidth: 3, 
-                          fill: "#10B981", 
-                          stroke: "#064E3B",
-                          filter: "url(#glowGreen)"
-                        }}
-                        animationDuration={1200}
-                        animationBegin={200}
-                      />
-                    </AreaChart>
-                  </ChartContainer>
-                </div>
+                  return (
+                    <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                      <div className="h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500" />
 
-                {/* Bottom Stats */}
-                <div className="relative px-6 sm:px-8 pb-8">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10">
-                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Сегодня</p>
-                      <p className="text-2xl font-bold text-white">
-                        {userActivityByDay[userActivityByDay.length - 1]?.registrations || 0}
-                      </p>
-                      <p className="text-xs text-blue-400 mt-1">регистраций</p>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10">
-                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Сегодня</p>
-                      <p className="text-2xl font-bold text-white">
-                        {userActivityByDay[userActivityByDay.length - 1]?.logins || 0}
-                      </p>
-                      <p className="text-xs text-emerald-400 mt-1">входов</p>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10">
-                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Среднее/день</p>
-                      <p className="text-2xl font-bold text-white">
-                        {Math.round(userActivityByDay.reduce((sum: number, day: any) => sum + (day.registrations || 0), 0) / userActivityByDay.length)}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1">регистраций</p>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10">
-                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Среднее/день</p>
-                      <p className="text-2xl font-bold text-white">
-                        {Math.round(userActivityByDay.reduce((sum: number, day: any) => sum + (day.logins || 0), 0) / userActivityByDay.length)}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1">входов</p>
-                    </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            )}
+                      {/* Header */}
+                      <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-border/40">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-md flex-shrink-0">
+                              <BarChart3 className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="min-w-0">
+                              <h2 className="text-lg sm:text-xl font-bold tracking-tight truncate">
+                                Активность пользователей
+                              </h2>
+                              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                                Динамика за последние 30 дней
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Legend (totals) */}
+                          <div className="flex flex-wrap gap-2 sm:gap-3 sm:flex-shrink-0">
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40">
+                              <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                              <span className="text-xs text-muted-foreground">Регистрации</span>
+                              <span className="text-sm font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                                {totalRegistrations}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                              <span className="text-xs text-muted-foreground">Входы</span>
+                              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                {totalLogins}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Chart */}
+                      <div className="px-2 sm:px-4 py-4 sm:py-6">
+                        <ChartContainer
+                          config={{
+                            registrations: { label: "Регистрации", color: "#3B82F6" },
+                            logins: { label: "Входы", color: "#10B981" },
+                          }}
+                          className="h-[260px] sm:h-[320px] w-full"
+                        >
+                          <AreaChart
+                            data={userActivityByDay}
+                            margin={{ top: 12, right: 12, left: 0, bottom: 0 }}
+                          >
+                            <defs>
+                              <linearGradient id="gradientRegistrations" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.3} />
+                                <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                              </linearGradient>
+                              <linearGradient id="gradientLogins" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#10B981" stopOpacity={0.3} />
+                                <stop offset="100%" stopColor="#10B981" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              vertical={false}
+                              stroke="hsl(var(--border))"
+                              strokeOpacity={0.5}
+                            />
+                            <XAxis
+                              dataKey="date"
+                              tickLine={false}
+                              axisLine={false}
+                              tickMargin={10}
+                              tickFormatter={(value) => format(new Date(value), "dd.MM", { locale: ru })}
+                              style={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                              interval="preserveStartEnd"
+                              minTickGap={24}
+                            />
+                            <YAxis
+                              tickLine={false}
+                              axisLine={false}
+                              tickMargin={8}
+                              style={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                              width={36}
+                              allowDecimals={false}
+                            />
+                            <ChartTooltip
+                              cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1, strokeDasharray: "3 3" }}
+                              content={
+                                <ChartTooltipContent
+                                  labelFormatter={(value) => format(new Date(value), "dd MMMM yyyy", { locale: ru })}
+                                />
+                              }
+                            />
+                            <Area
+                              dataKey="registrations"
+                              type="monotone"
+                              fill="url(#gradientRegistrations)"
+                              stroke="#3B82F6"
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={{ r: 5, strokeWidth: 2, fill: "#3B82F6", stroke: "#fff" }}
+                              animationDuration={800}
+                            />
+                            <Area
+                              dataKey="logins"
+                              type="monotone"
+                              fill="url(#gradientLogins)"
+                              stroke="#10B981"
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={{ r: 5, strokeWidth: 2, fill: "#10B981", stroke: "#fff" }}
+                              animationDuration={800}
+                              animationBegin={150}
+                            />
+                          </AreaChart>
+                        </ChartContainer>
+                      </div>
+
+                      {/* Bottom Stats */}
+                      <div className="px-4 sm:px-6 pb-5 pt-2 border-t border-border/40">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4">
+                          <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100/70 dark:border-blue-900/30">
+                            <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Сегодня</p>
+                            <p className="text-xl sm:text-2xl font-bold tabular-nums">{todayReg}</p>
+                            <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-0.5">регистраций</p>
+                          </div>
+                          <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100/70 dark:border-emerald-900/30">
+                            <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Сегодня</p>
+                            <p className="text-xl sm:text-2xl font-bold tabular-nums">{todayLogins}</p>
+                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">входов</p>
+                          </div>
+                          <div className="p-3 rounded-xl bg-muted/50 border border-border/60">
+                            <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">В среднем</p>
+                            <p className="text-xl sm:text-2xl font-bold tabular-nums">{avgReg}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">регистраций/день</p>
+                          </div>
+                          <div className="p-3 rounded-xl bg-muted/50 border border-border/60">
+                            <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">В среднем</p>
+                            <p className="text-xl sm:text-2xl font-bold tabular-nums">{avgLogins}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">входов/день</p>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })()}
 
             {/* Выручка и заказы по дням (period-based) */}
             {activityByDay.length > 0 && (
               <div className="grid lg:grid-cols-2 gap-4">
-                <Card className="border-0 shadow-xl overflow-hidden">
-                  <CardHeader>
+                <Card className="border-0 shadow-xl overflow-hidden bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+                  <CardHeader className="pb-3 px-4 sm:px-6 pt-4 sm:pt-5">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-md flex-shrink-0">
                         <DollarSign className="w-5 h-5 text-white" />
                       </div>
-                      <div>
-                        <CardTitle className="text-base">Выручка по дням</CardTitle>
-                        <CardDescription>Сумма оплаченных заказов</CardDescription>
+                      <div className="min-w-0">
+                        <CardTitle className="text-sm sm:text-base truncate">Выручка по дням</CardTitle>
+                        <CardDescription className="text-xs">Сумма оплаченных заказов</CardDescription>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-2 sm:px-4 pb-4">
                     <ChartContainer
                       config={{
                         revenue: { label: "Выручка, ₽", color: "#10B981" },
                       }}
-                      className="min-h-[240px] w-full"
+                      className="h-[220px] sm:h-[260px] w-full"
                     >
                       <AreaChart data={activityByDay} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
                         <defs>
@@ -1827,25 +1867,25 @@ export default function Admin() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-0 shadow-xl overflow-hidden">
-                  <CardHeader>
+                <Card className="border-0 shadow-xl overflow-hidden bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+                  <CardHeader className="pb-3 px-4 sm:px-6 pt-4 sm:pt-5">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600">
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 shadow-md flex-shrink-0">
                         <ShoppingCart className="w-5 h-5 text-white" />
                       </div>
-                      <div>
-                        <CardTitle className="text-base">Заказы и заявки по дням</CardTitle>
-                        <CardDescription>Количество заказов и контактных обращений</CardDescription>
+                      <div className="min-w-0">
+                        <CardTitle className="text-sm sm:text-base truncate">Заказы и заявки по дням</CardTitle>
+                        <CardDescription className="text-xs truncate">Количество заказов и обращений</CardDescription>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-2 sm:px-4 pb-4">
                     <ChartContainer
                       config={{
                         orders: { label: "Заказы", color: "#F59E0B" },
                         contacts: { label: "Заявки", color: "#8B5CF6" },
                       }}
-                      className="min-h-[240px] w-full"
+                      className="h-[220px] sm:h-[260px] w-full"
                     >
                       <BarChart data={activityByDay} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
@@ -4527,8 +4567,37 @@ export default function Admin() {
                       onChange={(e) => setContactAddress(e.target.value)}
                     />
                   </div>
+                  <div>
+                    <Label>Telegram</Label>
+                    <Input
+                      placeholder="@my_company  или  https://t.me/my_company"
+                      value={contactTelegram}
+                      onChange={(e) => setContactTelegram(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Можно указать @username или полную ссылку. Отображается в футере и на странице «Контакты».
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Часы работы</Label>
+                    <Textarea
+                      placeholder={"Пн-Пт: 9:00 - 18:00 МСК\nСб-Вс: выходной"}
+                      value={contactWorkingHours}
+                      onChange={(e) => setContactWorkingHours(e.target.value)}
+                      rows={2}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Показывается в карточке «Телефон» и блоке «Режим работы» на странице «Контакты».
+                    </p>
+                  </div>
                   <Button 
-                    onClick={() => saveContactSettings.mutate({ email: contactEmail, phone: contactPhone, address: contactAddress })}
+                    onClick={() => saveContactSettings.mutate({
+                      email: contactEmail,
+                      phone: contactPhone,
+                      address: contactAddress,
+                      telegram: contactTelegram,
+                      workingHours: contactWorkingHours,
+                    })}
                     disabled={saveContactSettings.isPending}
                   >
                     {saveContactSettings.isPending ? "Сохранение..." : "Сохранить контакты"}

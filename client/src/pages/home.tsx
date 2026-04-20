@@ -331,6 +331,17 @@ export default function Home() {
   const contactEmail = settingsData?.settings?.find((s: any) => s.key === 'contact_email')?.value || 'info@example.com';
   const contactPhone = settingsData?.settings?.find((s: any) => s.key === 'contact_phone')?.value || '+7 (999) 123-45-67';
   const contactAddress = settingsData?.settings?.find((s: any) => s.key === 'contact_address')?.value || 'Москва, Россия';
+  const contactTelegramRaw = settingsData?.settings?.find((s: any) => s.key === 'contact_telegram')?.value || '';
+  const telegramInfo = (() => {
+    const v = (contactTelegramRaw || '').trim();
+    if (!v) return null;
+    if (v.startsWith('http://') || v.startsWith('https://')) {
+      const handle = v.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '@').replace(/\/$/, '') || v;
+      return { handle, url: v };
+    }
+    const handle = v.startsWith('@') ? v : `@${v.replace(/^t\.me\//, '')}`;
+    return { handle, url: `https://t.me/${handle.replace(/^@/, '')}` };
+  })();
 
   // Get available products (active only)
   const availableProducts = products.filter((p: Product) => p.isActive !== false);
@@ -1681,22 +1692,26 @@ export default function Home() {
                       <a href={`mailto:${contactEmail}`} className="text-xs sm:text-sm text-muted-foreground hover:text-primary break-all" data-testid="text-email">{contactEmail}</a>
                     </div>
                   </div>
-                  <Separator />
-                  <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-telegram">
-                    <Send className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <div className="text-xs sm:text-sm font-medium">Telegram</div>
-                      <a 
-                        href="https://t.me/nu_equipment" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-xs sm:text-sm text-primary hover:underline"
-                        data-testid="link-telegram"
-                      >
-                        @nu_equipment
-                      </a>
-                    </div>
-                  </div>
+                  {telegramInfo && (
+                    <>
+                      <Separator />
+                      <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-telegram">
+                        <Send className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="text-xs sm:text-sm font-medium">Telegram</div>
+                          <a
+                            href={telegramInfo.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs sm:text-sm text-primary hover:underline break-all"
+                            data-testid="link-telegram"
+                          >
+                            {telegramInfo.handle}
+                          </a>
+                        </div>
+                      </div>
+                    </>
+                  )}
                   <Separator />
                   <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-address">
                     <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
@@ -1763,9 +1778,24 @@ export default function Home() {
             <div className="text-center sm:text-left sm:col-span-2 md:col-span-1">
               <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Контакты</h3>
               <ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
-                <li><a href="tel:+74951234567" className="hover:text-foreground">+7 (495) 123-45-67</a></li>
-                <li><a href="mailto:info@nm-100.ru" className="hover:text-foreground">info@nm-100.ru</a></li>
-                <li>Чебоксары</li>
+                {contactPhone && (
+                  <li>
+                    <a href={`tel:${contactPhone.replace(/[^+\d]/g, '')}`} className="hover:text-foreground">{contactPhone}</a>
+                  </li>
+                )}
+                {contactEmail && (
+                  <li>
+                    <a href={`mailto:${contactEmail}`} className="hover:text-foreground break-all">{contactEmail}</a>
+                  </li>
+                )}
+                {telegramInfo && (
+                  <li>
+                    <a href={telegramInfo.url} target="_blank" rel="noopener noreferrer" className="hover:text-foreground break-all">
+                      {telegramInfo.handle}
+                    </a>
+                  </li>
+                )}
+                {contactAddress && <li className="whitespace-pre-line">{contactAddress}</li>}
               </ul>
             </div>
           </div>
