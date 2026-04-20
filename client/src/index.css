@@ -915,6 +915,15 @@
       right: 1rem !important;
     }
   }
+
+  /* Hide scrollbars (for horizontal scroll navs etc.) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* MODERN 2025 BACKGROUNDS */
