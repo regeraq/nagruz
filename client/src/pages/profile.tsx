@@ -1397,29 +1397,29 @@ export default function Profile() {
 
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl mb-4 sm:mb-6">
+            <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl mb-4 sm:mb-6 overflow-hidden">
               <CardContent className="p-1.5 sm:p-2">
-                <TabsList className="w-full h-auto grid grid-cols-3 sm:flex sm:flex-wrap gap-1 bg-transparent p-0">
+                <TabsList className="w-full h-auto flex sm:flex-wrap gap-1 bg-transparent p-0 overflow-x-auto sm:overflow-visible scrollbar-hide justify-start sm:justify-stretch" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
                   {[
                     { value: "overview", icon: User, label: "Профиль", shortLabel: "Профиль" },
                     { value: "orders", icon: Package, label: "Заказы", shortLabel: "Заказы", badge: orders.length },
-                    { value: "favorites", icon: Heart, label: "Избранное", shortLabel: "Избр.", badge: favorites.length },
+                    { value: "favorites", icon: Heart, label: "Избранное", shortLabel: "Избранное", badge: favorites.length },
                     { value: "proposals", icon: FileText, label: "Коммерческие предложения", shortLabel: "КП", badge: commercialProposals.length },
                     { value: "notifications", icon: Bell, label: "Уведомления", shortLabel: "Увед.", badge: unreadNotifications },
                     { value: "security", icon: Shield, label: "Безопасность", shortLabel: "Защита" },
-                    { value: "settings", icon: Settings, label: "Настройки", shortLabel: "Настр." },
+                    { value: "settings", icon: Settings, label: "Настройки", shortLabel: "Настройки" },
                   ].map((tab) => (
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="sm:flex-1 sm:min-w-[100px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white rounded-lg sm:rounded-xl py-2 sm:py-3 px-2 sm:px-4 transition-all duration-300 flex-col sm:flex-row gap-0.5 sm:gap-0"
+                      className="flex-shrink-0 sm:flex-1 sm:min-w-[100px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white rounded-lg sm:rounded-xl py-2 sm:py-3 px-3 sm:px-4 transition-all duration-300 flex-row gap-1.5 sm:gap-0"
                     >
-                      <tab.icon className="w-4 h-4 sm:mr-2" />
-                      <span className="text-[10px] sm:text-sm sm:inline truncate">{tab.shortLabel}</span>
+                      <tab.icon className="w-4 h-4 flex-shrink-0 sm:mr-2" />
+                      <span className="text-xs sm:text-sm whitespace-nowrap">{tab.shortLabel}</span>
                       {tab.badge !== undefined && tab.badge > 0 && (
-                        <Badge 
-                          variant={tab.value === "notifications" ? "destructive" : "secondary"} 
-                          className="hidden sm:flex ml-2 h-5 min-w-[20px] text-xs"
+                        <Badge
+                          variant={tab.value === "notifications" ? "destructive" : "secondary"}
+                          className="ml-1 sm:ml-2 h-4 sm:h-5 min-w-[18px] sm:min-w-[20px] px-1 sm:px-1.5 text-[10px] sm:text-xs"
                         >
                           {tab.badge}
                         </Badge>
