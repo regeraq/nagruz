@@ -90,10 +90,8 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const { data: favorites = [] } = useQuery({
     queryKey: ["/api/favorites"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return [];
       const res = await fetch("/api/favorites", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) return [];
@@ -106,10 +104,8 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   const { data: recentOrders = [] } = useQuery({
     queryKey: ["/api/orders/user"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return [];
       const res = await fetch("/api/orders/user", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) return [];
@@ -170,11 +166,9 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
   // Add to favorites mutation
   const addFavoriteMutation = useMutation({
     mutationFn: async (productId: string) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/favorites", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -372,6 +366,7 @@ export function PaymentModal({ isOpen, onClose, product }: PaymentModalProps) {
       customerPhone: customerPhone.trim(),
       deliveryAddress: deliveryAddress.trim() || null,
       paymentDetails: JSON.stringify({ method: paymentMethod }),
+      consentPersonalData: true,
     };
 
     createOrderMutation.mutate(orderData);

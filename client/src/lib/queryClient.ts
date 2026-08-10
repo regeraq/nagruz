@@ -1,4 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { ensureCsrfToken } from "./csrf";
+import { clearLegacyTokens, refreshSession } from "./auth";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -9,15 +11,12 @@ async function throwIfResNotOk(res: Response) {
       if (text) {
         try {
           const json = JSON.parse(text);
-          // Use server-provided message if available
           if (json.message) {
             errorMessage = json.message;
-            // Improve CSRF error messages
             if (json.message.includes('CSRF')) {
               errorMessage = "Ошибка безопасности. Пожалуйста, обновите страницу и попробуйте снова";
             }
           } else {
-            // Map status codes to user-friendly messages
             if (res.status === 401) {
               errorMessage = "Требуется авторизация";
             } else if (res.status === 403) {
@@ -31,7 +30,6 @@ async function throwIfResNotOk(res: Response) {
             }
           }
         } catch {
-          // If JSON parsing fails, use status-based message
           if (res.status === 401) {
             errorMessage = "Требуется авторизация";
           } else if (res.status === 403) {
@@ -44,7 +42,6 @@ async function throwIfResNotOk(res: Response) {
         }
       }
     } catch {
-      // Fallback to status-based message
       if (res.status === 401) {
         errorMessage = "Требуется авторизация";
       } else if (res.status === 403) {
@@ -63,58 +60,44 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-/**
- * Gets CSRF token from cookie or fetches from server
- * CSRF token is set by server in cookie and should be sent in header
- */
-function getCsrfToken(): string | null {
-  // Try to get token from meta tag (set by server)
-  const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-  if (metaToken && metaToken.trim()) return metaToken.trim();
-  
-  // Fallback: try to read from cookie
-  const cookies = document.cookie.split(';');
-  for (const cookie of cookies) {
-    const trimmed = cookie.trim();
-    const [name, ...valueParts] = trimmed.split('=');
-    if (name === 'csrf-token' && valueParts.length > 0) {
-      const value = valueParts.join('='); // Handle values with = in them
-      if (value && value.trim()) {
-        return value.trim();
-      }
-    }
-  }
-  return null;
-}
+/** fetch с credentials + однократный refresh при 401. */
+async function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers || {});
+  const method = (init.method || "GET").toUpperCase();
 
-/**
- * Fetch CSRF token from server
- */
-export async function fetchCsrfToken(): Promise<string | null> {
-  try {
-    const res = await fetch("/api/csrf-token", { 
-      credentials: "include",
-      method: "GET",
-      headers: {
-        "Accept": "application/json"
-      }
-    });
-    if (!res.ok) {
-      console.warn("Failed to fetch CSRF token, status:", res.status);
-      return null;
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    const csrfToken = await ensureCsrfToken();
+    if (csrfToken && !headers.has("x-csrf-token")) {
+      headers.set("x-csrf-token", csrfToken);
     }
-    const data = await res.json();
-    const token = data.token || null;
-    if (token) {
-      // Also try to read from cookie after fetch (cookie should be set by server)
-      const cookieToken = getCsrfToken();
-      return cookieToken || token;
-    }
-    return null;
-  } catch (error) {
-    console.error("Error fetching CSRF token:", error);
-    return null;
   }
+
+  const first = await fetch(input, {
+    ...init,
+    headers,
+    credentials: "include",
+  });
+
+  if (first.status !== 401) return first;
+
+  // Не пытаемся refresh'ить сам refresh/logout — иначе цикл.
+  const url = typeof input === "string" ? input : input.toString();
+  if (url.includes("/api/auth/refresh") || url.includes("/api/auth/logout") || url.includes("/api/auth/login")) {
+    clearLegacyTokens();
+    return first;
+  }
+
+  const refreshed = await refreshSession();
+  if (!refreshed) {
+    clearLegacyTokens();
+    return first;
+  }
+
+  return fetch(input, {
+    ...init,
+    headers,
+    credentials: "include",
+  });
 }
 
 export async function apiRequest(
@@ -123,51 +106,11 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
-  
-  // Add JWT token if available
-  const accessToken = localStorage.getItem("accessToken");
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
-  }
-  
-  // Add CSRF token for state-changing requests
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    let csrfToken = getCsrfToken();
-    
-    // If no token found, try to fetch it from server first
-    if (!csrfToken) {
-      csrfToken = await fetchCsrfToken();
-    }
-    
-    // If still no token, make a GET request to get cookie set and try again
-    if (!csrfToken) {
-      try {
-        const tokenRes = await fetch("/api/csrf-token", { 
-          credentials: "include",
-          method: "GET"
-        });
-        if (tokenRes.ok) {
-          const tokenData = await tokenRes.json();
-          csrfToken = tokenData.token || getCsrfToken();
-        }
-      } catch (e) {
-        console.warn("Failed to fetch CSRF token:", e);
-      }
-    }
-    
-    if (csrfToken) {
-      headers['x-csrf-token'] = csrfToken;
-    } else {
-      console.warn("CSRF token not available, request may fail. Attempting request anyway...");
-      // Don't fail immediately - let server handle it with proper error message
-    }
-  }
 
-  const res = await fetch(url, {
+  const res = await authFetch(url, {
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
   });
 
   await throwIfResNotOk(res);
@@ -180,24 +123,12 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const headers: Record<string, string> = {};
-    
-    // Add JWT token if available
-    const accessToken = localStorage.getItem("accessToken");
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
-    }
-    
-    const res = await fetch(queryKey.join("/") as string, {
-      headers,
-      credentials: "include",
+    const res = await authFetch(queryKey.join("/") as string, {
+      method: "GET",
     });
 
     if (res.status === 401) {
-      // Clear invalid tokens
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      
+      clearLegacyTokens();
       if (unauthorizedBehavior === "returnNull") {
         return null;
       }
@@ -213,8 +144,8 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000, // 5 minutes - keep data fresh longer
-      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache longer (formerly cacheTime)
+      staleTime: 5 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
       retry: false,
     },
     mutations: {
@@ -222,3 +153,5 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+export { authFetch };

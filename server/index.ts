@@ -1,24 +1,6 @@
-//удалить что ниже
-// === ДОБАВЬТЕ ЭТО В НАЧАЛО ФАЙЛА ===
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-// Определяем __dirname для ES модулей
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Загружаем .env файл из корня проекта
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-
-// Проверяем загрузку переменных окружения
-console.log('=== ЗАГРУЗКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ===');
-console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✓ установлен' : '✗ НЕ установлен!');
-console.log('NODE_ENV:', process.env.NODE_ENV || 'не установлен');
-console.log('PORT:', process.env.PORT || '5000 (по умолчанию)');
-console.log('====================================');
-// === КОНЕЦ ДОБАВЛЕНИЯ ===
-//если что удалить что выше
+// ВАЖНО: должен быть самым первым импортом — заполняет process.env до того,
+// как остальные модули (в первую очередь ./db) прочитают свои настройки.
+import "./loadEnv";
 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
@@ -46,15 +28,41 @@ declare module 'http' {
 // Cookie parser for CSRF tokens
 app.use(cookieParser());
 
-// Security: Different body size limits for different content types
-// Large limit for file uploads (contact forms with attachments)
-app.use(express.json({
-  limit: '15mb', // Increased for file uploads (base64 encoded files can be large)
+// Security: Different body size limits for different content types.
+// SECURITY/DoS: раньше лимит 15 MB действовал на ВСЕ маршруты, поэтому любой
+// анонимный запрос мог заставить сервер разобрать 15 MB JSON. Крупный лимит
+// оставлен только там, где реально загружаются base64-вложения.
+//
+// ВАЖНО: список должен покрывать ВСЕ маршруты, принимающие base64. При
+// добавлении нового upload-эндпоинта его нужно внести сюда, иначе запрос
+// будет отклоняться с 413 PayloadTooLarge.
+const LARGE_BODY_ROUTES = [
+  '/api/contact',            // вложения к заявке (до 15 MB)
+  '/api/commercial',         // файлы коммерческих предложений (до 10 MB)
+  '/api/admin/products',     // изображения товаров (base64)
+  '/api/auth/avatar',        // загрузка аватара
+  '/api/auth/profile',       // аватар передаётся и в общем PATCH профиля
+];
+
+const largeJson = express.json({
+  limit: '15mb',
   verify: (req, _res, buf) => {
     req.rawBody = buf;
-  }
-}));
-app.use(express.urlencoded({ extended: false, limit: '15mb' }));
+  },
+});
+
+const defaultJson = express.json({
+  limit: '256kb',
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+});
+
+app.use((req, res, next) => {
+  const useLargeLimit = LARGE_BODY_ROUTES.some((prefix) => req.path.startsWith(prefix));
+  return useLargeLimit ? largeJson(req, res, next) : defaultJson(req, res, next);
+});
+app.use(express.urlencoded({ extended: false, limit: '256kb' }));
 
 // CSRF protection: Generate tokens for GET requests
 app.use(csrfToken);
@@ -62,35 +70,53 @@ app.use(csrfToken);
 // CORS configuration
 // SECURITY: в spec нельзя одновременно Access-Control-Allow-Origin: * и
 // Access-Control-Allow-Credentials: true. Всегда отвечаем конкретным origin.
+const CORS_ALLOW_LIST = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+if (!isDevelopment && CORS_ALLOW_LIST.length === 0) {
+  console.warn(
+    '[cors] ALLOWED_ORIGINS не задан — кросс-доменные запросы будут отклоняться. ' +
+      'Для same-origin развёртывания это ожидаемое и безопасное поведение.',
+  );
+}
+
 app.use((req, res, next) => {
   const requestOrigin = req.headers.origin;
 
-  if (isDevelopment) {
-    // В dev отражаем origin запроса (это безопасно, т.к. dev-сервер доступен только локально)
-    if (requestOrigin) res.header('Access-Control-Allow-Origin', requestOrigin);
-    res.header('Vary', 'Origin');
-  } else {
-    // В проде: same-origin или whitelist через ALLOWED_ORIGINS=https://a.ru,https://b.ru
-    const allowList = (process.env.ALLOWED_ORIGINS || '')
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-    if (requestOrigin && (allowList.length === 0 || allowList.includes(requestOrigin))) {
-      res.header('Access-Control-Allow-Origin', requestOrigin);
-      res.header('Vary', 'Origin');
-    }
+  // SECURITY: отражать произвольный Origin вместе с Allow-Credentials нельзя.
+  // Раньше в production при пустом ALLOWED_ORIGINS отражался ЛЮБОЙ origin —
+  // сторонний сайт мог прочитать /api/csrf-token с cookie пользователя
+  // и тем самым полностью обойти защиту от CSRF.
+  const originAllowed = isDevelopment
+    ? Boolean(requestOrigin)
+    : Boolean(requestOrigin && CORS_ALLOW_LIST.includes(requestOrigin));
+
+  if (originAllowed && requestOrigin) {
+    res.header('Access-Control-Allow-Origin', requestOrigin);
+    res.header('Access-Control-Allow-Credentials', 'true');
   }
+  res.header('Vary', 'Origin');
 
   res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, Cache-Control');
-  res.header('Access-Control-Allow-Credentials', 'true');
 
   if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
+    res.sendStatus(204);
     return;
   }
 
   next();
+});
+
+// SECURITY: CSRF-проверка применяется ко ВСЕМ изменяющим /api-запросам.
+// Раньше `csrfProtection` висел точечно всего на 5 маршрутах, а десятки
+// остальных (смена пароля, удаление аккаунта, весь /api/admin/*) были
+// полностью открыты для cross-site запросов.
+app.use('/api', (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  return csrfProtection(req, res, next);
 });
 
 // Security headers
@@ -105,21 +131,24 @@ app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)');
 
-  // Content Security Policy: в dev нужен 'unsafe-eval' для Vite HMR,
-  // в production он опасен и убирается.
+  // Content Security Policy.
+  // dev: Vite HMR требует 'unsafe-eval' и inline-скриптов.
+  // prod: сборка Vite отдаёт только внешние <script type="module">, поэтому
+  // 'unsafe-inline'/'unsafe-eval' убраны — это основная защита от XSS.
   const scriptSrc = isDevelopment
     ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-    : "script-src 'self' 'unsafe-inline'";
+    : "script-src 'self'";
 
+  // Шрифты самохостятся из /fonts (см. client/public/fonts) — без Google Fonts,
+  // чтобы IP посетителей не уходили в США (152-ФЗ).
   const csp = [
     "default-src 'self'",
     scriptSrc,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    // NB: связь с Yandex Postbox идёт только из серверной части (SMTP),
-    // поэтому здесь ей place нет. Resend оставлен на случай EMAIL_PROVIDER=resend.
-    "connect-src 'self' https://api.resend.com",
+    // Resend вызывается только с сервера; в браузере connect к нему не нужен.
+    "connect-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -150,8 +179,10 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse && isDevelopment) {
-        // Only log response body in development
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        // COMPLIANCE (152-ФЗ): в dev-логи попадали тела ответов целиком —
+        // вместе с email, телефонами и токенами. Логируем только состав
+        // ответа, без значений.
+        logLine += ` :: {${Object.keys(capturedJsonResponse).join(",")}}`;
       }
 
       if (logLine.length > 80) {
@@ -166,6 +197,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Проверяем конфигурацию до того, как начнём принимать трафик.
+  const { runPreflightChecks } = await import("./preflight");
+  runPreflightChecks();
+
   // Clear cache on server startup to ensure fresh data
   console.log("🧹 [Server] Clearing cache on startup");
   cache.clear();
@@ -236,6 +271,62 @@ app.use((req, res, next) => {
   const isWindows = process.platform === 'win32';
   const host = '0.0.0.0'; // Listen on all network interfaces
   
+  // COMPLIANCE (152-ФЗ ст.5 ч.7): ПДн не должны храниться дольше необходимого.
+  // Истёкшие сессии (с IP и User-Agent) и старые записи о попытках входа
+  // (с email) раньше накапливались в БД бессрочно.
+  const LOGIN_ATTEMPT_RETENTION_DAYS = parseInt(process.env.LOGIN_ATTEMPT_RETENTION_DAYS || '90', 10);
+  const purgeExpiredPersonalData = async () => {
+    try {
+      const { storage } = await import('./storage');
+      const removed = await storage.purgeExpiredData(LOGIN_ATTEMPT_RETENTION_DAYS);
+      if (removed.sessions || removed.loginAttempts) {
+        log(`[retention] удалено: сессий ${removed.sessions}, попыток входа ${removed.loginAttempts}`);
+      }
+    } catch (error) {
+      console.error('[retention] не удалось очистить устаревшие данные:', error);
+    }
+  };
+  void purgeExpiredPersonalData();
+  setInterval(purgeExpiredPersonalData, 24 * 60 * 60 * 1000).unref();
+
+  // RELIABILITY: без обработки SIGTERM `pm2 reload` убивает процесс мгновенно,
+  // обрывая запросы в полёте (в том числе незавершённые записи в БД) и оставляя
+  // соединения PostgreSQL висеть до таймаута.
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log(`получен ${signal} — завершаем работу`);
+
+    // Аварийный выход, если что-то не отпускает event loop.
+    const forceExit = setTimeout(() => {
+      console.error('[shutdown] не удалось закрыться штатно за 10 с — выходим принудительно');
+      process.exit(1);
+    }, 10_000);
+    forceExit.unref();
+
+    server.close(async () => {
+      try {
+        const { closePool } = await import('./db');
+        await closePool();
+        log('соединения закрыты, выходим');
+      } catch (error) {
+        console.error('[shutdown] ошибка при закрытии пула БД:', error);
+      } finally {
+        clearTimeout(forceExit);
+        process.exit(0);
+      }
+    });
+  };
+
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+
+  // Иначе необработанное отклонение промиса в Node 20+ роняет процесс целиком.
+  process.on('unhandledRejection', (reason) => {
+    console.error('[process] unhandledRejection:', reason);
+  });
+
   server.listen({
     port,
     host,

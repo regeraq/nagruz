@@ -1,54 +1,18 @@
-// =============================================
-// ЗАКОММЕНТИРОВАННЫЙ ИСХОДНЫЙ КОД (Neon Database)
-// =============================================
-// Этот код использовался для облачной базы данных Neon
-// import { Pool, neonConfig } from '@neondatabase/serverless';
-// import { drizzle } from 'drizzle-orm/neon-serverless';
-// import ws from "ws";
-// import * as schema from "@shared/schema";
-// 
-// neonConfig.webSocketConstructor = ws;
-// 
-// if (!process.env.DATABASE_URL) {
-//   throw new Error(
-//     "DATABASE_URL must be set. Did you forget to provision a database?",
-//   );
-// }
-// 
-// const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-// export const db = drizzle({ client: pool, schema });
-// 
-// export async function testConnection(): Promise<boolean> {
-//   try {
-//     const client = await pool.connect();
-//     await client.query('SELECT 1');
-//     client.release();
-//     console.log('✅ Database connection successful');
-//     return true;
-//   } catch (error) {
-//     console.error('❌ Database connection failed:', error);
-//     return false;
-//   }
-// }
-
-// =============================================
-// НОВЫЙ КОД ДЛЯ ЛОКАЛЬНОЙ РАЗРАБОТКИ
-// =============================================
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from '../shared/schema';
 
-// Устанавливаем DATABASE_URL по умолчанию для локальной разработки
-const DEFAULT_DATABASE_URL = 'postgresql://loaddevice_user:loaddevice123@localhost:5432/loaddevice_db';
-
+// SECURITY: раньше здесь лежал fallback с реальным логином и паролем БД.
+// Захардкоженные учётные данные в репозитории — это утечка секрета, а молчаливый
+// откат на локальную БД маскирует неверную конфигурацию прода.
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = DEFAULT_DATABASE_URL;
-  console.log('⚠️  DATABASE_URL не найден в .env, используется локальная БД');
-  console.log('📊  DATABASE_URL:', process.env.DATABASE_URL);
+  console.error('❌ DATABASE_URL не задан. Укажите его в .env или в переменных окружения.');
+  console.error('   Пример: DATABASE_URL=postgresql://user:password@localhost:5432/dbname');
+  process.exit(1);
 }
 
 // КРИТИЧЕСКОЕ ПРЕДУПРЕЖДЕНИЕ: Проверка на соответствие 152-ФЗ (локализация БД)
-const databaseUrl = process.env.DATABASE_URL || DEFAULT_DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL;
 const foreignDatabaseDomains = [
   'aws.neon.tech',
   'amazonaws.com',
@@ -94,14 +58,32 @@ if (isForeignDatabase) {
   console.error('');
 }
 
+// RELIABILITY: без явных лимитов пул использует настройки по умолчанию и,
+// главное, ждёт свободное соединение бесконечно. При недоступной БД запросы
+// «висят», Express копит соединения и процесс перестаёт отвечать вообще —
+// вместо того чтобы быстро вернуть 500 и остаться живым.
 const pool = new Pool({
   connectionString: databaseUrl,
+  max: parseInt(process.env.DB_POOL_MAX || '10', 10),
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+});
+
+// Иначе ошибка простаивающего клиента поднимается как uncaughtException
+// и роняет процесс.
+pool.on('error', (err) => {
+  console.error('[db] неожиданная ошибка простаивающего соединения:', err.message);
 });
 
 export const db = drizzle(pool, { schema });
 
 // Export pool for direct SQL queries (e.g., database export)
 export { pool };
+
+/** Закрывает пул при штатном завершении процесса. */
+export async function closePool(): Promise<void> {
+  await pool.end();
+}
 
 export async function testConnection(): Promise<boolean> {
   try {

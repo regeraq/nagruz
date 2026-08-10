@@ -95,15 +95,13 @@ router.post(
         });
       }
 
-      // Store file (for now, we'll store base64 data in filePath)
-      // In production, you'd save to disk and store the path
       const file = await fileService.createFile(
         proposalId,
         userId,
         validatedData.fileName,
         validatedData.mimeType,
         validatedData.fileSize,
-        validatedData.fileData // Store base64 data
+        validatedData.fileData, // на диск; в БД путь uploads/commercial/...
       );
 
       logger.logFileOperation("upload", {
@@ -269,7 +267,7 @@ router.delete(
         proposalId,
       }, req.user!.id, req.user!.email);
 
-      console.log(`🗑️ [Files] File deleted: ${file.fileName} (${fileId}) from proposal ${proposalId} by admin ${req.user!.email}`);
+      console.log(`🗑️ [Files] File deleted: ${file.fileName} (${fileId}) from proposal ${proposalId} by admin ${req.user!.id}`);
 
       res.json({
         success: true,

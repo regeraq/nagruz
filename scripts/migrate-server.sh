@@ -269,9 +269,9 @@ if [ ! -f "\$PROJECT_DIR/package.json" ] && [ -f "\$PROJECT_DIR/HelloWhoAreYou-1
 fi
 cd "\$PROJECT_DIR"
 
-npm install
+npm ci
 npm run build
-npm run db:push || true   # migrations (на случай если в дампе нет новых таблиц из кода)
+npm run db:migrate || true   # migrations (на случай если в дампе нет новых таблиц из кода)
 
 if ! command -v pm2 >/dev/null; then
     npm install -g pm2

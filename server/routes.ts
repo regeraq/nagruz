@@ -3,7 +3,14 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { pool } from "./db";
-import { hashPassword, verifyPassword, generateAccessToken, verifyAccessToken, generateRefreshToken } from "./auth";
+import { hashPassword, verifyPassword, generateAccessToken, verifyAccessToken, generateRefreshToken, verifyRefreshToken } from "./auth";
+import {
+  setAccessCookie,
+  setRefreshCookie,
+  clearAuthCookies,
+  getAccessTokenFromRequest,
+  getRefreshTokenFromRequest,
+} from "./authCookies";
 import {
   insertContactSubmissionSchema,
   insertOrderSchema,
@@ -11,7 +18,7 @@ import {
   adminUpdateProductSchema,
 } from "@shared/schema";
 import { z } from "zod";
-import { requireAdmin } from "./middleware/admin";
+import { requireAdmin, requireSuperAdmin, requireAuth } from "./middleware/admin";
 import { 
   escapeHtml, 
   sanitizeInput, 
@@ -29,6 +36,7 @@ import { randomBytes } from "crypto";
 // Import new API routes
 import commercialFilesRouter from "./api/commercial/files";
 import fileDownloadRouter from "./api/files/download";
+import { logger } from "./services/logger";
 
 // Unified email service (Yandex Postbox / Resend / noop — via EMAIL_PROVIDER env)
 import {
@@ -37,7 +45,20 @@ import {
   getEmailProviderStatus,
 } from "./services/email";
 
-const OWNER_EMAIL = process.env.OWNER_EMAIL || "rostext@gmail.com";
+// Адрес администратора для уведомлений о заявках.
+// Хардкод-фолбэка здесь быть не должно: при незаданном OWNER_EMAIL заявки
+// с персональными данными клиентов уходили бы на чужой посторонний ящик.
+const OWNER_EMAIL = process.env.OWNER_EMAIL || "";
+
+if (!OWNER_EMAIL) {
+  const message =
+    "OWNER_EMAIL не задан — уведомления администратору о новых заявках отправляться не будут.";
+  if (process.env.NODE_ENV === "production") {
+    console.error(`❌ [Config] ${message}`);
+  } else {
+    console.warn(`⚠️  [Config] ${message}`);
+  }
+}
 
 {
   const s = getEmailProviderStatus();
@@ -53,6 +74,29 @@ const OWNER_EMAIL = process.env.OWNER_EMAIL || "rostext@gmail.com";
       `[email] provider=${s.provider}, yandex=${s.yandex.configured ? "ok" : "off"}, resend=${s.resend.configured ? "ok" : "off"}, from=${s.fromName} <${s.fromEmail}>`,
     );
   }
+}
+
+/**
+ * SECURITY: `storage.getAllUsers()` / `getUserById()` возвращают строку таблицы
+ * целиком, включая `passwordHash` и токены сброса. Ни один API-ответ не должен
+ * их отдавать — даже администратору: XSS в админке или логи прокси превращают
+ * это в утечку всей базы хешей.
+ */
+function redactUser<T>(user: T): T | null {
+  if (!user || typeof user !== "object") return null;
+  const {
+    password: _password,
+    passwordHash: _passwordHash,
+    resetToken: _resetToken,
+    resetTokenExpiry: _resetTokenExpiry,
+    emailVerificationToken: _emailVerificationToken,
+    ...safe
+  } = user as Record<string, unknown>;
+  return safe as T;
+}
+
+function redactUsers<T>(users: T[]): (T | null)[] {
+  return (users || []).map((u) => redactUser(u));
 }
 
 // Constants
@@ -101,6 +145,32 @@ function parseAdvantagesFromDb(raw: unknown): Array<{ title: string; description
 
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  /**
+   * Health check для nginx, PM2 и внешнего мониторинга доступности.
+   *
+   * Отдаёт 200 только если приложение реально может обслужить запрос
+   * (то есть доступна БД). 503 при недоступной БД — это сигнал для
+   * балансировщика и для системы мониторинга, что инстанс не готов.
+   * Никаких сведений о конфигурации не раскрывает.
+   */
+  app.get("/api/health", async (_req, res) => {
+    const started = Date.now();
+    try {
+      await pool.query("SELECT 1");
+      res.status(200).json({
+        status: "ok",
+        uptime: Math.floor(process.uptime()),
+        db: { status: "ok", latencyMs: Date.now() - started },
+      });
+    } catch {
+      res.status(503).json({
+        status: "degraded",
+        uptime: Math.floor(process.uptime()),
+        db: { status: "unavailable" },
+      });
+    }
+  });
+
   // CSRF token endpoint
   app.get("/api/csrf-token", (req, res) => {
     const token = res.locals.csrfToken;
@@ -124,27 +194,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // FIXED: Added CSRF protection, rate limiting, authentication requirement, and input sanitization
-  app.post("/api/contact", csrfProtection, rateLimiters.contact, express.json({ limit: '15mb' }), async (req, res) => {
+  app.post("/api/contact", csrfProtection, rateLimiters.contact, requireAuth, express.json({ limit: '15mb' }), async (req, res) => {
     try {
-      // FIXED: Require authentication for contact submissions
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      let userId: string | null = null;
-      
-      if (token) {
-        try {
-          const payload = verifyAccessToken(token);
-          if (payload) {
-            userId = payload.userId;
-          }
-        } catch (e) {
-          // Token invalid, userId stays null
-        }
-      }
-      
-      if (!userId) {
-        res.status(401).json({
+      const userId = req.user!.id;
+
+      // COMPLIANCE (152-ФЗ): согласие нельзя проверять только на клиенте.
+      if (req.body?.consentPersonalData !== true) {
+        res.status(400).json({
           success: false,
-          message: "Для отправки заявок необходимо авторизоваться",
+          message: "Необходимо согласие на обработку персональных данных",
+          code: "CONSENT_REQUIRED",
         });
         return;
       }
@@ -414,7 +473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               file.fileName,
               file.mimeType,
               file.fileSize,
-              file.fileData // Store full data URL for now
+              file.fileData, // сохранится на диск, в БД — только путь
             );
             
             logger.logFileOperation("upload", {
@@ -668,7 +727,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/contact", rateLimiters.general, async (req, res) => {
+  // SECURITY: заявки содержат ПДн (ФИО, e-mail, телефон, текст обращения).
+  // Доступ только для администраторов — раньше endpoint был публичным.
+  app.get("/api/contact", requireAdmin, rateLimiters.general, async (req, res) => {
     try {
       const submissions = await storage.getContactSubmissions();
       res.json(submissions);
@@ -681,7 +742,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/contact/:id", rateLimiters.general, async (req, res) => {
+  app.get("/api/contact/:id", requireAdmin, rateLimiters.general, async (req, res) => {
     try {
       const submission = await storage.getContactSubmission(req.params.id);
       
@@ -1080,27 +1141,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // FIXED: Added CSRF protection, rate limiting and XSS protection
-  app.post("/api/orders", csrfProtection, rateLimiters.orders, async (req, res) => {
+  app.post("/api/orders", csrfProtection, rateLimiters.orders, requireAuth, async (req, res) => {
     try {
-      // FIXED: Require authentication for orders
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      let userId: string | null = null;
-      
-      if (token) {
-        try {
-          const payload = verifyAccessToken(token);
-          if (payload) {
-            userId = payload.userId;
-          }
-        } catch (e) {
-          // Token invalid, userId stays null
-        }
-      }
-      
-      if (!userId) {
-        res.status(401).json({
+      const userId = req.user!.id;
+
+      if (req.body?.consentPersonalData !== true) {
+        res.status(400).json({
           success: false,
-          message: "Для оформления заказов необходимо авторизоваться",
+          message: "Необходимо согласие на обработку персональных данных",
+          code: "CONSENT_REQUIRED",
         });
         return;
       }
@@ -1300,19 +1349,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user orders (must be BEFORE /api/orders/:id)
-  app.get("/api/orders/user", async (req, res) => {
+  app.get("/api/orders/user", requireAuth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const orders = await storage.getUserOrders(payload.userId);
       const ordersWithProducts = await Promise.all(
@@ -1335,25 +1374,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Get all orders (must be BEFORE /api/orders/:id)
-  app.get("/api/admin/orders", async (req, res) => {
+  app.get("/api/admin/orders", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const orders = await storage.getAllOrders();
       res.json({ success: true, orders });
@@ -1363,26 +1385,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Delete all orders - only for admins
-  app.delete("/api/admin/orders/all", async (req, res) => {
+  // Delete all orders — только superadmin (разрушительная операция)
+  app.delete("/api/admin/orders/all", requireSuperAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       // Get count before deletion for logging
       const ordersBefore = await storage.getAllOrders();
@@ -1400,7 +1405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete all orders
       const deletedCount = await storage.deleteAllOrders();
 
-      console.log(`🗑️ [DELETE /api/admin/orders/all] Deleted ${deletedCount} orders by admin ${user.email}`);
+      console.log(`🗑️ [DELETE /api/admin/orders/all] Deleted ${deletedCount} orders by admin ${req.user!.id}`);
 
       res.json({ 
         success: true, 
@@ -1417,23 +1422,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // SECURITY FIX: Added authentication and ownership check
-  app.get("/api/orders/:id", rateLimiters.general, async (req, res) => {
+  app.get("/api/orders/:id", requireAuth, rateLimiters.general, async (req, res) => {
     try {
-      // Require authentication
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Требуется авторизация" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Недействительный токен" });
-        return;
-      }
-
       const order = await storage.getOrder(req.params.id);
-      
+
       if (!order) {
         res.status(404).json({
           success: false,
@@ -1441,16 +1433,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         return;
       }
-      
-      // SECURITY: Check if user owns this order or is admin
-      const user = await storage.getUserById(payload.userId);
-      if (!user) {
-        res.status(401).json({ success: false, message: "Пользователь не найден" });
-        return;
-      }
 
-      const isOwner = order.userId === payload.userId;
-      const isAdmin = user.role === "admin" || user.role === "superadmin";
+      // SECURITY: Check if user owns this order or is admin
+      const isOwner = order.userId === req.user!.id;
+      const isAdmin = req.user!.role === "admin" || req.user!.role === "superadmin";
       
       if (!isOwner && !isAdmin) {
         res.status(403).json({
@@ -1471,27 +1457,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // SECURITY FIX: Added admin-only authorization
-  app.patch("/api/orders/:id/status", rateLimiters.general, async (req, res) => {
+  app.patch("/api/orders/:id/status", requireAuth, rateLimiters.general, async (req, res) => {
     try {
-      // Require authentication
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Требуется авторизация" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Недействительный токен" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user) {
-        res.status(401).json({ success: false, message: "Пользователь не найден" });
-        return;
-      }
-
+      const user = req.user!;
       const { status, paymentDetails } = req.body;
 
       if (!status || typeof status !== 'string') {
@@ -1561,12 +1529,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Auth endpoints
-  app.post("/api/auth/register", csrfProtection, rateLimiters.general, async (req, res) => {
+  // rateLimiters.general (100/мин) для регистрации слишком мягкий —
+  // это готовый вектор массового создания учёток и спама почтой.
+  app.post("/api/auth/register", csrfProtection, rateLimiters.auth, async (req, res) => {
     try {
       const { email, password, firstName, lastName, phone } = req.body;
-      
+
       if (!email || !password) {
         res.status(400).json({ success: false, message: "Email and password required" });
+        return;
+      }
+
+      // COMPLIANCE (152-ФЗ ст.9): согласие должно быть конкретным и доказуемым.
+      // Проверять галочки только на клиенте бессмысленно — прямой запрос к API
+      // их обходит. Требуем явные флаги и отказываем в регистрации без них.
+      const CONSENT_TEXT =
+        "Согласие на обработку персональных данных, Политика обработки данных и Политика конфиденциальности";
+      if (req.body?.consentPersonalData !== true || req.body?.consentPolicies !== true) {
+        res.status(400).json({
+          success: false,
+          message:
+            "Регистрация невозможна без согласия на обработку персональных данных и принятия политик",
+          code: "CONSENT_REQUIRED",
+        });
         return;
       }
 
@@ -1586,24 +1571,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: "user",
       });
 
-      // Save personal data consent (152-ФЗ compliance)
-      const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0] || 
-                      req.socket.remoteAddress || 
-                      'unknown';
+      // Save personal data consent (152-ФЗ compliance).
+      // COMPLIANCE: IP-адрес — доказательство факта дачи согласия, поэтому
+      // берём его через getClientIp (уважает TRUST_PROXY), а не из
+      // подделываемого клиентом заголовка X-Forwarded-For.
+      const clientIp = getClientIp(req);
       const userAgent = req.headers['user-agent'] || undefined;
-      
+
       try {
         await storage.createPersonalDataConsent({
           userId: user.id,
           consentType: "registration",
           isConsented: true,
-          consentText: "Согласен на обработку персональных данных и с политикой обработки персональных данных",
+          consentText: CONSENT_TEXT,
           ipAddress: clientIp,
           userAgent: userAgent,
         });
       } catch (consentError) {
-        console.error("Error saving consent:", consentError);
-        // Don't fail registration if consent saving fails
+        // COMPLIANCE: учётная запись без записи о согласии недопустима —
+        // оператор не сможет доказать законность обработки. Раньше ошибка
+        // молча игнорировалась. Откатываем создание пользователя.
+        console.error("Error saving consent, rolling back registration:", consentError);
+        await storage.deleteUser(user.id).catch(() => {});
+        res.status(500).json({
+          success: false,
+          message: "Не удалось зарегистрировать согласие на обработку данных. Попробуйте позже.",
+        });
+        return;
       }
 
       const accessToken = generateAccessToken({
@@ -1614,9 +1608,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const refreshToken = generateRefreshToken(user.id);
 
-      // Создаём запись сессии для регистрации
       try {
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         await storage.createSession({
           userId: user.id,
           refreshToken,
@@ -1628,11 +1621,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn("[Register] Failed to persist session:", sessionErr);
       }
 
+      // SECURITY: токены только в HttpOnly cookie — JS/XSS их не читает.
+      setAccessCookie(req, res, accessToken);
+      setRefreshCookie(req, res, refreshToken);
+
       res.json({
         success: true,
         message: "User registered successfully",
         user: { id: user.id, email: user.email, role: user.role },
-        tokens: { accessToken, refreshToken },
       });
     } catch (error) {
       console.error("Registration error:", error);
@@ -1663,16 +1659,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user is blocked
       // SECURITY: Explicitly check for true (handle null/undefined as false)
       if (user.isBlocked === true) {
-        console.log(`[Login] Blocked user attempted login: ${email} (ID: ${user.id})`);
+        // COMPLIANCE (152-ФЗ, ст. 5 — минимизация): в логи пишем только
+        // идентификатор пользователя, без e-mail.
+        console.log(`[Login] Blocked user attempted login (ID: ${user.id})`);
         res.status(403).json({ 
           success: false, 
           message: "Ваш аккаунт заблокирован. Обратитесь в поддержку." 
         });
         return;
       }
-      
-      // Log successful user lookup (for debugging)
-      console.log(`[Login] User found: ${email}, isBlocked: ${user.isBlocked}, role: ${user.role}`);
 
       if (!user.passwordHash) {
         res.status(401).json({
@@ -1709,13 +1704,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const refreshToken = generateRefreshToken(user.id);
 
-      // Update last login timestamp
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
 
-      // Создаём запись сессии для управления устройствами
       try {
         const userAgent = (req.headers["user-agent"] || "").toString().slice(0, 500);
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 дней
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         await storage.createSession({
           userId: user.id,
           refreshToken,
@@ -1724,15 +1717,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userAgent,
         });
       } catch (sessionErr) {
-        // Не блокируем логин если не удалось записать сессию (fail-open)
         console.warn("[Login] Failed to persist session:", sessionErr);
       }
+
+      setAccessCookie(req, res, accessToken);
+      setRefreshCookie(req, res, refreshToken);
 
       res.json({
         success: true,
         message: "Login successful",
         user: { id: user.id, email: user.email, role: user.role },
-        tokens: { accessToken, refreshToken },
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -1740,40 +1734,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // DIAGNOSTIC: Check user status by email (temporary, remove after fixing)
-  app.get("/api/debug/user-status/:email", async (req, res) => {
-    try {
-      const email = req.params.email;
-      const user = await storage.getUserByEmail(email);
-      
-      if (!user) {
-        return res.json({
-          success: false,
-          message: "User not found",
-          email,
-        });
-      }
-      
-      res.json({
-        success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          isBlocked: user.isBlocked,
-          isEmailVerified: user.isEmailVerified,
-          createdAt: user.createdAt,
-        },
-      });
-    } catch (error) {
-      console.error("Debug user status error:", error);
-      res.status(500).json({ success: false, message: "Error checking user status" });
-    }
-  });
+  // SECURITY: диагностический endpoint GET /api/debug/user-status/:email удалён.
+  // Он позволял без авторизации перебирать e-mail адреса и узнавать роль,
+  // статус блокировки и дату регистрации любого пользователя.
+  // Ту же информацию администратор получает через GET /api/admin/users/:id.
 
-  app.get("/api/auth/me", async (req, res) => {
+  app.get("/api/auth/me", rateLimiters.general, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
+      const token = getAccessTokenFromRequest(req);
       if (!token) {
         res.status(401).json({ success: false, message: "No token" });
         return;
@@ -1787,12 +1755,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const user = await storage.getUserById(payload.userId);
       if (!user) {
-        res.status(404).json({ success: false, message: "User not found" });
+        clearAuthCookies(req, res);
+        res.status(401).json({ success: false, message: "Недействительный токен" });
         return;
       }
-      
-      // Log user status for debugging
-      console.log(`[Auth/Me] User: ${user.email}, isBlocked: ${user.isBlocked}, role: ${user.role}`);
+
+      if (user.isBlocked) {
+        clearAuthCookies(req, res);
+        res.status(403).json({ success: false, message: "Учётная запись заблокирована" });
+        return;
+      }
 
       res.json({
         success: true,
@@ -1818,24 +1790,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/logout", rateLimiters.general, (req, res) => {
-    res.json({ success: true, message: "Logged out" });
+  /**
+   * Обновление access-токена по refresh HttpOnly cookie.
+   * Клиент вызывает при 401; JS никогда не видит сами токены.
+   */
+  app.post("/api/auth/refresh", csrfProtection, rateLimiters.auth, async (req, res) => {
+    try {
+      const refreshToken = getRefreshTokenFromRequest(req);
+      if (!refreshToken) {
+        res.status(401).json({ success: false, message: "Нет refresh-токена" });
+        return;
+      }
+
+      const payload = verifyRefreshToken(refreshToken);
+      if (!payload) {
+        clearAuthCookies(req, res);
+        res.status(401).json({ success: false, message: "Недействительный refresh-токен" });
+        return;
+      }
+
+      const session = await storage.getSessionByToken(refreshToken);
+      if (!session || new Date(session.expiresAt) < new Date()) {
+        if (session) await storage.deleteSession(session.id);
+        clearAuthCookies(req, res);
+        res.status(401).json({ success: false, message: "Сессия истекла" });
+        return;
+      }
+
+      const user = await storage.getUserById(payload.userId);
+      if (!user || user.isBlocked) {
+        clearAuthCookies(req, res);
+        res.status(401).json({ success: false, message: "Пользователь недоступен" });
+        return;
+      }
+
+      const accessToken = generateAccessToken({
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      });
+      setAccessCookie(req, res, accessToken);
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Refresh error:", error);
+      res.status(500).json({ success: false, message: "Не удалось обновить сессию" });
+    }
+  });
+
+  app.post("/api/auth/logout", csrfProtection, rateLimiters.general, async (req, res) => {
+    try {
+      const refreshToken = getRefreshTokenFromRequest(req);
+      if (refreshToken) {
+        const session = await storage.getSessionByToken(refreshToken);
+        if (session) {
+          await storage.deleteSession(session.id);
+        }
+      }
+      clearAuthCookies(req, res);
+      res.json({ success: true, message: "Logged out" });
+    } catch (error) {
+      clearAuthCookies(req, res);
+      console.error("Logout error:", error);
+      res.json({ success: true, message: "Logged out" });
+    }
   });
 
   // Get user's commercial proposals
-  app.get("/api/auth/commercial-proposals", rateLimiters.general, async (req, res) => {
+  app.get("/api/auth/commercial-proposals", requireAuth, rateLimiters.general, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const userId = payload.userId;
       
@@ -1892,19 +1916,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Profile update endpoint — SECURITY: строгая валидация, разрешённые поля
-  app.patch("/api/auth/profile", rateLimiters.general, async (req, res) => {
+  app.patch("/api/auth/profile", requireAuth, rateLimiters.general, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const user = await storage.getUserById(payload.userId);
       if (!user) {
@@ -1952,13 +1966,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (parsed.data.avatar !== undefined) {
         const avatar = parsed.data.avatar;
         if (avatar && avatar.length > 0) {
-          // Разрешаем только data: URL с image/* или http(s)://
-          const isDataUrl = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(avatar);
-          const isHttpUrl = /^https?:\/\//i.test(avatar);
-          if (!isDataUrl && !isHttpUrl) {
+          // SVG запрещён: хранимый XSS при рендере в <img>/<AvatarImage>.
+          // Внешние URL запрещены: трекинг и подмена изображения.
+          const isDataUrl = /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(avatar);
+          if (!isDataUrl) {
             res.status(400).json({
               success: false,
-              message: "Аватар должен быть data: URL изображения или https-ссылкой",
+              message: "Аватар должен быть data: URL изображения (PNG/JPEG/GIF/WebP)",
             });
             return;
           }
@@ -2009,7 +2023,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Вспомогательная функция: достаёт текущего пользователя по JWT.
    */
   async function getCurrentUser(req: any) {
-    const token = req.headers.authorization?.replace("Bearer ", "");
+    const token = getAccessTokenFromRequest(req);
     if (!token) return null;
     const payload = verifyAccessToken(token);
     if (!payload) return null;
@@ -2331,10 +2345,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(413).json({ success: false, message: "Аватар слишком большой" });
         return;
       }
-      const isDataUrl = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(avatar);
-      const isHttpUrl = /^https?:\/\//i.test(avatar);
-      if (!isDataUrl && !isHttpUrl) {
-        res.status(400).json({ success: false, message: "Аватар должен быть data:image/... или URL" });
+      const isDataUrl = /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(avatar);
+      if (!isDataUrl) {
+        res.status(400).json({
+          success: false,
+          message: "Аватар должен быть data: URL изображения (PNG/JPEG/GIF/WebP)",
+        });
         return;
       }
       const updated = await storage.updateUser(user.id, { avatar, updatedAt: new Date() });
@@ -2410,25 +2426,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin: Delete products - REMOVED: Duplicate endpoint, using the one below at line 2021
 
   // Admin: Update order status
-  app.patch("/api/admin/orders/:id", async (req, res) => {
+  app.patch("/api/admin/orders/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const { paymentStatus } = req.body;
       const order = await storage.updateOrderStatus(req.params.id, paymentStatus);
@@ -2525,19 +2524,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add to favorites
-  app.post("/api/favorites", async (req, res) => {
+  app.post("/api/favorites", requireAuth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const { productId } = req.body;
       const favorite = await storage.addToFavorites(payload.userId, productId);
@@ -2555,19 +2544,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user favorites
-  app.get("/api/favorites", async (req, res) => {
+  app.get("/api/favorites", requireAuth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const favorites = await storage.getUserFavorites(payload.userId);
       
@@ -2587,19 +2566,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Remove from favorites
-  app.delete("/api/favorites/:productId", async (req, res) => {
+  app.delete("/api/favorites/:productId", requireAuth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const deleted = await storage.removeFavorite(payload.userId, req.params.productId);
       res.json({ success: deleted });
@@ -2610,19 +2579,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user notifications
-  app.get("/api/notifications", async (req, res) => {
+  app.get("/api/notifications", requireAuth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const notifications = await storage.getAllNotifications(payload.userId);
       res.json(notifications);
@@ -2633,19 +2592,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete notification - SECURITY FIX: Added ownership check
-  app.delete("/api/notifications/:id", async (req, res) => {
+  app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       // SECURITY: Check if notification belongs to user
       const notification = await storage.getNotificationById(req.params.id);
@@ -2668,19 +2617,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Clear all notifications
-  app.post("/api/notifications/clear", async (req, res) => {
+  app.post("/api/notifications/clear", requireAuth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       await storage.clearUserNotifications(payload.userId);
       res.json({ success: true });
@@ -2695,26 +2634,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   //  единственный rich-endpoint — `/api/admin/users/:id` ниже.)
 
   // Admin: Get order details
-  app.get("/api/admin/orders/:id", async (req, res) => {
+  app.get("/api/admin/orders/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
       const order = await storage.getOrder(req.params.id);
       if (!order) {
         res.status(404).json({ success: false, message: "Order not found" });
@@ -2724,7 +2645,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const product = await storage.getProduct(order.productId);
       const orderUser = order.userId ? await storage.getUserById(order.userId) : null;
 
-      res.json({ order, product, user: orderUser });
+      res.json({ order, product, user: redactUser(orderUser) });
     } catch (error) {
       console.error("Get order details error:", error);
       res.status(500).json({ success: false, message: "Failed to get order details" });
@@ -3116,28 +3037,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get All Users
-  app.get("/api/admin/users", async (req, res) => {
+  app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
       const users = await storage.getAllUsers();
-      res.json({ success: true, users });
+      res.json({ success: true, users: redactUsers(users) });
     } catch (error) {
       console.error("Get users error:", error);
       res.status(500).json({ success: false, message: "Failed to get users" });
@@ -3221,22 +3124,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Update User Role
-  app.patch("/api/admin/users/:id/role", async (req, res) => {
+  app.patch("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || user.role !== "superadmin") {
+      if (req.user!.role !== "superadmin") {
         res.status(403).json({ success: false, message: "Only superadmin can change roles" });
         return;
       }
@@ -3247,13 +3137,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      // SECURITY: суперадмин не может понизить сам себя — иначе последний
+      // владелец системы способен одним запросом отрезать себе доступ.
+      if (req.params.id === req.user!.id && role !== "superadmin") {
+        res.status(400).json({
+          success: false,
+          message: "Нельзя понизить собственную роль суперадминистратора",
+        });
+        return;
+      }
+
       const updatedUser = await storage.updateUserRole(req.params.id, role);
       if (!updatedUser) {
         res.status(404).json({ success: false, message: "User not found" });
         return;
       }
 
-      res.json({ success: true, user: updatedUser });
+      res.json({ success: true, user: redactUser(updatedUser) });
     } catch (error) {
       console.error("Update role error:", error);
       res.status(500).json({ success: false, message: "Failed to update role" });
@@ -3261,34 +3161,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Block/Unblock User
-  app.patch("/api/admin/users/:id/block", async (req, res) => {
+  app.patch("/api/admin/users/:id/block", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
       const { blocked } = req.body;
+      if (typeof blocked !== "boolean") {
+        res.status(400).json({ success: false, message: "Поле 'blocked' должно быть boolean" });
+        return;
+      }
+
+      if (req.params.id === req.user!.id) {
+        res.status(400).json({ success: false, message: "Нельзя заблокировать собственную учётную запись" });
+        return;
+      }
+
+      // SECURITY: обычный admin не должен блокировать superadmin.
+      const target = await storage.getUserById(req.params.id);
+      if (!target) {
+        res.status(404).json({ success: false, message: "User not found" });
+        return;
+      }
+      if (target.role === "superadmin" && req.user!.role !== "superadmin") {
+        res.status(403).json({ success: false, message: "Недостаточно прав для блокировки суперадминистратора" });
+        return;
+      }
+
       const updatedUser = await storage.blockUser(req.params.id, blocked);
       if (!updatedUser) {
         res.status(404).json({ success: false, message: "User not found" });
         return;
       }
 
-      res.json({ success: true, user: updatedUser });
+      res.json({ success: true, user: redactUser(updatedUser) });
     } catch (error) {
       console.error("Block user error:", error);
       res.status(500).json({ success: false, message: "Failed to block user" });
@@ -3296,19 +3199,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // USER: Delete Own Account
-  app.delete("/api/auth/account", async (req, res) => {
+  app.delete("/api/auth/account", requireAuth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const user = await storage.getUserById(payload.userId);
       if (!user) {
@@ -3336,23 +3229,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Delete User
-  app.delete("/api/admin/users/:id", async (req, res) => {
+  app.delete("/api/admin/users/:id", requireSuperAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || user.role !== "superadmin") {
-        res.status(403).json({ success: false, message: "Only superadmin can delete users" });
+      // Удаление собственной учётной записи через админ-API оставило бы
+      // систему без владельца; для этого есть DELETE /api/auth/account.
+      if (req.params.id === req.user!.id) {
+        res.status(400).json({
+          success: false,
+          message: "Нельзя удалить собственную учётную запись через админ-панель",
+        });
         return;
       }
 
@@ -3370,25 +3255,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get User Orders
-  app.get("/api/admin/users/:id/orders", async (req, res) => {
+  app.get("/api/admin/users/:id/orders", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const orders = await storage.getUserOrders(req.params.id);
       res.json({ success: true, orders });
@@ -3399,32 +3267,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Create Admin User
-  app.post("/api/admin/admins", async (req, res) => {
+  app.post("/api/admin/admins", requireSuperAdmin, rateLimiters.auth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
+      const createAdminSchema = z.object({
+        email: z.string().email().max(254),
+        // Админский пароль — не короче 12 символов, иначе учётка администратора
+        // становится самым слабым местом всей системы.
+        password: z.string().min(12, "Пароль администратора минимум 12 символов").max(200),
+        role: z.enum(["moderator", "admin", "superadmin"]).default("admin"),
+        firstName: z.string().max(100).nullish(),
+        lastName: z.string().max(100).nullish(),
+      });
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
+      const parsed = createAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          message: "Ошибка валидации данных",
+          errors: parsed.error.errors,
+        });
         return;
       }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || user.role !== "superadmin") {
-        res.status(403).json({ success: false, message: "Only superadmin can create admins" });
-        return;
-      }
-
-      const { email, password, role, firstName, lastName } = req.body;
-      
-      if (!email || !password) {
-        res.status(400).json({ success: false, message: "Email and password required" });
-        return;
-      }
+      const { email, password, role, firstName, lastName } = parsed.data;
 
       const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
@@ -3435,13 +3299,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hashedPassword = await hashPassword(password);
       const newAdmin = await storage.createUser({
         email,
-        password: hashedPassword,
-        role: role || "admin",
+        // BUGFIX: раньше передавалось поле `password`, которое storage.createUser
+        // игнорирует — админ создавался с passwordHash = NULL и не мог войти.
+        passwordHash: hashedPassword,
+        role,
         firstName: firstName || null,
         lastName: lastName || null,
       });
 
-      res.status(201).json({ success: true, admin: newAdmin });
+      res.status(201).json({ success: true, admin: redactUser(newAdmin) });
     } catch (error) {
       console.error("Create admin error:", error);
       res.status(500).json({ success: false, message: "Failed to create admin" });
@@ -3449,25 +3315,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get Contact Submissions
-  app.get("/api/admin/contacts", async (req, res) => {
+  app.get("/api/admin/contacts", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const contacts = await storage.getContactSubmissions();
       
@@ -3491,25 +3340,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get Contact Submission with Files
-  app.get("/api/admin/contacts/:id", async (req, res) => {
+  app.get("/api/admin/contacts/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const { commercialProposalService } = await import("./services/commercial");
       const { proposal, files } = await commercialProposalService.getProposalWithFiles(req.params.id);
@@ -3537,25 +3369,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Delete Contact Submission
-  app.delete("/api/admin/contacts/:id", async (req, res) => {
+  app.delete("/api/admin/contacts/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const deleted = await storage.deleteContactSubmission(req.params.id);
       if (!deleted) {
@@ -3571,26 +3386,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get Promo Codes
-  app.get("/api/admin/promocodes", async (req, res) => {
+  app.get("/api/admin/promocodes", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
       const promoCodes = await storage.getPromoCodes();
       res.json({ success: true, promoCodes });
     } catch (error) {
@@ -3599,28 +3396,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SECURITY: строгая схема вместо передачи req.body напрямую в storage —
+  // иначе админ-API принимает любые поля (в т.ч. id, createdAt) в БД.
+  const adminPromoCodeSchema = z.object({
+    code: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/, "Допустимы латиница, цифры, дефис и подчёркивание"),
+    discountPercent: z.coerce.number().int().min(1).max(100),
+    expiresAt: z.coerce.date().nullish(),
+    isActive: z.coerce.number().int().min(0).max(1).default(1),
+  });
+
   // ADMIN: Create Promo Code
-  app.post("/api/admin/promocodes", async (req, res) => {
+  app.post("/api/admin/promocodes", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
+      const parsed = adminPromoCodeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Ошибка валидации данных", errors: parsed.error.errors });
         return;
       }
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      const promoCode = await storage.createPromoCode(req.body);
+      const promoCode = await storage.createPromoCode(parsed.data);
       res.status(201).json({ success: true, promoCode });
     } catch (error) {
       console.error("Create promo code error:", error);
@@ -3629,27 +3423,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Update Promo Code
-  app.patch("/api/admin/promocodes/:id", async (req, res) => {
+  app.patch("/api/admin/promocodes/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
+      const parsed = adminPromoCodeSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Ошибка валидации данных", errors: parsed.error.errors });
         return;
       }
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      const promoCode = await storage.updatePromoCode(req.params.id, req.body);
+      const promoCode = await storage.updatePromoCode(req.params.id, parsed.data);
       if (!promoCode) {
         res.status(404).json({ success: false, message: "Promo code not found" });
         return;
@@ -3663,25 +3445,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Delete Promo Code
-  app.delete("/api/admin/promocodes/:id", async (req, res) => {
+  app.delete("/api/admin/promocodes/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const deleted = await storage.deletePromoCode(req.params.id);
       if (!deleted) {
@@ -3732,25 +3497,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get Site Settings
-  app.get("/api/admin/settings", async (req, res) => {
+  app.get("/api/admin/settings", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const settings = await storage.getSiteSettings();
       res.json({ success: true, settings });
@@ -3761,29 +3509,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Update Site Setting
-  app.put("/api/admin/settings/:key", async (req, res) => {
+  app.put("/api/admin/settings/:key", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
+
+      const settingSchema = z.object({
+        value: z.string().max(100_000).nullish().transform((v) => v ?? ""),
+        type: z.enum(["string", "number", "boolean", "json"]).default("string"),
+        description: z.string().max(1000).nullish().transform((v) => v ?? ""),
+      });
+      const parsed = settingSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Ошибка валидации данных", errors: parsed.error.errors });
         return;
       }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
-      const { value, type, description } = req.body;
-      // FIXED: Pass userId explicitly to avoid null reference error
-      const setting = await storage.setSiteSetting(req.params.key, value, type, description, payload.userId);
+      const { value, type, description } = parsed.data;
+      const setting = await storage.setSiteSetting(req.params.key, value, type, description, req.user!.id);
       res.json({ success: true, setting });
     } catch (error) {
       console.error("Update setting error:", error);
@@ -3805,25 +3545,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get Site Content
-  app.get("/api/admin/content", async (req, res) => {
+  app.get("/api/admin/content", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const content = await storage.getAllSiteContent();
       res.json({ success: true, content });
@@ -3834,25 +3557,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get Site Content by Key
-  app.get("/api/admin/content/:key", async (req, res) => {
+  app.get("/api/admin/content/:key", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const content = await storage.getSiteContent(req.params.key);
       if (!content) {
@@ -3868,25 +3574,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Update Site Content
-  app.put("/api/admin/content/:key", async (req, res) => {
+  app.put("/api/admin/content/:key", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const { value, page, section } = req.body;
       const existing = await storage.getSiteContent(req.params.key);
@@ -3905,25 +3594,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Delete Site Content
-  app.delete("/api/admin/content/:key", async (req, res) => {
+  app.delete("/api/admin/content/:key", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       await storage.deleteSiteContent(req.params.key);
       res.json({ success: true, message: "Content deleted" });
@@ -3946,25 +3618,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get Site Contacts
-  app.get("/api/admin/site-contacts", async (req, res) => {
+  app.get("/api/admin/site-contacts", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const contacts = await storage.getAllSiteContacts();
       res.json({ success: true, contacts });
@@ -3975,25 +3630,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Create Site Contact
-  app.post("/api/admin/site-contacts", async (req, res) => {
+  app.post("/api/admin/site-contacts", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const { type, value, label, order } = req.body;
       const contact = await storage.createSiteContact({ type, value, label, order });
@@ -4005,25 +3643,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Update Site Contact
-  app.put("/api/admin/site-contacts/:id", async (req, res) => {
+  app.put("/api/admin/site-contacts/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const contact = await storage.updateSiteContact(req.params.id, req.body);
       res.json({ success: true, contact });
@@ -4034,25 +3655,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Delete Site Contact
-  app.delete("/api/admin/site-contacts/:id", async (req, res) => {
+  app.delete("/api/admin/site-contacts/:id", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       await storage.deleteSiteContact(req.params.id);
       res.json({ success: true, message: "Site contact deleted" });
@@ -4063,25 +3667,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get Cookie Settings
-  app.get("/api/admin/cookie-settings", async (req, res) => {
+  app.get("/api/admin/cookie-settings", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const settings = await storage.getCookieSettings();
       res.json({ success: true, settings });
@@ -4092,25 +3679,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Update Cookie Settings
-  app.put("/api/admin/cookie-settings", async (req, res) => {
+  app.put("/api/admin/cookie-settings", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const settings = await storage.setCookieSettings(req.body);
       res.json({ success: true, settings });
@@ -4132,27 +3702,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get Database Size Information
-  app.get("/api/admin/database/size", async (req, res) => {
+  app.get("/api/admin/database/size", requireAdmin, async (req, res) => {
     let client: any = null;
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
       // Check if pool is available
       if (!pool) {
         console.error("[Database Size] Pool is not available");
@@ -4346,25 +3898,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Export Database
-  app.get("/api/admin/database/export", async (req, res) => {
+  //
+  // SECURITY: дамп содержит ВСЮ базу — хеши паролей, ПДн всех пользователей,
+  // refresh-токены сессий. Это самый чувствительный endpoint в приложении,
+  // поэтому: только superadmin, жёсткий rate limit и запись в лог аудита.
+  // COMPLIANCE (152-ФЗ ст. 19): выгрузку следует хранить в зашифрованном виде.
+  app.get("/api/admin/database/export", requireAdmin, rateLimiters.auth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
+      if (req.user!.role !== "superadmin") {
+        res.status(403).json({
+          success: false,
+          message: "Экспорт базы данных доступен только суперадминистратору",
+        });
         return;
       }
 
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
+      logger.logAdminAction(
+        "Database export requested",
+        { ip: getClientIp(req) },
+        req.user!.id,
+        req.user!.email,
+      );
 
       // Get all tables
       const client = await pool.connect();
@@ -4456,19 +4010,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // USER: Change Password
-  app.post("/api/auth/change-password", rateLimiters.auth, async (req, res) => {
+  app.post("/api/auth/change-password", requireAuth, rateLimiters.auth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const user = await storage.getUserById(payload.userId);
       if (!user) {
@@ -4500,7 +4044,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const hashedPassword = await hashPassword(newPassword);
-      await storage.updateUser(user.id, { passwordHash: hashedPassword, password: hashedPassword });
+      // BUGFIX: колонки `password` в таблице users нет — есть только
+      // `password_hash`. Лишний ключ уходил в Drizzle .set() как несуществующее поле.
+      await storage.updateUser(user.id, { passwordHash: hashedPassword, updatedAt: new Date() });
 
       res.json({ success: true, message: "Password changed successfully" });
     } catch (error) {
@@ -4510,19 +4056,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // USER: Delete own account
-  app.delete("/api/auth/delete-account", rateLimiters.auth, async (req, res) => {
+  app.delete("/api/auth/delete-account", requireAuth, rateLimiters.auth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       const user = await storage.getUserById(payload.userId);
       if (!user) {
@@ -4547,19 +4083,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // USER: Mark Notification as Read - SECURITY FIX: Added ownership check
-  app.patch("/api/notifications/:id/read", async (req, res) => {
+  app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
+      const payload = { userId: req.user!.id, email: req.user!.email, role: req.user!.role };
 
       // SECURITY: Check if notification belongs to user
       const notification = await storage.getNotificationById(req.params.id);
@@ -4582,25 +4108,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Get product images
-  app.get("/api/admin/products/:id/images", async (req, res) => {
+  app.get("/api/admin/products/:id/images", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const images = await storage.getProductImages(req.params.id);
       res.json({ success: true, images });
@@ -4611,27 +4120,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Add product image (accepts both base64 and URL)
-  app.post("/api/admin/products/:id/images", async (req, res) => {
+  app.post("/api/admin/products/:id/images", requireAdmin, async (req, res) => {
     try {
       console.log(`📸 [POST /api/admin/products/:id/images] Starting image upload for product: ${req.params.id}`);
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
-
       const { imageUrl, imageBase64 } = req.body;
       const imageData = imageBase64 || imageUrl;
       
@@ -4683,25 +4174,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Remove product image
-  app.delete("/api/admin/products/:id/images", async (req, res) => {
+  app.delete("/api/admin/products/:id/images", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const { imageUrl, imageData } = req.body;
       const dataToRemove = imageData || imageUrl;
@@ -4737,25 +4211,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN: Send notification to user
-  app.post("/api/admin/notifications/send", async (req, res) => {
+  app.post("/api/admin/notifications/send", requireAdmin, async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        res.status(401).json({ success: false, message: "Not authenticated" });
-        return;
-      }
-
-      const payload = verifyAccessToken(token);
-      if (!payload) {
-        res.status(401).json({ success: false, message: "Invalid token" });
-        return;
-      }
-
-      const user = await storage.getUserById(payload.userId);
-      if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-        res.status(403).json({ success: false, message: "Not authorized" });
-        return;
-      }
 
       const { userId, title, message, type = "info", link } = req.body;
       

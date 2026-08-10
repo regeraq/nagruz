@@ -126,10 +126,8 @@ export function UserDetailDialog({ userId, open, onOpenChange }: Props) {
   const { data, isLoading, isError, error } = useQuery<FullUserResponse>({
     queryKey: ["/api/admin/users", userId, "full"],
     enabled: !!userId && open,
-    queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch(`/api/admin/users/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+    queryFn: async () => {      const res = await fetch(`/api/admin/users/${userId}`, {
+        
         credentials: "include",
       });
       if (!res.ok) {

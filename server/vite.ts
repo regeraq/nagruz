@@ -8,6 +8,15 @@ import { nanoid } from "nanoid";
 
 const viteLogger = createLogger();
 
+/**
+ * SECURITY: токен приходит из cookie, то есть из-под контроля клиента, и
+ * подставляется прямо в HTML-атрибут. Пропускаем только hex-строку ожидаемой
+ * формы, иначе получаем инъекцию разметки в <head> каждой страницы.
+ */
+function sanitizeCsrfTokenForHtml(token: unknown): string | null {
+  return typeof token === "string" && /^[0-9a-f]{64}$/.test(token) ? token : null;
+}
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -80,7 +89,7 @@ export async function setupVite(app: Express, server: Server) {
         );
         
         // Inject CSRF token for client-side use
-        const csrfToken = res.locals.csrfToken;
+        const csrfToken = sanitizeCsrfTokenForHtml(res.locals.csrfToken);
         if (csrfToken) {
           template = template.replace(
             '</head>',
@@ -156,7 +165,7 @@ export function serveStatic(app: Express) {
     let html = await fs.promises.readFile(indexPath, "utf-8");
     
     // Inject CSRF token for client-side use
-    const csrfToken = res.locals.csrfToken;
+    const csrfToken = sanitizeCsrfTokenForHtml(res.locals.csrfToken);
     if (csrfToken) {
       html = html.replace(
         '</head>',

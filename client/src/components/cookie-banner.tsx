@@ -39,12 +39,17 @@ export function CookieBanner() {
   const handleAccept = () => {
     localStorage.setItem("cookie-consent", "accepted");
     localStorage.setItem("cookie-consent-date", new Date().toISOString());
+    // Сигнал для опциональной аналитики (если появится): грузить только после accept.
+    window.dispatchEvent(new CustomEvent("cookie-consent-changed", { detail: "accepted" }));
     setIsVisible(false);
   };
 
   const handleDecline = () => {
     localStorage.setItem("cookie-consent", "declined");
     localStorage.setItem("cookie-consent-date", new Date().toISOString());
+    // Отклонение запрещает опциональные cookies/аналитику. Технические cookies
+    // (сессия HttpOnly, CSRF) остаются — без них сайт не работает.
+    window.dispatchEvent(new CustomEvent("cookie-consent-changed", { detail: "declined" }));
     setIsVisible(false);
   };
 
@@ -57,7 +62,7 @@ export function CookieBanner() {
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex-1">
           <p className="text-sm text-muted-foreground">
-            {settings.message || "Мы используем cookies для улучшения работы сайта. Продолжая использовать сайт, вы соглашаетесь с использованием cookies."}
+            {settings.message || "Мы используем необходимые cookies для работы сайта (сессия, защита форм). Опциональные cookies и аналитика подключаются только после вашего согласия."}
           </p>
           <div className="mt-2 flex gap-4 text-xs">
             <button

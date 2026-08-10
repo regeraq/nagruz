@@ -1,3 +1,4 @@
+import { clearLegacyTokens, logoutSession } from "@/lib/auth";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -124,11 +125,9 @@ export default function Profile() {
   const { data: userData, isLoading } = useQuery<UserData>({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
 
       const res = await fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
 
@@ -141,10 +140,8 @@ export default function Profile() {
   const { data: orders = [] } = useQuery({
     queryKey: ["/api/orders/user"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return [];
       const res = await fetch("/api/orders/user", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) return [];
@@ -156,10 +153,8 @@ export default function Profile() {
   const { data: favorites = [] } = useQuery({
     queryKey: ["/api/favorites"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return [];
       const res = await fetch("/api/favorites", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) return [];
@@ -171,10 +166,8 @@ export default function Profile() {
   const { data: notifications = [] } = useQuery({
     queryKey: ["/api/notifications"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return [];
       const res = await fetch("/api/notifications", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) return [];
@@ -186,10 +179,8 @@ export default function Profile() {
   const { data: commercialProposalsData } = useQuery({
     queryKey: ["/api/auth/commercial-proposals"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return { success: false, proposals: [] };
       const res = await fetch("/api/auth/commercial-proposals", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) return { success: false, proposals: [] };
@@ -204,10 +195,8 @@ export default function Profile() {
   const { data: sessionsData } = useQuery<{ success: boolean; sessions: SessionInfo[] }>({
     queryKey: ["/api/auth/sessions"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return { success: false, sessions: [] };
       const res = await fetch("/api/auth/sessions", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) return { success: false, sessions: [] };
@@ -221,10 +210,8 @@ export default function Profile() {
   const { data: consentsData } = useQuery<{ success: boolean; consents: ConsentInfo[] }>({
     queryKey: ["/api/auth/consents"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return { success: false, consents: [] };
       const res = await fetch("/api/auth/consents", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) return { success: false, consents: [] };
@@ -238,15 +225,7 @@ export default function Profile() {
   const { data: prefsData } = useQuery<{ success: boolean; preferences: NotificationPreferences }>({
     queryKey: ["/api/auth/notification-preferences"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) {
-        return {
-          success: false,
-          preferences: { orders: true, promotions: false, news: true, email: true, push: false },
-        };
-      }
       const res = await fetch("/api/auth/notification-preferences", {
-        headers: { Authorization: `Bearer ${token}` },
         credentials: "include",
       });
       if (!res.ok) {
@@ -318,13 +297,10 @@ export default function Profile() {
 
   const updateProfile = useMutation({
     mutationFn: async (data: ProfileForm) => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
 
       const res = await fetch("/api/auth/profile", {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -395,12 +371,9 @@ export default function Profile() {
       if (phoneDigits.length >= 10) {
         customerPhone = userPhone;
       }
-
-      const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -460,11 +433,9 @@ export default function Profile() {
 
   const addFavorite = useMutation({
     mutationFn: async (productId: string) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/favorites", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -492,10 +463,9 @@ export default function Profile() {
 
   const removeFavorite = useMutation({
     mutationFn: async (productId: string) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch(`/api/favorites/${productId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
 
@@ -520,10 +490,9 @@ export default function Profile() {
 
   const deleteNotification = useMutation({
     mutationFn: async (id: string) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch(`/api/notifications/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
 
@@ -548,10 +517,9 @@ export default function Profile() {
 
   const clearNotifications = useMutation({
     mutationFn: async () => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/notifications/clear", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
 
@@ -576,10 +544,9 @@ export default function Profile() {
 
   const markNotificationRead = useMutation({
     mutationFn: async (id: string) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch(`/api/notifications/${id}/read`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
 
@@ -596,12 +563,10 @@ export default function Profile() {
 
   const changePassword = useMutation({
     mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         credentials: "include",
         body: JSON.stringify(data),
@@ -632,13 +597,9 @@ export default function Profile() {
 
   const deleteAccount = useMutation({
     mutationFn: async () => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/auth/delete-account", {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: "include",
+                credentials: "include",
       });
 
       if (!res.ok) {
@@ -648,8 +609,7 @@ export default function Profile() {
       return res.json();
     },
     onSuccess: () => {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
+      clearLegacyTokens();
       queryClient.clear();
       setLocation("/");
       toast({
@@ -669,11 +629,9 @@ export default function Profile() {
   // Upload avatar
   const uploadAvatar = useMutation({
     mutationFn: async (dataUrl: string | null) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/auth/avatar", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -699,10 +657,9 @@ export default function Profile() {
   // Resend verification email
   const resendVerification = useMutation({
     mutationFn: async () => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/auth/resend-verification", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) {
@@ -725,10 +682,9 @@ export default function Profile() {
   // Cancel order
   const cancelOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch(`/api/orders/${orderId}/cancel`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) {
@@ -751,7 +707,6 @@ export default function Profile() {
   const repeatOrder = useMutation({
     mutationFn: async (order: any) => {
       if (!userData) throw new Error("Нет данных пользователя");
-      const token = localStorage.getItem("accessToken");
       let customerName = "Покупатель";
       const fn = (userData.firstName || "").trim();
       const ln = (userData.lastName || "").trim();
@@ -766,7 +721,7 @@ export default function Profile() {
         : "+7 (900) 000-00-00";
       const res = await fetch("/api/orders", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           productId: order.productId,
@@ -885,12 +840,11 @@ export default function Profile() {
   // Revoke consent
   const revokeConsent = useMutation({
     mutationFn: async (consentType: string) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch(
         `/api/auth/consents/${encodeURIComponent(consentType)}/revoke`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          
           credentials: "include",
         },
       );
@@ -912,11 +866,9 @@ export default function Profile() {
   // Update notification preferences
   const updatePrefs = useMutation({
     mutationFn: async (prefs: Partial<NotificationPreferences>) => {
-      const token = localStorage.getItem("accessToken");
       const res = await fetch("/api/auth/notification-preferences", {
         method: "PUT",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -1157,13 +1109,13 @@ export default function Profile() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    queryClient.clear();
-    setLocation("/login");
-    toast({
-      title: "Выход выполнен",
-      description: "Вы успешно вышли из системы",
+    void logoutSession().then(() => {
+      queryClient.clear();
+      setLocation("/login");
+      toast({
+        title: "Выход выполнен",
+        description: "Вы успешно вышли из системы",
+      });
     });
   };
 
@@ -2114,9 +2066,8 @@ export default function Profile() {
                                         variant="outline"
                                         onClick={async () => {
                                           try {
-                                            const token = localStorage.getItem("accessToken");
                                             const res = await fetch(`/api/files/${file.id}/download`, {
-                                              headers: { Authorization: `Bearer ${token}` },
+                                              
                                             });
                                             if (!res.ok) throw new Error("Failed to download file");
                                             const blob = await res.blob();

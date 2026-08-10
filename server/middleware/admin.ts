@@ -1,12 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyAccessToken } from "../auth";
+import { getAccessTokenFromRequest } from "../authCookies";
 import { storage } from "../storage";
 
 /**
  * SECURITY: Централизованная проверка JWT + актуального состояния пользователя.
  *
- * В отличие от «ленивой» проверки по JWT-пейлоаду, здесь мы каждый раз
- * подтягиваем пользователя из БД, чтобы:
+ * Токен читается из HttpOnly cookie `access_token` (основной канал) или
+ * из заголовка Authorization (переходный период для старых вкладок).
+ * Каждый раз подтягиваем пользователя из БД, чтобы:
  *   - сразу отозвать доступ у заблокированного/удалённого администратора,
  *   - получить актуальную роль (а не ту, что была на момент выдачи токена).
  */
@@ -15,7 +17,7 @@ type AuthResult =
   | { ok: false; status: number; message: string };
 
 async function resolveAuthenticatedUser(req: Request): Promise<AuthResult> {
-  const token = req.headers.authorization?.replace("Bearer ", "");
+  const token = getAccessTokenFromRequest(req);
   if (!token) return { ok: false, status: 401, message: "Требуется авторизация" };
 
   const payload = verifyAccessToken(token);

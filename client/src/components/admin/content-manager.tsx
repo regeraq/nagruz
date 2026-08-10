@@ -83,11 +83,7 @@ interface Props {
   items: ContentItem[];
 }
 
-function authHeaders(): HeadersInit {
-  const token = localStorage.getItem("accessToken");
-  return {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
+function authHeaders(): HeadersInit {  return {    "Content-Type": "application/json",
   };
 }
 

@@ -4,6 +4,14 @@
 
 Актуально на: апрель 2026. Все цены указаны с учётом открытых тарифов провайдеров на начало 2026 года; перед оплатой **всегда сверяй на сайте**, цены и акции меняются.
 
+> 📌 **Для первого развёртывания используйте
+> [PRODUCTION_DEPLOYMENT_GUIDE.md](PRODUCTION_DEPLOYMENT_GUIDE.md)** — это
+> основное пошаговое руководство «с нуля до работающего сайта», и оно
+> поддерживается в актуальном состоянии. Текущий документ оставлен как
+> справочник по отдельным темам: сравнение провайдеров и цен, выбор
+> email-сервиса, 152-ФЗ/242-ФЗ, миграция между серверами. При расхождениях
+> считайте верным PRODUCTION_DEPLOYMENT_GUIDE.md.
+
 ---
 
 ## Содержание
@@ -39,7 +47,8 @@
 | Порт приложения        | 5000 (за nginx reverse-proxy)                                               |
 | Точка входа            | `dist/index.js` (после `npm run build`)                                     |
 | Текущий сервер         | `45.9.72.103` (Ubuntu, FirstByte), проект в `/var/www/loaddevice`           |
-| Email (сейчас)         | Resend (США) — **нужно заменить на российский**, см. [§13](#13-российский-email-сервис-выбор-цены-интеграция) |
+| Email (сейчас)         | Yandex Cloud Postbox (РФ) — задаётся `EMAIL_PROVIDER=yandex`. Resend (США) оставлен как legacy-вариант, см. [§13](#13-российский-email-сервис-выбор-цены-интеграция) |
+| Health check           | `GET /api/health` — `200` при живой БД, `503` при недоступной            |
 | Сборка                 | `npm run build` → `vite build` + `esbuild server/index.ts`                  |
 
 ---
@@ -50,15 +59,22 @@
 
 ### Минимальные требования
 
-| Параметр | Минимум         | Рекомендуется       | Комфортно для роста |
-| -------- | --------------- | ------------------- | ------------------- |
-| CPU      | 1 vCPU          | 2 vCPU              | 2–4 vCPU            |
-| RAM      | 1 GB + swap 1GB | **2 GB**            | 4 GB                |
-| Диск     | 15 GB SSD/NVMe  | 20–30 GB NVMe       | 40–80 GB NVMe       |
-| ОС       | Ubuntu 22.04 LTS                                                             |
-| Канал    | 100 Мбит/с+, без ограничений по трафику                                      |
+| Параметр | Минимум            | **Рекомендуется**   | Комфортно для роста |
+| -------- | ------------------ | ------------------- | ------------------- |
+| CPU      | 1 vCPU             | **2 vCPU**          | 4 vCPU              |
+| RAM      | 2 GB + swap 2 GB   | **4 GB**            | 8 GB                |
+| Диск     | 20–30 GB NVMe      | **50–80 GB NVMe**   | 100–160 GB NVMe     |
+| ОС       | Ubuntu 24.04 LTS (допустимо 22.04 LTS)                                          |
+| Канал    | 100 Мбит/с+, без ограничений по трафику                                         |
 
-Сборка проекта (`vite build`) довольно прожорлива по RAM — на 1 GB без свопа бывают OOM-kill. Поэтому **всегда делайте swap** (см. [§5](#5-первоначальная-настройка-сервера-ubuntu-2204)) или берите 2 GB сразу.
+**1 GB RAM брать нельзя** даже со свопом: сборка фронтенда (`vite build`)
+почти наверняка упадёт с `JavaScript heap out of memory`. На 2 GB сборка
+проходит, но **swap обязателен** (см.
+[§5](#5-первоначальная-настройка-сервера-ubuntu-2204)).
+
+Подробное сравнение трёх конфигураций с ценами, запасом по нагрузке и
+рекомендациями провайдеров — §3.2 в
+[PRODUCTION_DEPLOYMENT_GUIDE.md](PRODUCTION_DEPLOYMENT_GUIDE.md).
 
 ### Порядок действий с нуля
 
@@ -363,11 +379,37 @@ CSRF_SECRET=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 FRONTEND_URL=https://ваш-домен.ru
 
-# Пока (до §13) — оставить пустым, временно можно Resend, потом заменим.
-RESEND_API_KEY=
+# Кросс-доменные запросы. Пусто = запрещены (правильно, когда фронтенд
+# и API живут на одном домене — это наш случай).
+ALLOWED_ORIGINS=
+
+# ОБЯЗАТЕЛЬНО: без этих двух переменных аккаунт администратора не будет
+# создан и войти в админку будет невозможно. Пароль нигде не логируется.
+ADMIN_EMAIL=admin@ваш-домен.ru
+ADMIN_INITIAL_PASSWORD=
+
+# Почта (подробнее в §13). Российский провайдер — Yandex Cloud Postbox.
+EMAIL_PROVIDER=yandex
 OWNER_EMAIL=owner@ваш-домен.ru
-RESEND_FROM_EMAIL=noreply@ваш-домен.ru
+MAIL_FROM_EMAIL=noreply@ваш-домен.ru
+MAIL_FROM_NAME=Loaddevice
+YANDEX_POSTBOX_KEY_ID=
+YANDEX_POSTBOX_SECRET=
+
+# Сколько дней хранить журнал попыток входа (в нём IP-адреса).
+# Записи старше удаляются автоматически. По умолчанию 90.
+#LOGIN_ATTEMPT_RETENTION_DAYS=90
 ```
+
+Закройте файл от других пользователей системы — в нём все секреты проекта:
+
+```bash
+chmod 600 .env
+```
+
+При старте приложение проверяет конфигурацию и **не запустится**, если
+секреты оставлены как заглушки, совпадают между собой или выглядят
+тестовыми. Полный перечень проверок — `server/preflight.ts`.
 
 Установи права только на чтение владельцем:
 
@@ -383,10 +425,14 @@ chmod 600 .env
 
 ```bash
 cd /var/www/loaddevice
-npm install
+npm ci              # воспроизводимая установка строго из package-lock.json
 npm run build
-npm run db:push   # накатит схему из shared/schema.ts через drizzle-kit
+npm run db:migrate  # применит версионные миграции из migrations/
 ```
+
+> ⚠️ Не используйте здесь `npm run db:push`: команда интерактивна и в
+> сессии без TTY либо зависает, либо может переименовать/обрезать таблицу
+> с данными. `db:push` — только для локальной разработки.
 
 ### 8.2. Запуск под pm2
 
@@ -418,36 +464,27 @@ curl http://localhost:5000/api/products
 
 ### 9.1. Конфиг nginx
 
-Создай `/etc/nginx/sites-available/loaddevice`:
+**Не пишите конфиг вручную — готовый лежит в репозитории:**
+`deploy/nginx.conf`.
 
-```nginx
-server {
-    listen 80;
-    server_name ваш-домен.ru www.ваш-домен.ru;
-
-    # Увеличенный лимит загрузки (аватары, галереи товаров)
-    client_max_body_size 10M;
-
-    # gzip
-    gzip on;
-    gzip_vary on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript;
-    gzip_min_length 1024;
-
-    location / {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 60s;
-    }
-}
+```bash
+cd /var/www/loaddevice
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/loaddevice
+sudo sed -i 's/example\.ru/ваш-домен.ru/g' /etc/nginx/sites-available/loaddevice
 ```
+
+В отличие от минимального конфига, который был здесь раньше, он включает
+TLS 1.2/1.3, HSTS, ограничение частоты запросов (отдельное, более строгое,
+для `/api/auth/*`), кэширование статики и `client_max_body_size 16m`.
+
+> ⚠️ Прежний вариант этой инструкции задавал `client_max_body_size 10M`,
+> тогда как приложение принимает вложения до 15 MB. Загрузка крупного файла
+> отклонялась самим nginx с ошибкой 413, не доходя до приложения — при этом
+> в логах приложения не было ничего. Если вы разворачивались по старой
+> инструкции, поднимите лимит до `16m`.
+
+Пошаговая настройка (включая обход проблемы «сертификата ещё нет») —
+в [PRODUCTION_DEPLOYMENT_GUIDE.md](PRODUCTION_DEPLOYMENT_GUIDE.md) §12.
 
 Активировать:
 
@@ -500,7 +537,21 @@ nslookup ваш-домен.ru
 
 ## 11. Резервное копирование: backup.sh + cron
 
-В репозитории есть готовый скрипт `scripts/backup.sh` — он делает дамп БД, архивирует `.env`, папку `dist/` и ротирует старые бэкапы. См. также «Автоматический дамп по расписанию» ниже.
+В репозитории есть готовый скрипт `scripts/backup.sh`. Он создаёт:
+
+- **дамп PostgreSQL** — `loaddevice-db-ГГГГММДД-ЧЧММСС.dump`
+  (формат `pg_dump --format=custom`, восстанавливается через `pg_restore`);
+- **архив файлов** — `loaddevice-files-ГГГГММДД-ЧЧММСС.tar.gz` с `.env`,
+  папкой `uploads` и конфигом nginx, если он существует.
+
+Папку `dist/` скрипт **не** сохраняет, и это правильно: она полностью
+воспроизводится командой `npm run build` из кода в git.
+
+Старые копии ротируются: удаляются старше 14 дней, но не менее 7 последних
+каждого типа остаётся всегда.
+
+**Восстановление** — скриптом `scripts/restore.sh`, см. §20 в
+[PRODUCTION_DEPLOYMENT_GUIDE.md](PRODUCTION_DEPLOYMENT_GUIDE.md).
 
 ### 11.1. Установка
 
@@ -533,14 +584,20 @@ crontab -e
 
 ### 11.4. Выкачивание бэкапа к себе
 
-**Важно: хранить бэкапы только на том же сервере — бессмысленно.** Раз в неделю забирай их к себе:
+**Важно: хранить бэкапы только на том же сервере — бессмысленно.** При отказе
+диска или блокировке сервера копии пропадут вместе с данными. Раз в неделю
+забирайте их к себе:
 
 ```powershell
-# На Windows (PowerShell):
-scp deploy@IP:/var/backups/loaddevice/loaddevice-db-*.sql.gz "C:\backups\"
+# На Windows (PowerShell). Расширение .dump, а не .sql.gz —
+# скрипт создаёт дамп в custom-формате pg_dump:
+scp deploy@IP:/var/backups/loaddevice/loaddevice-db-*.dump  "C:\backups\"
+scp deploy@IP:/var/backups/loaddevice/loaddevice-files-*.tar.gz "C:\backups\"
 ```
 
-Или автоматизируй через Windows Task Scheduler + `scp`.
+Надёжнее — автоматическая выгрузка в объектное хранилище (Yandex Object
+Storage) или снапшоты диска на стороне провайдера. Настройка — §15.4
+в [PRODUCTION_DEPLOYMENT_GUIDE.md](PRODUCTION_DEPLOYMENT_GUIDE.md).
 
 ---
 
@@ -602,9 +659,9 @@ pg_restore -d "postgresql://loaddevice_user:PWD@localhost:5432/loaddevice_db" \
 cd /var/www
 git clone https://github.com/regeraq/nagruz.git loaddevice
 cd loaddevice
-npm install
+npm ci
 npm run build
-npm run db:push   # на всякий случай, docirm schema
+npm run db:migrate   # применить миграции схемы
 
 # 6. Запустить pm2
 pm2 start ecosystem.config.cjs
@@ -817,15 +874,24 @@ cd "C:\Users\k62\Documents\Атом\сайт\HelloWhoAreYou-1 (5)\HelloWhoAreYou
 
 ```powershell
 # На сервере (одной командой с Windows):
-ssh root@45.9.72.103 "cd /var/www/loaddevice && git fetch origin && git reset --hard origin/main && bash update-project.sh"
+ssh deploy@ВАШ_IP "bash /var/www/loaddevice/update-project.sh"
 ```
 
 Скрипт `update-project.sh`:
 
-- Сам подгружает nvm / находит node/npm/pm2.
-- Делает `git fetch && git reset --hard`, `npm install`, `npm run build`, `npm run db:push`, `pm2 restart`.
+- Сам подгружает nvm / находит node/npm/pm2 (работает и в неинтерактивной
+  SSH-сессии).
+- Проверяет наличие `.env` и **делает бэкап БД до миграций**.
+- Делает `git fetch && git reset --hard`, `npm ci`, `npm run build`,
+  `npm run db:migrate`, `pm2 reload`.
+- **Проверяет `/api/health`** до 30 секунд после перезапуска.
+- **Автоматически откатывается** на предыдущий коммит, если сборка,
+  миграции или health check провалились.
 - В конце выводит `SHA Было/Стало` и `pm2 status`.
 - Если коммит не изменился, всё равно пересобирает (на случай правки `.env`).
+
+Подробное описание — в [QUICK_UPDATE.md](QUICK_UPDATE.md) и
+[PRODUCTION_DEPLOYMENT_GUIDE.md](PRODUCTION_DEPLOYMENT_GUIDE.md) §18.
 
 ---
 
@@ -889,7 +955,7 @@ free -h                          # RAM + swap
 
 - [ ] `git clone` в `/var/www/loaddevice`.
 - [ ] Заполнен `.env` со всеми секретами (JWT×3 разных, CSRF, DATABASE_URL).
-- [ ] `npm install && npm run build && npm run db:push`.
+- [ ] `npm ci && npm run build && npm run db:migrate` (НЕ `db:push`).
 - [ ] `pm2 start ecosystem.config.cjs`, `pm2 save`, `pm2 startup`.
 - [ ] Проверка: `curl http://localhost:5000/api/products` → 200.
 

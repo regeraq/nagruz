@@ -49,28 +49,37 @@ fi
 echo "🔄 Updating code..."
 git reset --hard origin/$BRANCH
 
-# Установка зависимостей
+# Установка зависимостей.
+# npm ci ставит ровно то, что зафиксировано в package-lock.json, и включает
+# devDependencies (нужны для сборки). npm install мог подтянуть новые
+# минорные версии и сломать прод без изменений в коде.
 echo "📦 Installing dependencies..."
-npm install --production=false
+npm ci
 
 # Сборка проекта
 echo "🔨 Building project..."
 npm run build
 
-# Применение миграций БД (если есть)
+# Применение миграций БД.
+# Продолжать деплой после неудачной миграции нельзя: код будет ожидать
+# схему, которой в базе нет, и приложение начнёт отдавать 500.
 echo "🗄️  Applying database migrations..."
-if npm run db:push; then
+if npm run db:migrate; then
     echo "✅ Database migrations applied successfully"
 else
-    echo "⚠️  Migration failed or no changes needed"
-    echo "   Check DATABASE_URL in .env file"
-    echo "   Continuing deployment..."
+    echo "❌ Migration failed — deployment stopped BEFORE pm2 reload."
+    echo "   Код и dist/ уже обновлены, но процесс PM2 ещё на старой сборке."
+    echo "   Откатите вручную: git reset --hard PREVIOUS_SHA && npm ci && npm run build && pm2 reload ecosystem.config.cjs --update-env"
+    echo "   Либо используйте update-project.sh (там есть автооткат)."
+    exit 1
 fi
 
-# Перезапуск приложения через PM2
+# Перезапуск приложения через PM2.
+# reload, а не restart: приложение обрабатывает SIGTERM и корректно
+# завершает запросы, которые уже выполняются.
 echo "🔄 Restarting application..."
 if pm2 list | grep -q "loaddevice"; then
-    pm2 restart loaddevice
+    pm2 reload ecosystem.config.cjs --update-env || pm2 restart loaddevice --update-env
 else
     # Используем ecosystem.config.cjs для загрузки переменных окружения
     if [ -f "ecosystem.config.cjs" ]; then

@@ -83,7 +83,10 @@ class LoggerService {
     // Ensure timestamp is set (use current time if not provided)
     const timestamp = (entry.timestamp || new Date()).toISOString();
     const prefix = `[${timestamp}] [${entry.level.toUpperCase()}] [${entry.category}]`;
-    const userInfo = entry.userEmail ? ` (user: ${entry.userEmail})` : entry.userId ? ` (userId: ${entry.userId})` : "";
+    // COMPLIANCE (152-ФЗ): в логи пишем идентификатор пользователя, а не email.
+    // userId однозначно указывает на субъекта при разборе инцидента, но сам по
+    // себе не является контактными данными.
+    const userInfo = entry.userId ? ` (userId: ${entry.userId})` : "";
     const message = `${prefix}${userInfo}: ${entry.message}`;
 
     if (entry.metadata) {

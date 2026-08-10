@@ -10,3 +10,5 @@ vite.config.ts.*
 .local
 *.log
 attached_assets
+uploads/*
+!uploads/.gitkeep

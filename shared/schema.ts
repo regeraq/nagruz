@@ -472,6 +472,27 @@ export const insertCommercialProposalFileSchema = createInsertSchema(commercialP
 export type InsertCommercialProposalFile = z.infer<typeof insertCommercialProposalFileSchema>;
 export type CommercialProposalFile = typeof commercialProposalFiles.$inferSelect;
 
+/**
+ * Журнал действий администраторов.
+ *
+ * Таблица уже существовала в БД, но отсутствовала в схеме Drizzle. Из-за этого
+ * `drizzle-kit push` считал её «лишней» и предлагал переименовать в новую
+ * таблицу — то есть мог уничтожить журнал аудита. Описываем её явно.
+ */
+export const adminAuditLog = pgTable("admin_audit_log", {
+  id: varchar("id", { length: 255 }).primaryKey().default(sql`gen_random_uuid()`),
+  adminId: varchar("admin_id", { length: 255 }).notNull(),
+  action: varchar("action", { length: 100 }).notNull(),
+  entityType: varchar("entity_type", { length: 50 }).notNull(),
+  entityId: varchar("entity_id", { length: 255 }),
+  details: jsonb("details"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type AdminAuditLogEntry = typeof adminAuditLog.$inferSelect;
+
 // Relations
 export const productsRelations = relations(products, ({ many }) => ({
   orders: many(orders),

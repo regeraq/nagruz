@@ -15,6 +15,25 @@ import nodemailer, { type Transporter } from "nodemailer";
 
 type EmailProvider = "yandex" | "resend" | "noop";
 
+/**
+ * COMPLIANCE (152-ФЗ): e-mail — персональные данные, а логи почтового сервиса
+ * писали адреса получателей открытым текстом при каждой отправке. Для
+ * диагностики достаточно маскированного адреса.
+ */
+function maskEmail(value: string | string[] | undefined): string {
+  const list = Array.isArray(value) ? value : value ? [value] : [];
+  return list
+    .map((addr) => {
+      const at = addr.lastIndexOf("@");
+      if (at <= 0) return "***";
+      const name = addr.slice(0, at);
+      const domain = addr.slice(at + 1);
+      const head = name.slice(0, 2);
+      return `${head}${"*".repeat(Math.max(1, name.length - 2))}@${domain}`;
+    })
+    .join(", ");
+}
+
 export interface EmailAttachment {
   filename: string;
   /** Base64-string БЕЗ префикса data URL. */
@@ -68,6 +87,15 @@ export async function sendEmail(
 export async function sendEmailWithAttachment(
   input: SendEmailWithAttachmentInput,
 ): Promise<EmailResult> {
+  // Пустой получатель — это всегда ошибка конфигурации (не задан OWNER_EMAIL).
+  // Понятное сообщение в логе вместо невнятной ошибки от SMTP-сервера.
+  const recipients = (Array.isArray(input.to) ? input.to : [input.to])
+    .filter((address) => typeof address === "string" && address.trim().length > 0);
+  if (recipients.length === 0) {
+    console.error("[email] Не указан получатель — проверьте OWNER_EMAIL в .env");
+    return { success: false, error: "Не указан получатель письма" };
+  }
+
   switch (PROVIDER) {
     case "yandex":
       return sendViaYandex(input);
@@ -149,7 +177,7 @@ async function sendViaYandex(
 
   try {
     console.log("[email:yandex] sending", {
-      to: recipients,
+      to: maskEmail(recipients),
       subject: input.subject,
       from,
       attachments: attachments.length,
@@ -165,7 +193,7 @@ async function sendViaYandex(
       attachments: attachments.length ? attachments : undefined,
     });
 
-    console.log("[email:yandex] sent", { messageId: info.messageId, to: recipients });
+    console.log("[email:yandex] sent", { messageId: info.messageId, to: maskEmail(recipients) });
     return {
       success: true,
       data: { messageId: info.messageId, response: info.response },
@@ -188,7 +216,7 @@ function handleYandexError(
   const msg = err.message || "Unknown SMTP error";
   const code = err.code || "UNKNOWN";
   console.error("[email:yandex] send failed", {
-    to: input.to,
+    to: maskEmail(input.to),
     subject: input.subject,
     code,
     responseCode: err.responseCode,
@@ -286,7 +314,7 @@ async function sendViaResend(
 
   try {
     console.log("[email:resend] sending", {
-      to,
+      to: maskEmail(to),
       subject: input.subject,
       from,
       attachments: input.attachments?.length || 0,
@@ -326,7 +354,7 @@ async function sendViaResend(
       };
     }
 
-    console.log("[email:resend] sent", { id: data.id, to });
+    console.log("[email:resend] sent", { id: data.id, to: maskEmail(to) });
     return { success: true, data };
   } catch (error) {
     clearTimeout(timeoutId);
@@ -348,7 +376,7 @@ async function sendViaNoop(
   input: SendEmailWithAttachmentInput,
 ): Promise<EmailResult> {
   console.log("[email:noop] skipping send", {
-    to: input.to,
+    to: maskEmail(input.to),
     subject: input.subject,
     attachments: input.attachments?.length || 0,
   });

@@ -43,6 +43,13 @@ module.exports = {
       autorestart: true,
       watch: false,
       ignore_watch: ['node_modules', 'logs', '.git'],
+      // Даём приложению домучать запросы в полёте после SIGTERM.
+      // Должно быть больше внутреннего таймаута graceful shutdown (10 с).
+      kill_timeout: 12000,
+      // Защита от бесконечного цикла падений при неверной конфигурации.
+      min_uptime: '20s',
+      max_restarts: 10,
+      restart_delay: 2000,
     },
   ],
 };

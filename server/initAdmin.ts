@@ -1,19 +1,5 @@
 import { storage } from "./storage";
 import { hashPassword } from "./auth";
-import { randomBytes } from "crypto";
-
-/**
- * Generate a secure random password
- */
-function generateSecurePassword(length: number = 16): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-  const bytes = randomBytes(length);
-  let password = '';
-  for (let i = 0; i < length; i++) {
-    password += chars[bytes[i] % chars.length];
-  }
-  return password;
-}
 
 /**
  * Initialize default admin account and products
@@ -41,21 +27,26 @@ export async function initAdminAccount(): Promise<void> {
       const existingAdmin = await storage.getUserByEmail(adminEmail);
       
       if (!existingAdmin) {
-        // Use provided password or generate a secure one
-        let finalPassword = adminPassword;
-        let passwordGenerated = false;
-        
+        // SECURITY: раньше при отсутствии ADMIN_INITIAL_PASSWORD пароль
+        // генерировался и печатался в stdout открытым текстом — то есть
+        // попадал в логи PM2/journald/CI, откуда его может прочитать любой,
+        // у кого есть доступ к логам. Пароль администратора теперь берётся
+        // только из окружения и никогда не логируется.
+        const finalPassword = adminPassword;
+
         if (!finalPassword) {
-          finalPassword = generateSecurePassword(20);
-          passwordGenerated = true;
+          console.error("🚨 [initAdmin] ADMIN_EMAIL задан, но ADMIN_INITIAL_PASSWORD отсутствует.");
+          console.error("   Учётная запись администратора НЕ создана.");
+          console.error("   Сгенерируйте пароль (openssl rand -base64 24) и задайте");
+          console.error("   ADMIN_INITIAL_PASSWORD в окружении, затем перезапустите сервер.");
+          return;
         }
-        
+
         // Validate password strength
         if (finalPassword.length < 12) {
-          console.error("🚨 [initAdmin] SECURITY WARNING: ADMIN_INITIAL_PASSWORD is too weak (min 12 characters)");
-          console.error("   Generating a secure password instead...");
-          finalPassword = generateSecurePassword(20);
-          passwordGenerated = true;
+          console.error("🚨 [initAdmin] ADMIN_INITIAL_PASSWORD слишком короткий (минимум 12 символов).");
+          console.error("   Учётная запись администратора НЕ создана.");
+          return;
         }
         
         // Hash password
@@ -75,18 +66,9 @@ export async function initAdminAccount(): Promise<void> {
         console.log("═══════════════════════════════════════════════════════════════");
         console.log("🔐 ADMIN ACCOUNT CREATED SUCCESSFULLY");
         console.log("═══════════════════════════════════════════════════════════════");
-        console.log(`   Email: ${adminEmail}`);
         console.log(`   ID: ${admin.id}`);
-        if (passwordGenerated) {
-          console.log("");
-          console.log("⚠️  AUTO-GENERATED PASSWORD (save it securely!):");
-          console.log(`   Password: ${finalPassword}`);
-          console.log("");
-          console.log("   IMPORTANT: Change this password immediately after first login!");
-          console.log("   Set ADMIN_INITIAL_PASSWORD in .env to use your own password.");
-        } else {
-          console.log("   Password: [using ADMIN_INITIAL_PASSWORD from .env]");
-        }
+        console.log("   Пароль: взят из ADMIN_INITIAL_PASSWORD (в лог не выводится)");
+        console.log("   Смените его после первого входа и удалите переменную из .env");
         console.log("═══════════════════════════════════════════════════════════════");
         console.log("");
       } else {

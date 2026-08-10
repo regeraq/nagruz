@@ -3,16 +3,47 @@ name: Deploy to Server
 on:
   push:
     branches:
-      - main  # Автоматический деплой при пуше в main ветку
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build-check:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-check
+    environment: production
+
+    steps:
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -20,39 +51,14 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
+          # Единый безопасный путь: backup → pull → npm ci → build →
+          # migrate → reload → health check → rollback при сбое.
+          # Не дублируем логику здесь — иначе CI и update-project.sh разъедутся.
           script: |
-            cd /var/www/loaddevice
-            
-            # Сохранение текущего коммита для отката (опционально)
-            CURRENT_COMMIT=$(git rev-parse HEAD)
-            echo "Deploying commit: $CURRENT_COMMIT"
-            
-            # Получение последних изменений
-            git fetch origin
-            git reset --hard origin/main
-            
-            # Установка зависимостей (если изменился package.json)
-            npm install --production=false
-            
-            # Сборка проекта
-            npm run build
-            
-            # Применение миграций БД (если есть)
-            npm run db:push || true
-            
-            # Перезапуск приложения через PM2
-            pm2 restart loaddevice || pm2 start dist/index.js --name loaddevice --max-memory-restart 300M
-            
-            # Проверка статуса
-            pm2 status
-            
-            echo "✅ Deployment completed successfully!"
-
-
-
-
-
-
-
-
-
+            set -euo pipefail
+            PROJECT_DIR="/var/www/loaddevice"
+            if [ ! -f "$PROJECT_DIR/package.json" ] && [ -f "$PROJECT_DIR/HelloWhoAreYou-1/package.json" ]; then
+              PROJECT_DIR="$PROJECT_DIR/HelloWhoAreYou-1"
+            fi
+            cd "$PROJECT_DIR"
+            bash ./update-project.sh

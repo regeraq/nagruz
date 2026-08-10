@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import { verifyAccessToken, type JWTPayload } from "../auth";
+import { verifyAccessToken } from "../auth";
+import { getAccessTokenFromRequest } from "../authCookies";
 import { storage } from "../storage";
 
 export interface AuthRequest extends Request {
@@ -29,9 +30,9 @@ export async function authenticate(
   next: NextFunction
 ): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const token = getAccessTokenFromRequest(req);
+
+    if (!token) {
       res.status(401).json({
         success: false,
         code: "UNAUTHORIZED",
@@ -40,7 +41,6 @@ export async function authenticate(
       return;
     }
 
-    const token = authHeader.substring(7);
     const payload = verifyAccessToken(token);
 
     if (!payload) {
@@ -137,29 +137,23 @@ export async function optionalAuthenticate(
   next: NextFunction
 ): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.substring(7);
+    const token = getAccessTokenFromRequest(req);
+    if (token) {
       const payload = verifyAccessToken(token);
-
       if (payload) {
         const user = await storage.getUserById(payload.userId);
-        
         if (user && !user.isBlocked) {
           req.user = {
             id: user.id,
-            userId: user.id, // Alias for compatibility
+            userId: user.id,
             email: user.email,
             role: user.role,
           };
         }
       }
     }
-
     next();
-  } catch (error) {
-    // Continue even if authentication fails
+  } catch {
     next();
   }
 }

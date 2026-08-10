@@ -71,6 +71,7 @@ echo "[backup] DB dump size: $DB_SIZE"
 # -------- 2. Архив файлов --------
 FILES_FILE="$BACKUP_DIR/loaddevice-files-$TS.tar.gz"
 echo "[backup] tar -> $FILES_FILE"
+# .env + uploads/ (вложения коммерческих предложений на диске)
 tar -czf "$FILES_FILE" \
     --ignore-failed-read \
     -C / \

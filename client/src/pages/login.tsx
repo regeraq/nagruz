@@ -79,12 +79,6 @@ export default function Login() {
         return;
       }
 
-      // Store tokens
-      if (result.tokens) {
-        localStorage.setItem("accessToken", result.tokens.accessToken);
-        localStorage.setItem("refreshToken", result.tokens.refreshToken);
-      }
-
       // Invalidate and refetch user data (don't await - do it in background)
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
 

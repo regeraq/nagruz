@@ -101,29 +101,74 @@ echo "📁 Рабочая директория: $PROJECT_ROOT"
 cd "$PROJECT_ROOT" || exit 1
 echo ""
 
-# Запомним SHA ДО обновления, чтобы в конце показать, что реально поменялось.
+# Запомним SHA ДО обновления — он же точка отката.
 SHA_BEFORE="$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
 
-# ---------- 2. Получение последних изменений ----------
+# Откат к предыдущему коммиту, если деплой развалился на сборке/миграциях.
+rollback() {
+    echo ""
+    echo "⏪ ОТКАТ на предыдущий рабочий коммит $SHA_BEFORE"
+    if [ "$SHA_BEFORE" = "unknown" ]; then
+        echo "   ⚠️  Точка отката неизвестна — откат невозможен, разбирайтесь вручную."
+        return
+    fi
+    git reset --hard "$SHA_BEFORE"
+    npm ci && npm run build || echo "   ⚠️  Не удалось пересобрать откатанную версию!"
+    pm2 restart loaddevice --update-env >/dev/null 2>&1 || true
+    echo "   Откат выполнен. Сайт работает на прежней версии."
+}
+
+# ---------- 2. Проверка обязательных условий ----------
+if [ ! -f ".env" ]; then
+    echo "❌ ОШИБКА: файл .env не найден в $PROJECT_ROOT"
+    echo "   Без него приложение не запустится (нет DATABASE_URL и секретов)."
+    exit 1
+fi
+
+# Бэкап БД ПЕРЕД миграциями: если миграция испортит данные, откат кода не поможет.
+if [ -f "scripts/backup.sh" ]; then
+    echo "💾 Шаг 0: Резервная копия БД перед миграциями..."
+    bash scripts/backup.sh >/dev/null 2>&1 \
+        && echo "   ✅ Бэкап создан" \
+        || echo "   ⚠️  Бэкап не удался — продолжаем, но риск выше"
+    echo ""
+fi
+
+# ---------- 3. Получение последних изменений ----------
 echo "🔍 Шаг 1: Получение последних изменений с GitHub..."
 git fetch origin
 git reset --hard origin/main
 SHA_AFTER="$(git rev-parse HEAD)"
 echo ""
 
-# ---------- 3. Установка зависимостей ----------
-echo "📦 Шаг 2: Установка зависимостей..."
-npm install
+# ---------- 4. Установка зависимостей ----------
+# npm ci, а не npm install: устанавливает ровно то, что в package-lock.json.
+# npm install мог подтянуть новые минорные версии и сломать прод «сам по себе».
+echo "📦 Шаг 2: Установка зависимостей (npm ci)..."
+if ! npm ci; then
+    echo "❌ npm ci не выполнился."
+    rollback
+    exit 1
+fi
 echo ""
 
-# ---------- 4. Сборка ----------
+# ---------- 5. Сборка ----------
 echo "🔨 Шаг 3: Сборка проекта..."
-npm run build
+if ! npm run build; then
+    echo "❌ Сборка упала — старая версия продолжает работать."
+    rollback
+    exit 1
+fi
 echo ""
 
-# ---------- 5. Миграции БД ----------
+# ---------- 6. Миграции БД ----------
+# Только db:migrate: db:push интерактивен и в неинтерактивной сессии зависает.
 echo "🗄️  Шаг 4: Применение миграций БД..."
-npm run db:push || echo "⚠️  Миграции не применены (возможно, нет изменений)"
+if ! npm run db:migrate; then
+    echo "❌ Миграции не применились — схема БД несовместима с кодом."
+    rollback
+    exit 1
+fi
 echo ""
 
 # ---------- 6. Перезапуск ----------
@@ -135,7 +180,10 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 
 if pm2 list | grep -q "loaddevice"; then
-    pm2 restart loaddevice --update-env
+    # reload вместо restart: посылает SIGTERM и даёт приложению корректно
+    # завершить запросы в полёте (см. graceful shutdown в server/index.ts).
+    pm2 reload ecosystem.config.cjs --update-env || pm2 restart loaddevice --update-env
+    pm2 save
 else
     echo "ℹ️  PM2-процесс loaddevice не найден, запускаем заново..."
     if [ -f "ecosystem.config.cjs" ]; then
@@ -147,8 +195,35 @@ else
 fi
 echo ""
 
-# ---------- 7. Статус и сверка ----------
-echo "✅ Шаг 6: Проверка статуса..."
+# ---------- 8. Health check ----------
+# Без этой проверки скрипт рапортует «успех», даже если приложение упало
+# сразу после старта (например, из-за отсутствующей переменной окружения).
+echo "🩺 Шаг 6: Проверка работоспособности..."
+APP_PORT="$(grep -E '^PORT=' .env 2>/dev/null | head -n1 | cut -d'=' -f2- | tr -d '"'"'"' ' || true)"
+APP_PORT="${APP_PORT:-5000}"
+HEALTH_URL="http://127.0.0.1:${APP_PORT}/api/health"
+
+HEALTHY=0
+for i in $(seq 1 15); do
+    if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null 2>&1; then
+        HEALTHY=1
+        echo "   ✅ Приложение отвечает на $HEALTH_URL (попытка $i)"
+        break
+    fi
+    sleep 2
+done
+
+if [ "$HEALTHY" -ne 1 ]; then
+    echo "   ❌ Приложение НЕ отвечает на $HEALTH_URL после 30 секунд."
+    echo "   Логи ошибок:"
+    pm2 logs loaddevice --lines 40 --nostream --err || true
+    rollback
+    exit 1
+fi
+echo ""
+
+# ---------- 9. Статус и сверка ----------
+echo "✅ Шаг 7: Статус процессов..."
 pm2 status
 echo ""
 

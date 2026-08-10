@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
+import { getClientIp } from "../security";
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
@@ -13,18 +14,6 @@ interface LoginAttempt {
 
 // In-memory cache for login attempts (in production, use Redis)
 const loginAttemptsCache = new Map<string, LoginAttempt[]>();
-
-/**
- * Get client IP address
- */
-function getClientIp(req: Request): string {
-  return (
-    (req.headers["x-forwarded-for"] as string)?.split(",")[0] ||
-    (req.headers["x-real-ip"] as string) ||
-    req.socket.remoteAddress ||
-    "unknown"
-  );
-}
 
 /**
  * Clean old attempts from cache
@@ -102,7 +91,7 @@ export async function recordLoginAttempt(
   loginAttemptsCache.set(key, attempts);
   
   // Also store in database for persistence
-  await storage.recordLoginAttempt(email, success);
+  await storage.recordLoginAttempt(email, success, ipAddress);
   
   // Clean old attempts
   cleanOldAttempts(email, ipAddress);

@@ -173,13 +173,10 @@ export default function Admin() {
   const queryClient = useQueryClient();
 
   // Fetch current user
-  const { data: userData } = useQuery({
+  const { data: userData, isLoading: isLoadingUser } = useQuery({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch user");
@@ -192,10 +189,8 @@ export default function Admin() {
   const { data: productsData = { products: [] } as any } = useQuery({
     queryKey: ["/api/admin/products"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/products", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch products");
@@ -223,10 +218,8 @@ export default function Admin() {
   const { data: usersData = {} as any } = useQuery({
     queryKey: ["/api/admin/users"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/users", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch users");
@@ -239,10 +232,8 @@ export default function Admin() {
   const { data: ordersData = {} as any } = useQuery({
     queryKey: ["/api/admin/orders"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/orders", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch orders");
@@ -255,10 +246,8 @@ export default function Admin() {
   const { data: contactSubmissionsData = {} as any } = useQuery({
     queryKey: ["/api/admin/contacts"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/contacts", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch contact submissions");
@@ -271,10 +260,8 @@ export default function Admin() {
   const { data: siteContentData = {} as any } = useQuery({
     queryKey: ["/api/admin/content"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/content", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch site content");
@@ -287,10 +274,8 @@ export default function Admin() {
   const { data: siteContactsData = {} as any } = useQuery({
     queryKey: ["/api/admin/site-contacts"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/site-contacts", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch site contacts");
@@ -303,10 +288,8 @@ export default function Admin() {
   const { data: cookieSettingsData = {} as any } = useQuery({
     queryKey: ["/api/admin/cookie-settings"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/cookie-settings", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch cookie settings");
@@ -326,10 +309,8 @@ export default function Admin() {
   const { data: promoCodesData = {} as any } = useQuery({
     queryKey: ["/api/admin/promocodes"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/promocodes", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch promocodes");
@@ -342,10 +323,8 @@ export default function Admin() {
   const { data: settingsData = {} as any } = useQuery({
     queryKey: ["/api/admin/settings"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/settings", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch settings");
@@ -358,10 +337,8 @@ export default function Admin() {
   const databaseSizeQuery = useQuery({
     queryKey: ["/api/admin/database/size"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch("/api/admin/database/size", {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch database size information");
@@ -399,10 +376,8 @@ export default function Admin() {
   const { data: statsData = {} as any, isFetching: isFetchingStats } = useQuery({
     queryKey: ["/api/admin/stats", statsQueryParams],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) throw new Error("Not authenticated");
       const res = await fetch(`/api/admin/stats?${statsQueryParams}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch stats");
@@ -789,10 +764,8 @@ export default function Admin() {
     queryKey: ["/api/admin/products", selectedProductForImages, "images"],
     queryFn: async () => {
       if (!selectedProductForImages) return [];
-      const token = localStorage.getItem("accessToken");
-      if (!token) return [];
       const res = await fetch(`/api/admin/products/${selectedProductForImages}/images`, {
-        headers: { Authorization: `Bearer ${token}` },
+        
         credentials: "include",
       });
       if (!res.ok) return [];
@@ -1133,6 +1106,14 @@ export default function Admin() {
     weekAgo.setDate(weekAgo.getDate() - 7);
     return allUsers.filter((u: any) => new Date(u.createdAt) > weekAgo).length;
   }, [allUsers]);
+
+  if (isLoadingUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary" />
+      </div>
+    );
+  }
 
   if (!isAdmin) {
     return (
@@ -3762,9 +3743,8 @@ export default function Admin() {
                               onClick={async () => {
                                 setLoadingContactDetails(true);
                                 try {
-                                  const token = localStorage.getItem("accessToken");
                                   const res = await fetch(`/api/admin/contacts/${contact.id}`, {
-                                    headers: { Authorization: `Bearer ${token}` },
+                                    
                                   });
                                   if (!res.ok) throw new Error("Failed to fetch contact details");
                                   const data = await res.json();
@@ -3865,9 +3845,8 @@ export default function Admin() {
                                 variant="outline"
                                 onClick={async () => {
                                   try {
-                                    const token = localStorage.getItem("accessToken");
                                     const res = await fetch(`/api/files/${file.id}/download`, {
-                                      headers: { Authorization: `Bearer ${token}` },
+                                      
                                     });
                                     if (!res.ok) throw new Error("Failed to download file");
                                     const blob = await res.blob();
@@ -4112,11 +4091,9 @@ export default function Admin() {
                           return;
                         }
                         try {
-                          const token = localStorage.getItem("accessToken");
                           const res = await fetch("/api/admin/site-contacts", {
                             method: "POST",
                             headers: {
-                              Authorization: `Bearer ${token}`,
                               "Content-Type": "application/json",
                             },
                             body: JSON.stringify(newContact),
@@ -4174,10 +4151,9 @@ export default function Admin() {
                                 onClick={async () => {
                                   if (!confirm("Удалить контакт?")) return;
                                   try {
-                                    const token = localStorage.getItem("accessToken");
                                     const res = await fetch(`/api/admin/site-contacts/${contact.id}`, {
                                       method: "DELETE",
-                                      headers: { Authorization: `Bearer ${token}` },
+                                      
                                     });
                                     if (!res.ok) throw new Error("Failed to delete");
                                     toast({ title: "Успешно", description: "Контакт удален" });
@@ -4255,11 +4231,9 @@ export default function Admin() {
                 <Button
                   onClick={async () => {
                     try {
-                      const token = localStorage.getItem("accessToken");
                       const res = await fetch("/api/admin/cookie-settings", {
                         method: "PUT",
                         headers: {
-                          Authorization: `Bearer ${token}`,
                           "Content-Type": "application/json",
                         },
                         body: JSON.stringify(cookieSettings),
@@ -4817,12 +4791,8 @@ export default function Admin() {
                     <Button
                       onClick={async () => {
                         try {
-                          const token = localStorage.getItem("accessToken");
                           const response = await fetch("/api/admin/database/export", {
-                            headers: {
-                              Authorization: `Bearer ${token}`,
-                            },
-                          });
+                                                      });
                           if (!response.ok) {
                             const error = await response.json();
                             throw new Error(error.message || "Failed to export database");
@@ -5012,11 +4982,9 @@ export default function Admin() {
                   return;
                 }
                 try {
-                  const token = localStorage.getItem("accessToken");
                   const res = await fetch(`/api/admin/site-contacts/${editingContact.id}`, {
                     method: "PUT",
                     headers: {
-                      Authorization: `Bearer ${token}`,
                       "Content-Type": "application/json",
                     },
                     body: JSON.stringify({

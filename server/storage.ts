@@ -2,9 +2,10 @@ import { db } from "./db";
 import { 
   users, products, orders, notifications, favorites, sessions,
   contactSubmissions, loginAttempts, promoCodes, siteSettings,
-  siteContent, siteContacts, cookieSettings, personalDataConsents
+  siteContent, siteContacts, cookieSettings, personalDataConsents,
+  commercialProposalFiles
 } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray, lt } from "drizzle-orm";
 
 /**
  * Сериализация `advantages` перед записью в БД.
@@ -76,7 +77,8 @@ export interface IStorage {
   getContactSubmissions(): Promise<any[]>;
   getContactSubmission(id: string): Promise<any>;
   deleteContactSubmission(id: string): Promise<boolean>;
-  recordLoginAttempt(email: string, success: boolean): Promise<void>;
+  recordLoginAttempt(email: string, success: boolean, ipAddress?: string | null): Promise<void>;
+  purgeExpiredData(loginAttemptRetentionDays?: number): Promise<{ sessions: number; loginAttempts: number }>;
   getOrder(id: string): Promise<any>;
   updateOrderStatus(id: string, status: string, details?: string): Promise<any>;
   createOrder(order: any): Promise<any>;
@@ -378,13 +380,36 @@ export class DrizzleStorage implements IStorage {
     return true;
   }
 
-  async recordLoginAttempt(email: string, success: boolean) {
+  async recordLoginAttempt(email: string, success: boolean, ipAddress?: string | null) {
+    // IP вызывающая сторона знает, а колонка раньше всегда оставалась NULL —
+    // журнал попыток входа был бесполезен для разбора инцидентов.
     await db.insert(loginAttempts).values({
       id: undefined,
       email,
       success,
-      ipAddress: null,
+      ipAddress: ipAddress ?? null,
     });
+  }
+
+  /**
+   * Удаление персональных данных с истёкшим сроком хранения.
+   * COMPLIANCE (152-ФЗ ст.5 ч.7): ПДн хранятся не дольше, чем требуется.
+   */
+  async purgeExpiredData(loginAttemptRetentionDays = 90) {
+    const now = new Date();
+    const loginAttemptCutoff = new Date(now.getTime() - loginAttemptRetentionDays * 24 * 60 * 60 * 1000);
+
+    const removedSessions = await db
+      .delete(sessions)
+      .where(lt(sessions.expiresAt, now))
+      .returning({ id: sessions.id });
+
+    const removedAttempts = await db
+      .delete(loginAttempts)
+      .where(lt(loginAttempts.createdAt, loginAttemptCutoff))
+      .returning({ id: loginAttempts.id });
+
+    return { sessions: removedSessions.length, loginAttempts: removedAttempts.length };
   }
 
   async getOrder(id: string) {
@@ -536,8 +561,83 @@ export class DrizzleStorage implements IStorage {
     return result[0];
   }
 
+  /**
+   * Полное удаление учётной записи вместе с персональными данными.
+   *
+   * COMPLIANCE (152-ФЗ ст.21): раньше удалялась только строка в `users`.
+   * Каскад закрывал sessions/favorites/notifications/consents/oauth, но ПДн
+   * оставались:
+   *   - `orders` (FK `set null`) сохраняли customerName/Email/Phone;
+   *   - `contact_submissions` вообще не связаны с пользователем по FK;
+   *   - `commercial_proposal_files` (FK `set null`) сохраняли файлы заявителя;
+   *   - `login_attempts` хранили email.
+   *
+   * Заказы не удаляем — они нужны для бухгалтерского учёта, но обезличиваем:
+   * после этого строку нельзя связать с физическим лицом.
+   */
   async deleteUser(id: string) {
-    await db.delete(users).where(eq(users.id, id));
+    const existing = await db.select().from(users).where(eq(users.id, id));
+    const user = existing[0];
+    if (!user) return false;
+
+    const email = user.email;
+
+    // Файлы коммерческих предложений пользователя и сами заявки.
+    const proposalRows = await db
+      .select({
+        proposalId: commercialProposalFiles.proposalId,
+        filePath: commercialProposalFiles.filePath,
+      })
+      .from(commercialProposalFiles)
+      .where(eq(commercialProposalFiles.userId, id));
+
+    // Все изменения в БД — одной транзакцией: частично удалённый пользователь
+    // (например, стёртые заявки при живой строке users) нарушал бы и целостность,
+    // и обещание «удаляем ПДн полностью».
+    await db.transaction(async (tx) => {
+      await tx.delete(commercialProposalFiles).where(eq(commercialProposalFiles.userId, id));
+
+      const proposalIds = Array.from(new Set(proposalRows.map((r) => r.proposalId).filter(Boolean)));
+      if (proposalIds.length > 0) {
+        await tx.delete(contactSubmissions).where(inArray(contactSubmissions.id, proposalIds));
+      }
+      // Заявки, отправленные с того же email, но без привязки к файлам.
+      if (email) {
+        await tx.delete(contactSubmissions).where(eq(contactSubmissions.email, email));
+        await tx.delete(loginAttempts).where(eq(loginAttempts.email, email));
+      }
+
+      // Обезличивание заказов: финансовые записи сохраняются, ПДн — нет.
+      // paymentDetails может содержать ФИО/телефон из платёжной формы — очищаем.
+      await tx
+        .update(orders)
+        .set({
+          customerName: "Удалённый пользователь",
+          customerEmail: null,
+          customerPhone: null,
+          paymentDetails: null,
+          userId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(orders.userId, id));
+
+      // Настройки уведомлений пользователя в site_settings (не FK, иначе orphan).
+      await tx
+        .delete(siteSettings)
+        .where(eq(siteSettings.key, `user_prefs_notifications_${id}`));
+
+      await tx.delete(users).where(eq(users.id, id));
+    });
+
+    // Файлы с диска удаляем только после коммита: откатить удаление файла нельзя,
+    // а при откате транзакции ссылки на него остались бы в БД.
+    const { deleteStoredFile, isStoredFilePath } = await import("./services/fileStorage");
+    for (const row of proposalRows) {
+      if (row.filePath && isStoredFilePath(row.filePath)) {
+        await deleteStoredFile(row.filePath);
+      }
+    }
+
     return true;
   }
 

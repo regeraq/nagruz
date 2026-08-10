@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -6,42 +6,57 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Navigation } from "@/components/navigation";
 import Home from "@/pages/home";
-import About from "@/pages/about";
-import FAQ from "@/pages/faq";
-import Contacts from "@/pages/contacts";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
-import Profile from "@/pages/profile";
-import Admin from "@/pages/admin";
-import Specifications from "@/pages/specifications";
-import Applications from "@/pages/applications";
-import Documentation from "@/pages/documentation";
 import NotFound from "@/pages/not-found";
-import PrivacyPolicy from "@/pages/privacy-policy";
-import DataProcessingPolicy from "@/pages/data-processing-policy";
-import PublicOffer from "@/pages/public-offer";
 import { CookieBanner } from "@/components/cookie-banner";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
+// PERF: без разделения кода вся админка (~275 КБ исходника), личный кабинет
+// и юридические страницы попадали в один бандл, который скачивал каждый
+// анонимный посетитель главной. Редко посещаемые маршруты грузятся по требованию.
+const About = lazy(() => import("@/pages/about"));
+const FAQ = lazy(() => import("@/pages/faq"));
+const Contacts = lazy(() => import("@/pages/contacts"));
+const Profile = lazy(() => import("@/pages/profile"));
+const Admin = lazy(() => import("@/pages/admin"));
+const Specifications = lazy(() => import("@/pages/specifications"));
+const Applications = lazy(() => import("@/pages/applications"));
+const Documentation = lazy(() => import("@/pages/documentation"));
+const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
+const DataProcessingPolicy = lazy(() => import("@/pages/data-processing-policy"));
+const PublicOffer = lazy(() => import("@/pages/public-offer"));
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center" role="status" aria-live="polite">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
+      <span className="sr-only">Загрузка…</span>
+    </div>
+  );
+}
+
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/about" component={About} />
-      <Route path="/faq" component={FAQ} />
-      <Route path="/contacts" component={Contacts} />
-      <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
-      <Route path="/profile" component={Profile} />
-      <Route path="/admin" component={Admin} />
-      <Route path="/specifications" component={Specifications} />
-      <Route path="/applications" component={Applications} />
-      <Route path="/documentation" component={Documentation} />
-      <Route path="/privacy-policy" component={PrivacyPolicy} />
-      <Route path="/data-processing-policy" component={DataProcessingPolicy} />
-      <Route path="/public-offer" component={PublicOffer} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<RouteFallback />}>
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/about" component={About} />
+        <Route path="/faq" component={FAQ} />
+        <Route path="/contacts" component={Contacts} />
+        <Route path="/login" component={Login} />
+        <Route path="/register" component={Register} />
+        <Route path="/profile" component={Profile} />
+        <Route path="/admin" component={Admin} />
+        <Route path="/specifications" component={Specifications} />
+        <Route path="/applications" component={Applications} />
+        <Route path="/documentation" component={Documentation} />
+        <Route path="/privacy-policy" component={PrivacyPolicy} />
+        <Route path="/data-processing-policy" component={DataProcessingPolicy} />
+        <Route path="/public-offer" component={PublicOffer} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 

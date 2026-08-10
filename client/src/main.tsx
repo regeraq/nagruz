@@ -1,6 +1,12 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { installCsrfFetchInterceptor } from "./lib/csrf";
+
+// Сервер требует x-csrf-token на всех изменяющих /api-запросах. В коде десятки
+// «сырых» fetch() (профиль, админка, оплата), поэтому заголовок навешивается
+// один раз глобально, а не в каждом месте вызова.
+installCsrfFetchInterceptor();
 
 // Global error handlers to suppress browser extension errors
 // These errors are typically caused by Chrome extensions and don't affect app functionality

@@ -1,3 +1,4 @@
+import { clearLegacyTokens, logoutSession } from "@/lib/auth";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Menu, X, Gauge, User, LogOut, Settings } from "lucide-react";
@@ -12,7 +13,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
 interface User {
@@ -189,20 +189,14 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
   const { data: userData, isLoading: isLoadingUser } = useQuery<User | null>({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      if (!token) return null;
 
       try {
         const res = await fetch("/api/auth/me", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          credentials: "include",
+                    credentials: "include",
         });
 
         if (res.status === 401) {
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
+          clearLegacyTokens();
           return null;
         }
 
@@ -228,14 +222,8 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
   }, []);
 
   const handleLogout = () => {
-    // Clear tokens immediately for instant logout
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    
-    // Invalidate user-related queries only (not products - they should be public)
+    clearLegacyTokens();
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    
-    // Clear all admin-related cache to prevent 401 errors on next visit
     queryClient.removeQueries({ queryKey: ["/api/admin/settings"] });
     queryClient.removeQueries({ queryKey: ["/api/admin/users"] });
     queryClient.removeQueries({ queryKey: ["/api/admin/orders"] });
@@ -243,22 +231,8 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
     queryClient.removeQueries({ queryKey: ["/api/admin/products"] });
     queryClient.removeQueries({ queryKey: ["/api/admin/contacts"] });
     queryClient.removeQueries({ queryKey: ["/api/admin/promocodes"] });
-    
-    // FIXED: Don't invalidate products cache - products are public and should remain cached
-    // This ensures gallery images remain visible after logout
-    // queryClient.invalidateQueries({ queryKey: ['/api/products'] });
-    // queryClient.refetchQueries({ queryKey: ['/api/products'] });
-    
-    // Redirect immediately
     setLocation("/");
-    
-    // Fire-and-forget logout API call (don't wait for response)
-    const refreshToken = localStorage.getItem("refreshToken");
-    if (refreshToken) {
-      apiRequest("POST", "/api/auth/logout", { refreshToken }).catch(() => {
-        // Ignore errors - logout is already complete on client side
-      });
-    }
+    void logoutSession();
   };
 
   const getUserInitials = (user: User) => {

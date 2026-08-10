@@ -140,14 +140,6 @@ export default function Home() {
       .then(res => res.json())
       .then(data => {
         const arr = Array.isArray(data) ? data : (data.products || data.data || []);
-        console.log('[Products] Loaded products:', arr.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          hasImages: !!p.images,
-          imagesType: typeof p.images,
-          imagesLength: Array.isArray(p.images) ? p.images.length : (p.images ? 'string' : 0),
-          hasImageUrl: !!p.imageUrl
-        })));
         setProducts(arr);
       })
       .catch(err => console.error('Products error:', err))
@@ -204,14 +196,12 @@ export default function Home() {
         const res = await fetch(`/api/products/${selectedDevice}/images?_t=${Date.now()}`);
         if (res.ok) {
           const data = await res.json();
-          console.log('[Gallery] API response:', data);
           
           if (data.images) {
             finalImages = extractValidImages(data.images);
           }
           
           if (finalImages.length > 0) {
-            console.log(`[Gallery] Got ${finalImages.length} images from API`);
             return finalImages;
           }
         }
@@ -222,12 +212,6 @@ export default function Home() {
       // Source 2: Current products state
       const product = products.find(p => p.id === selectedDevice);
       if (product) {
-        console.log('[Gallery] Trying product data:', { 
-          id: product.id, 
-          hasImages: !!product.images,
-          hasImageUrl: !!product.imageUrl,
-          imagesType: typeof product.images
-        });
         
         // Get images array
         finalImages = extractValidImages(product.images);
@@ -241,7 +225,6 @@ export default function Home() {
         }
         
         if (finalImages.length > 0) {
-          console.log(`[Gallery] Got ${finalImages.length} images from products state`);
           return finalImages;
         }
       }
@@ -251,7 +234,6 @@ export default function Home() {
         const res = await fetch(`/api/products/${selectedDevice}?_t=${Date.now()}`);
         if (res.ok) {
           const product = await res.json();
-          console.log('[Gallery] Single product response:', product);
           
           finalImages = extractValidImages(product.images);
           
@@ -263,15 +245,12 @@ export default function Home() {
           }
           
           if (finalImages.length > 0) {
-            console.log(`[Gallery] Got ${finalImages.length} images from single product API`);
             return finalImages;
           }
         }
       } catch (err) {
         console.warn('[Gallery] Single product fetch error:', err);
       }
-      
-      console.log('[Gallery] No images found from any source');
       return [];
     };
     
@@ -649,7 +628,7 @@ export default function Home() {
       });
       return;
     }
-    contactMutation.mutate(data);
+    contactMutation.mutate({ ...data, consentPersonalData: true } as any);
   };
 
   const scrollToContact = () => {
@@ -1327,9 +1306,6 @@ export default function Home() {
                   return null;
                 }
                 
-                // Debug: log image being rendered
-                console.log(`[Gallery] Rendering image ${idx}: ${trimmedUrl.substring(0, 50)}...`);
-                
                 return (
                   <div
                     key={`${currentProduct?.id || 'product'}-image-${idx}`}
@@ -1353,13 +1329,7 @@ export default function Home() {
                           position: 'relative',
                           zIndex: 10
                         }}
-                        onLoad={(e) => {
-                          console.log(`[Gallery] Image ${idx} loaded successfully`);
-                          const img = e.target as HTMLImageElement;
-                          console.log(`[Gallery] Image dimensions: ${img.naturalWidth}x${img.naturalHeight}`);
-                        }}
                         onError={(e) => {
-                          console.error(`[Gallery] Image ${idx} failed to load`);
                           const target = e.target as HTMLImageElement;
                           target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' dy='10.5' font-weight='bold' x='50%25' y='50%25' text-anchor='middle'%3EИзображение не найдено%3C/text%3E%3C/svg%3E";
                           target.onerror = null;

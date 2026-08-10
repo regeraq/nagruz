@@ -164,7 +164,10 @@ export default function Contacts() {
     setSubmitSuccess(false);
 
     try {
-      const response = await apiRequest("POST", "/api/contact", formData);
+      const response = await apiRequest("POST", "/api/contact", {
+        ...formData,
+        consentPersonalData: true,
+      });
       const payload = (await response.json().catch(() => ({}))) as { success?: boolean; message?: string };
 
       if (response.ok && payload.success) {
