@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Save, Trash2, Plus, FileText, Globe, Home as HomeIcon } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 // Каталог "известных" ключей контента: человекочитаемая метка, подсказка
 // и страница, к которой относится ключ. При сохранении заполняем page и
@@ -83,10 +84,6 @@ interface Props {
   items: ContentItem[];
 }
 
-function authHeaders(): HeadersInit {  return {    "Content-Type": "application/json",
-  };
-}
-
 export function ContentManager({ items }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -145,16 +142,11 @@ export function ContentManager({ items }: Props) {
     }
     setSaving((s) => ({ ...s, [key]: true }));
     try {
-      const res = await fetch(`/api/admin/content/${encodeURIComponent(key)}`, {
-        method: "PUT",
-        headers: authHeaders(),
-        body: JSON.stringify({
-          value,
-          page: pageId || byKey.get(key)?.page || "",
-          section: preset.section || byKey.get(key)?.section || "",
-        }),
+      await apiRequest("PUT", `/api/admin/content/${encodeURIComponent(key)}`, {
+        value,
+        page: pageId || byKey.get(key)?.page || "",
+        section: preset.section || byKey.get(key)?.section || "",
       });
-      if (!res.ok) throw new Error(`Сервер ответил ${res.status}`);
       toast({ title: "Сохранено", description: `«${key}» обновлён` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
@@ -174,11 +166,7 @@ export function ContentManager({ items }: Props) {
   async function removeOne(key: string) {
     if (!confirm(`Удалить контент «${key}»?`)) return;
     try {
-      const res = await fetch(`/api/admin/content/${encodeURIComponent(key)}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
-      if (!res.ok) throw new Error(`Сервер ответил ${res.status}`);
+      await apiRequest("DELETE", `/api/admin/content/${encodeURIComponent(key)}`);
       toast({ title: "Удалено", description: `«${key}» удалён` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
@@ -205,12 +193,11 @@ export function ContentManager({ items }: Props) {
       return;
     }
     try {
-      const res = await fetch(`/api/admin/content/${encodeURIComponent(k)}`, {
-        method: "PUT",
-        headers: authHeaders(),
-        body: JSON.stringify({ value: newValue, page: newPage || "", section: newSection || "" }),
+      await apiRequest("PUT", `/api/admin/content/${encodeURIComponent(k)}`, {
+        value: newValue,
+        page: newPage || "",
+        section: newSection || "",
       });
-      if (!res.ok) throw new Error(`Сервер ответил ${res.status}`);
       toast({ title: "Сохранено", description: `«${k}» создан` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
       setNewKey(""); setNewValue(""); setNewPage(""); setNewSection("");

@@ -346,8 +346,8 @@ export default function Admin() {
       if (!data.success) throw new Error(data.message || "Failed to fetch database size");
       return data;
     },
-    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
-    refetchInterval: 60000, // Refresh every minute
+    enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role) && activeTab === "database",
+    refetchInterval: activeTab === "database" ? 60000 : false,
   });
 
   // Период для аналитики.
@@ -432,43 +432,44 @@ export default function Admin() {
     );
   });
 
-  // Load settings into form when they arrive
+  // Fill the forms once from the server. Later refetches must not overwrite
+  // values the admin is still typing (that looked like "данные не сохраняются").
+  const settingsFormHydrated = useRef(false);
   useEffect(() => {
-    if (settingsData?.settings) {
-      const settings = settingsData.settings as any[];
-      const seoTitle = settings.find((s: any) => s.key === "seo_title");
-      const seoDesc = settings.find((s: any) => s.key === "seo_description");
-      const seoKeywords = settings.find((s: any) => s.key === "seo_keywords");
-      const contactEmailSetting = settings.find((s: any) => s.key === "contact_email");
-      const contactPhoneSetting = settings.find((s: any) => s.key === "contact_phone");
-      const contactAddressSetting = settings.find((s: any) => s.key === "contact_address");
-      const contactTelegramSetting = settings.find((s: any) => s.key === "contact_telegram");
-      const contactWorkingHoursSetting = settings.find((s: any) => s.key === "contact_working_hours");
-      const operatorNameSetting = settings.find((s: any) => s.key === "operator_name");
-      const operatorInnSetting = settings.find((s: any) => s.key === "operator_inn");
-      const operatorOgrnSetting = settings.find((s: any) => s.key === "operator_ogrn");
-      const responsiblePersonSetting = settings.find((s: any) => s.key === "responsible_person");
-      const enableFileUploadSetting = settings.find((s: any) => s.key === "enable_file_upload");
+    if (settingsFormHydrated.current || !settingsData?.settings) return;
+    const settings = settingsData.settings as any[];
+    const seoTitle = settings.find((s: any) => s.key === "seo_title");
+    const seoDesc = settings.find((s: any) => s.key === "seo_description");
+    const seoKeywords = settings.find((s: any) => s.key === "seo_keywords");
+    const contactEmailSetting = settings.find((s: any) => s.key === "contact_email");
+    const contactPhoneSetting = settings.find((s: any) => s.key === "contact_phone");
+    const contactAddressSetting = settings.find((s: any) => s.key === "contact_address");
+    const contactTelegramSetting = settings.find((s: any) => s.key === "contact_telegram");
+    const contactWorkingHoursSetting = settings.find((s: any) => s.key === "contact_working_hours");
+    const operatorNameSetting = settings.find((s: any) => s.key === "operator_name");
+    const operatorInnSetting = settings.find((s: any) => s.key === "operator_inn");
+    const operatorOgrnSetting = settings.find((s: any) => s.key === "operator_ogrn");
+    const responsiblePersonSetting = settings.find((s: any) => s.key === "responsible_person");
+    const enableFileUploadSetting = settings.find((s: any) => s.key === "enable_file_upload");
 
-      if (seoTitle) setSeoTitle(seoTitle.value || "");
-      if (seoDesc) setSeoDescription(seoDesc.value || "");
-      if (seoKeywords) setSeoKeywords(seoKeywords.value || "");
-      if (contactEmailSetting) setContactEmail(contactEmailSetting.value || "");
-      if (contactPhoneSetting) setContactPhone(contactPhoneSetting.value || "");
-      if (contactAddressSetting) setContactAddress(contactAddressSetting.value || "");
-      if (contactTelegramSetting) setContactTelegram(contactTelegramSetting.value || "");
-      if (contactWorkingHoursSetting) setContactWorkingHours(contactWorkingHoursSetting.value || "");
-      if (operatorNameSetting) setOperatorName(operatorNameSetting.value || "");
-      if (operatorInnSetting) setOperatorInn(operatorInnSetting.value || "");
-      if (operatorOgrnSetting) setOperatorOgrn(operatorOgrnSetting.value || "");
-      if (responsiblePersonSetting) setResponsiblePerson(responsiblePersonSetting.value || "");
-      if (enableFileUploadSetting) {
-        setEnableFileUpload(enableFileUploadSetting.value === "true" || enableFileUploadSetting.value === true);
-      } else {
-        // По умолчанию включено, если настройка не установлена
-        setEnableFileUpload(true);
-      }
+    if (seoTitle) setSeoTitle(seoTitle.value || "");
+    if (seoDesc) setSeoDescription(seoDesc.value || "");
+    if (seoKeywords) setSeoKeywords(seoKeywords.value || "");
+    if (contactEmailSetting) setContactEmail(contactEmailSetting.value || "");
+    if (contactPhoneSetting) setContactPhone(contactPhoneSetting.value || "");
+    if (contactAddressSetting) setContactAddress(contactAddressSetting.value || "");
+    if (contactTelegramSetting) setContactTelegram(contactTelegramSetting.value || "");
+    if (contactWorkingHoursSetting) setContactWorkingHours(contactWorkingHoursSetting.value || "");
+    if (operatorNameSetting) setOperatorName(operatorNameSetting.value || "");
+    if (operatorInnSetting) setOperatorInn(operatorInnSetting.value || "");
+    if (operatorOgrnSetting) setOperatorOgrn(operatorOgrnSetting.value || "");
+    if (responsiblePersonSetting) setResponsiblePerson(responsiblePersonSetting.value || "");
+    if (enableFileUploadSetting) {
+      setEnableFileUpload(enableFileUploadSetting.value === "true" || enableFileUploadSetting.value === true);
+    } else {
+      setEnableFileUpload(true);
     }
+    settingsFormHydrated.current = true;
   }, [settingsData]);
 
   // Create product mutation
@@ -703,13 +704,21 @@ export default function Admin() {
     },
   });
 
+  const saveAdminSettings = async (
+    settings: { key: string; value: string; type?: string; description?: string }[],
+  ) => {
+    const res = await apiRequest("PUT", "/api/admin/settings", { settings });
+    return res.json();
+  };
+
   // Save SEO settings
   const saveSeoSettings = useMutation({
     mutationFn: async (data: any) => {
-      await apiRequest("PUT", "/api/admin/settings/seo_title", { value: data.title, type: "string" });
-      await apiRequest("PUT", "/api/admin/settings/seo_description", { value: data.description, type: "string" });
-      await apiRequest("PUT", "/api/admin/settings/seo_keywords", { value: data.keywords, type: "string" });
-      return true;
+      return saveAdminSettings([
+        { key: "seo_title", value: data.title, type: "string" },
+        { key: "seo_description", value: data.description, type: "string" },
+        { key: "seo_keywords", value: data.keywords, type: "string" },
+      ]);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
@@ -724,12 +733,13 @@ export default function Admin() {
   // Save contact settings
   const saveContactSettings = useMutation({
     mutationFn: async (data: any) => {
-      await apiRequest("PUT", "/api/admin/settings/contact_email", { value: data.email, type: "string" });
-      await apiRequest("PUT", "/api/admin/settings/contact_phone", { value: data.phone, type: "string" });
-      await apiRequest("PUT", "/api/admin/settings/contact_address", { value: data.address, type: "string" });
-      await apiRequest("PUT", "/api/admin/settings/contact_telegram", { value: data.telegram || "", type: "string" });
-      await apiRequest("PUT", "/api/admin/settings/contact_working_hours", { value: data.workingHours || "", type: "string" });
-      return true;
+      return saveAdminSettings([
+        { key: "contact_email", value: data.email, type: "string" },
+        { key: "contact_phone", value: data.phone, type: "string" },
+        { key: "contact_address", value: data.address, type: "string" },
+        { key: "contact_telegram", value: data.telegram || "", type: "string" },
+        { key: "contact_working_hours", value: data.workingHours || "", type: "string" },
+      ]);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
@@ -1056,15 +1066,12 @@ export default function Admin() {
   // Save privacy policy settings (operator data)
   const savePrivacyPolicySettings = useMutation({
     mutationFn: async (data: any) => {
-      await apiRequest("PUT", "/api/admin/settings/operator_name", { value: data.operatorName, type: "string", description: "Полное наименование оператора персональных данных" });
-      await apiRequest("PUT", "/api/admin/settings/operator_inn", { value: data.operatorInn, type: "string", description: "ИНН оператора персональных данных" });
-      if (data.operatorOgrn !== undefined) {
-        await apiRequest("PUT", "/api/admin/settings/operator_ogrn", { value: data.operatorOgrn, type: "string", description: "ОГРН/ОГРНИП оператора персональных данных" });
-      }
-      if (data.responsiblePerson !== undefined) {
-        await apiRequest("PUT", "/api/admin/settings/responsible_person", { value: data.responsiblePerson, type: "string", description: "ФИО ответственного за организацию обработки персональных данных" });
-      }
-      return true;
+      return saveAdminSettings([
+        { key: "operator_name", value: data.operatorName, type: "string", description: "Полное наименование оператора персональных данных" },
+        { key: "operator_inn", value: data.operatorInn, type: "string", description: "ИНН оператора персональных данных" },
+        { key: "operator_ogrn", value: data.operatorOgrn ?? "", type: "string", description: "ОГРН/ОГРНИП оператора персональных данных" },
+        { key: "responsible_person", value: data.responsiblePerson ?? "", type: "string", description: "ФИО ответственного за организацию обработки персональных данных" },
+      ]);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
@@ -1072,7 +1079,7 @@ export default function Admin() {
       toast({ title: "Данные оператора сохранены" });
     },
     onError: (error: any) => {
-      toast({ title: "Ошибка", description: "Произошла ошибка. Попробуйте позже.", variant: "destructive" });
+      toast({ title: "Ошибка", description: error.message || "Произошла ошибка. Попробуйте позже.", variant: "destructive" });
     },
   });
 
@@ -4231,13 +4238,7 @@ export default function Admin() {
                 <Button
                   onClick={async () => {
                     try {
-                      const res = await fetch("/api/admin/cookie-settings", {
-                        method: "PUT",
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify(cookieSettings),
-                      });
+                      const res = await apiRequest("PUT", "/api/admin/cookie-settings", cookieSettings);
                       if (!res.ok) throw new Error("Failed to save settings");
                       toast({ title: "Успешно", description: "Настройки сохранены" });
                       queryClient.invalidateQueries({ queryKey: ["/api/admin/cookie-settings"] });

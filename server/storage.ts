@@ -101,6 +101,10 @@ export interface IStorage {
   getSiteSettings(): Promise<any[]>;
   getSiteSetting(key: string): Promise<any>;
   setSiteSetting(key: string, value: string, type?: string, description?: string, updatedBy?: string): Promise<any>;
+  setSiteSettingsBulk(
+    items: { key: string; value: string; type?: string; description?: string }[],
+    updatedBy?: string,
+  ): Promise<any[]>;
   getProductImages(productId: string): Promise<string[]>;
   addProductImage(productId: string, imageUrl: string): Promise<any>;
   removeProductImage(productId: string, imageUrl: string): Promise<any>;
@@ -686,8 +690,7 @@ export class DrizzleStorage implements IStorage {
   async setSiteSetting(key: string, value: string, type: string = "string", description?: string, updatedBy?: string) {
     const existing = await this.getSiteSetting(key);
     if (existing) {
-      // FIXED: Include updatedBy if provided
-      const updateData: any = { value, type, description };
+      const updateData: any = { value, type, description, updatedAt: new Date() };
       if (updatedBy) {
         updateData.updatedBy = updatedBy;
       }
@@ -695,7 +698,6 @@ export class DrizzleStorage implements IStorage {
       return result[0];
     } else {
       const result = await db.insert(siteSettings).values({
-        id: undefined,
         key,
         value,
         type,
@@ -704,6 +706,39 @@ export class DrizzleStorage implements IStorage {
       }).returning();
       return result[0];
     }
+  }
+
+  async setSiteSettingsBulk(
+    items: { key: string; value: string; type?: string; description?: string }[],
+    updatedBy?: string,
+  ) {
+    return await db.transaction(async (tx) => {
+      const saved: any[] = [];
+      for (const item of items) {
+        const existing = await tx.select().from(siteSettings).where(eq(siteSettings.key, item.key));
+        if (existing[0]) {
+          const updateData: any = {
+            value: item.value,
+            type: item.type || "string",
+            description: item.description ?? existing[0].description,
+            updatedAt: new Date(),
+          };
+          if (updatedBy) updateData.updatedBy = updatedBy;
+          const result = await tx.update(siteSettings).set(updateData).where(eq(siteSettings.key, item.key)).returning();
+          saved.push(result[0]);
+        } else {
+          const result = await tx.insert(siteSettings).values({
+            key: item.key,
+            value: item.value,
+            type: item.type || "string",
+            description: item.description || "",
+            updatedBy: updatedBy || null,
+          }).returning();
+          saved.push(result[0]);
+        }
+      }
+      return saved;
+    });
   }
 
   async getProductImages(productId: string): Promise<string[]> {

@@ -3508,6 +3508,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ADMIN: Update several settings in one transaction (operator / SEO / contacts).
+  app.put("/api/admin/settings", requireAdmin, async (req, res) => {
+    try {
+      const itemSchema = z.object({
+        key: z.string().min(1).max(255).regex(/^[a-z0-9_]+$/i),
+        value: z.string().max(100_000),
+        type: z.enum(["string", "number", "boolean", "json"]).default("string"),
+        description: z.string().max(1000).optional(),
+      });
+      const parsed = z.object({ settings: z.array(itemSchema).min(1).max(50) }).safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Ошибка валидации данных", errors: parsed.error.errors });
+        return;
+      }
+      const saved = await storage.setSiteSettingsBulk(parsed.data.settings, req.user!.id);
+      res.json({ success: true, settings: saved });
+    } catch (error) {
+      console.error("Bulk update settings error:", error);
+      res.status(500).json({ success: false, message: "Failed to update settings" });
+    }
+  });
+
   // ADMIN: Update Site Setting
   app.put("/api/admin/settings/:key", requireAdmin, async (req, res) => {
     try {
@@ -3786,9 +3808,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         indexesSizeResult = await client.query(`
           SELECT 
-            pg_size_pretty(COALESCE(SUM(pg_relation_size(indexrelid)), 0)) AS total_indexes_size,
-            COALESCE(SUM(pg_relation_size(indexrelid)), 0) AS total_indexes_size_bytes
-          FROM pg_indexes
+            pg_size_pretty(COALESCE(SUM(pg_indexes_size(quote_ident(schemaname)||'.'||quote_ident(tablename))), 0)) AS total_indexes_size,
+            COALESCE(SUM(pg_indexes_size(quote_ident(schemaname)||'.'||quote_ident(tablename))), 0) AS total_indexes_size_bytes
+          FROM pg_tables
           WHERE schemaname = 'public';
         `);
         console.log("[Database Size] Indexes size query completed");
@@ -3808,11 +3830,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const rowCountQuery = `
             SELECT 
               schemaname,
-              tablename,
+              relname as tablename,
               n_live_tup as row_count
             FROM pg_stat_user_tables
             WHERE schemaname = 'public'
-            ORDER BY tablename;
+            ORDER BY relname;
           `;
           
           try {
