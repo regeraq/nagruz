@@ -18,6 +18,12 @@ const registerSchema = z.object({
   firstName: z.string().min(2, "Имя должно содержать минимум 2 символа").optional(),
   lastName: z.string().min(2, "Фамилия должна содержать минимум 2 символа").optional(),
   phone: z.string().min(10, "Введите корректный номер телефона").optional(),
+  consentPersonalData: z.boolean().refine((v) => v === true, {
+    message: "Необходимо согласие на обработку персональных данных",
+  }),
+  consentPolicies: z.boolean().refine((v) => v === true, {
+    message: "Необходимо принять политики сайта",
+  }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Пароли не совпадают",
   path: ["confirmPassword"],
@@ -38,6 +44,10 @@ export default function Register() {
     formState: { errors },
   } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
+    defaultValues: {
+      consentPersonalData: false,
+      consentPolicies: false,
+    },
   });
 
   const onSubmit = async (data: RegisterForm) => {
@@ -59,7 +69,11 @@ export default function Register() {
           "x-csrf-token": csrfToken,
         },
         credentials: "include",
-        body: JSON.stringify(registerData),
+        body: JSON.stringify({
+          ...registerData,
+          consentPersonalData: true,
+          consentPolicies: true,
+        }),
       });
 
       const result = await response.json();
@@ -225,18 +239,23 @@ export default function Register() {
                 <input
                   type="checkbox"
                   id="consent-personal-data-register"
-                  required
+                  {...register("consentPersonalData")}
+                  disabled={isLoading}
                   className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                 />
                 <Label htmlFor="consent-personal-data-register" className="text-xs sm:text-sm leading-relaxed cursor-pointer">
                   Я даю согласие на обработку персональных данных *
                 </Label>
               </div>
+              {errors.consentPersonalData && (
+                <p className="text-xs text-destructive">{errors.consentPersonalData.message}</p>
+              )}
               <div className="flex items-start gap-2">
                 <input
                   type="checkbox"
                   id="consent-data-processing-register"
-                  required
+                  {...register("consentPolicies")}
+                  disabled={isLoading}
                   className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                 />
                 <Label htmlFor="consent-data-processing-register" className="text-xs sm:text-sm leading-relaxed cursor-pointer">
@@ -250,6 +269,9 @@ export default function Register() {
                   </a> *
                 </Label>
               </div>
+              {errors.consentPolicies && (
+                <p className="text-xs text-destructive">{errors.consentPolicies.message}</p>
+              )}
             </div>
 
             <Button type="submit" className="w-full h-11 sm:h-12 text-sm sm:text-base" disabled={isLoading}>
