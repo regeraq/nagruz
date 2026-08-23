@@ -913,6 +913,24 @@ export class DrizzleStorage implements IStorage {
     return true;
   }
 
+  async upsertSiteContent(data: { key: string; value: string; page?: string; section?: string }) {
+    const existing = await this.getSiteContent(data.key);
+    if (existing) {
+      return this.updateSiteContent(data.key, data);
+    }
+    return this.createSiteContent(data);
+  }
+
+  async setSiteContentBulk(
+    items: { key: string; value: string; page?: string; section?: string }[],
+  ) {
+    const saved: any[] = [];
+    for (const item of items) {
+      saved.push(await this.upsertSiteContent(item));
+    }
+    return saved;
+  }
+
   // Site Contacts methods
   async createSiteContact(data: { type: string; value: string; label?: string; order?: number }) {
     const result = await db.insert(siteContacts).values({

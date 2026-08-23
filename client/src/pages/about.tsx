@@ -3,26 +3,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Factory, Users, Award, Target, Shield, Zap } from "lucide-react";
+import { useSiteContent } from "@/hooks/useSiteContent";
 
-/**
- * About page - Company information and history
- */
 export default function About() {
+  const { t, lines, stats } = useSiteContent();
+  const valueIcons = [Shield, Zap, Users, Award];
+
   return (
     <div className="min-h-screen pt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-10 md:py-12">
-        <Breadcrumbs items={[{ label: "О нас" }]} className="mb-6 sm:mb-8" />
+        <Breadcrumbs items={[{ label: t("about_crumb") }]} className="mb-6 sm:mb-8" />
 
         <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
           <Badge variant="secondary" className="mb-3 sm:mb-4">
-            О компании
+            {t("about_badge")}
           </Badge>
           <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2">
-            Надёжный партнёр в энергетике
+            {t("about_title")}
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2">
-            Мы специализируемся на поставке профессионального испытательного оборудования
-            для крупных промышленных заказчиков
+            {t("about_intro")}
           </p>
         </div>
 
@@ -31,14 +31,12 @@ export default function About() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Factory className="h-5 w-5 text-primary" />
-                Наша миссия
+                {t("about_mission_title")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground leading-relaxed">
-                Обеспечить промышленные предприятия надёжным и точным оборудованием
-                для тестирования энергетических систем, способствуя повышению
-                надёжности и безопасности критической инфраструктуры.
+                {t("about_mission")}
               </p>
             </CardContent>
           </Card>
@@ -47,27 +45,20 @@ export default function About() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-primary" />
-                Наши ценности
+                {t("about_values_title")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="space-y-3 text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <Shield className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <span>Надёжность и безопасность превыше всего</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Zap className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <span>Инновации в каждом решении</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Users className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <span>Партнёрство с клиентами</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Award className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <span>Высокое качество продукции</span>
-                </li>
+                {lines("about_values").map((item, idx) => {
+                  const Icon = valueIcons[idx % valueIcons.length];
+                  return (
+                    <li key={idx} className="flex items-start gap-2">
+                      <Icon className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </CardContent>
           </Card>
@@ -76,23 +67,16 @@ export default function About() {
         <Separator className="my-10 sm:my-12 md:my-16" />
 
         <div className="mb-10 sm:mb-12 md:mb-16">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-center">Наша история</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-center">{t("about_history_title")}</h2>
           <div className="max-w-4xl mx-auto">
             <Card className="scroll-animate">
               <CardContent className="pt-6">
                 <div className="prose prose-sm max-w-none">
                   <p className="text-muted-foreground leading-relaxed mb-4">
-                    Компания была основана более 15 лет назад с целью обеспечения
-                    промышленных предприятий качественным испытательным оборудованием.
-                    За годы работы мы зарекомендовали себя как надёжный поставщик
-                    для предприятий атомной энергетики, нефтегазовой отрасли и
-                    критической инфраструктуры.
+                    {t("about_history_p1")}
                   </p>
                   <p className="text-muted-foreground leading-relaxed">
-                    Наша команда состоит из опытных инженеров и специалистов,
-                    которые понимают специфику работы с энергетическим оборудованием.
-                    Мы не просто продаём оборудование — мы предоставляем комплексные
-                    решения и поддержку на всех этапах внедрения.
+                    {t("about_history_p2")}
                   </p>
                 </div>
               </CardContent>
@@ -101,66 +85,40 @@ export default function About() {
         </div>
 
         <div className="grid sm:grid-cols-3 gap-4 sm:gap-6 md:gap-8 mb-10 sm:mb-12 md:mb-16">
-          <Card className="text-center scroll-animate">
-            <CardHeader>
-              <div className="text-3xl sm:text-4xl md:text-5xl font-bold text-primary mb-2">15+</div>
-              <CardTitle className="text-base sm:text-lg">Лет опыта</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
-                Более 15 лет работы на рынке испытательного оборудования
-              </CardDescription>
-            </CardContent>
-          </Card>
-
-          <Card className="text-center scroll-animate">
-            <CardHeader>
-              <div className="text-3xl sm:text-4xl md:text-5xl font-bold text-primary mb-2">500+</div>
-              <CardTitle className="text-base sm:text-lg">Проектов</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
-                Успешно реализованных проектов по всей России
-              </CardDescription>
-            </CardContent>
-          </Card>
-
-          <Card className="text-center scroll-animate">
-            <CardHeader>
-              <div className="text-3xl sm:text-4xl md:text-5xl font-bold text-primary mb-2">50+</div>
-              <CardTitle className="text-base sm:text-lg">Отраслей</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
-                Работаем с предприятиями различных отраслей промышленности
-              </CardDescription>
-            </CardContent>
-          </Card>
+          {stats("about_stats").map((stat, idx) => (
+            <Card key={idx} className="text-center scroll-animate">
+              <CardHeader>
+                <div className="text-3xl sm:text-4xl md:text-5xl font-bold text-primary mb-2">{stat.value}</div>
+                <CardTitle className="text-base sm:text-lg">{stat.label}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription>
+                  {stat.description}
+                </CardDescription>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         <Separator className="my-10 sm:my-12 md:my-16" />
 
         <div>
-          <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-center">Наши клиенты</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-center">{t("about_clients_title")}</h2>
           <Card className="scroll-animate">
             <CardContent className="pt-6">
               <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
                 <div>
-                  <h3 className="font-semibold mb-3">Ключевые отрасли:</h3>
+                  <h3 className="font-semibold mb-3">{t("about_clients_industries_title")}</h3>
                   <ul className="space-y-2 text-muted-foreground">
-                    <li>• Атомная энергетика</li>
-                    <li>• Нефтегазовая отрасль</li>
-                    <li>• Критическая инфраструктура</li>
-                    <li>• Промышленные предприятия</li>
-                    <li>• Энергоснабжающие компании</li>
+                    {lines("about_clients_industries").map((item) => (
+                      <li key={item}>• {item}</li>
+                    ))}
                   </ul>
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-3">География:</h3>
+                  <h3 className="font-semibold mb-3">{t("about_clients_geo_title")}</h3>
                   <p className="text-muted-foreground">
-                    Мы работаем с клиентами по всей территории Российской Федерации,
-                    обеспечивая поставку оборудования и техническую поддержку
-                    независимо от региона.
+                    {t("about_clients_geo")}
                   </p>
                 </div>
               </div>
@@ -171,4 +129,3 @@ export default function About() {
     </div>
   );
 }
-

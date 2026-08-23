@@ -8,109 +8,29 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { HelpCircle } from "lucide-react";
+import { useSiteContent } from "@/hooks/useSiteContent";
+import { Link } from "wouter";
 
-interface FAQItem {
-  question: string;
-  answer: string;
-  category: string;
-}
-
-const faqData: FAQItem[] = [
-  {
-    category: "Общие вопросы",
-    question: "Что такое нагрузочное устройство?",
-    answer:
-      "Нагрузочное устройство — это оборудование для имитации электрической нагрузки при тестировании генераторов, ИБП и других источников питания. Оно позволяет создавать контролируемую нагрузку для проверки работоспособности оборудования.",
-  },
-  {
-    category: "Общие вопросы",
-    question: "Для чего используется нагрузочное устройство?",
-    answer:
-      "Устройство используется для тестирования дизель-генераторов, газопоршневых установок, ИБП, аккумуляторных батарей и проверки качества вырабатываемой электроэнергии. Оно обеспечивает точную имитацию реальной нагрузки.",
-  },
-  {
-    category: "Технические характеристики",
-    question: "Какая максимальная мощность устройств?",
-    answer:
-      "Мы предлагаем два варианта: НУ-100 (до 100 кВт) и НУ-30 (до 30 кВт). Оба устройства поддерживают работу с переменным (AC) и постоянным (DC) током.",
-  },
-  {
-    category: "Технические характеристики",
-    question: "Можно ли объединить несколько устройств?",
-    answer:
-      "Да, несколько устройств можно подключить параллельно для увеличения суммарной мощности. Это позволяет масштабировать систему под конкретные требования.",
-  },
-  {
-    category: "Технические характеристики",
-    question: "Какие условия эксплуатации?",
-    answer:
-      "Устройства работают на улице и в помещении при температуре от −40°C до +40°C, при влажности до 80% при 25°С. Охлаждение — воздушное принудительное.",
-  },
-  {
-    category: "Покупка и доставка",
-    question: "Как оформить заказ?",
-    answer:
-      "Вы можете оформить заказ через форму на сайте, выбрав нужную модель и количество. Также можно связаться с нами по телефону или email для получения коммерческого предложения.",
-  },
-  {
-    category: "Покупка и доставка",
-    question: "Какие способы оплаты доступны?",
-    answer:
-      "Мы принимаем оплату банковскими картами и через СБП (QR-код). Возможна оплата по договору для юридических лиц.",
-  },
-  {
-    category: "Покупка и доставка",
-    question: "Какова стоимость доставки?",
-    answer:
-      "Стоимость доставки рассчитывается индивидуально в зависимости от региона и способа доставки. Мы работаем с надёжными транспортными компаниями по всей России.",
-  },
-  {
-    category: "Гарантия и обслуживание",
-    question: "Какая гарантия на оборудование?",
-    answer:
-      "На все оборудование предоставляется гарантия производителя. Срок гарантии и условия обслуживания уточняются при оформлении заказа.",
-  },
-  {
-    category: "Гарантия и обслуживание",
-    question: "Предоставляется ли техническая поддержка?",
-    answer:
-      "Да, мы предоставляем техническую поддержку на всех этапах: от консультации при выборе оборудования до помощи в эксплуатации. Наши специалисты всегда готовы ответить на ваши вопросы.",
-  },
-  {
-    category: "Гарантия и обслуживание",
-    question: "Какая документация входит в комплект?",
-    answer:
-      "В комплект входит паспорт изделия, руководство по эксплуатации, методика поверки, аттестат и протокол аттестации, свидетельство об утверждении типа СИ, свидетельство о первичной поверке.",
-  },
-  {
-    category: "Соответствие и сертификация",
-    question: "Соответствует ли оборудование ГОСТам?",
-    answer:
-      "Да, все оборудование соответствует требованиям ГОСТ РФ, имеет необходимые сертификаты и внесено в фонд измерительных приборов (ФИФ).",
-  },
-];
-
-/**
- * FAQ page - Frequently asked questions
- */
 export default function FAQ() {
+  const { t, faq } = useSiteContent();
+  const faqData = faq("faq_items");
   const categories = Array.from(new Set(faqData.map((item) => item.category)));
 
   return (
     <div className="min-h-screen pt-20">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-10 md:py-12">
-        <Breadcrumbs items={[{ label: "Помощь" }]} className="mb-6 sm:mb-8" />
+        <Breadcrumbs items={[{ label: t("faq_crumb") }]} className="mb-6 sm:mb-8" />
 
         <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
           <Badge variant="secondary" className="mb-3 sm:mb-4">
-            Помощь
+            {t("faq_badge")}
           </Badge>
           <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 px-2">
             <HelpCircle className="h-7 w-7 sm:h-9 sm:w-9 md:h-10 md:w-10 text-primary flex-shrink-0" />
-            <span>Часто задаваемые вопросы</span>
+            <span>{t("faq_title")}</span>
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground px-2">
-            Найдите ответы на популярные вопросы о нашем оборудовании
+            {t("faq_subtitle")}
           </p>
         </div>
 
@@ -148,20 +68,13 @@ export default function FAQ() {
         <Card className="mt-8 sm:mt-10 md:mt-12 scroll-animate bg-primary/5 border-primary/20">
           <CardContent className="pt-6">
             <div className="text-center">
-              <h3 className="font-semibold mb-2">Не нашли ответ на свой вопрос?</h3>
+              <h3 className="font-semibold mb-2">{t("faq_cta_title")}</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Свяжитесь с нами, и мы с радостью поможем вам
+                {t("faq_cta_text")}
               </p>
-              <a
-                href="#contact"
-                className="text-primary hover:underline font-medium"
-                onClick={(e) => {
-                  e.preventDefault();
-                  document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
-                }}
-              >
-                Связаться с нами →
-              </a>
+              <Link href="/contacts#contact" className="text-primary hover:underline font-medium">
+                {t("faq_cta_button")}
+              </Link>
             </div>
           </CardContent>
         </Card>
@@ -169,4 +82,3 @@ export default function FAQ() {
     </div>
   );
 }
-

@@ -14,6 +14,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { useSiteContent } from "@/hooks/useSiteContent";
 
 interface User {
   id: string;
@@ -30,16 +31,18 @@ interface NavigationProps {
   availableDeviceIds?: string[];
 }
 
-const navLinks = [
-  { label: "Главная", id: "hero" },
-  { label: "Характеристики", id: "specifications" },
-  { label: "Галерея", id: "gallery" },
-  { label: "Применение", id: "applications" },
-  { label: "Документация", id: "documentation" },
-  { label: "Контакты", id: "contact" },
+const navLinkDefs = [
+  { key: "nav_home" as const, id: "hero" },
+  { key: "nav_specifications" as const, id: "specifications" },
+  { key: "nav_gallery" as const, id: "gallery" },
+  { key: "nav_applications" as const, id: "applications" },
+  { key: "nav_documentation" as const, id: "documentation" },
+  { key: "nav_contacts" as const, id: "contact" },
 ];
 
 export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availableDeviceIds = [] }: NavigationProps = {}) {
+  const { t } = useSiteContent();
+  const navLinks = navLinkDefs.map((link) => ({ id: link.id, label: t(link.key) }));
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [location, setLocation] = useLocation();
@@ -280,7 +283,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                   >
                     <Gauge className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     <span className="max-w-[80px] sm:max-w-none truncate">
-                      {devices.find(d => d.id === selectedDevice)?.name || "Устройство"}
+                      {devices.find(d => d.id === selectedDevice)?.name || t("nav_device_fallback")}
                     </span>
                   </Button>
                 </DropdownMenuTrigger>
@@ -364,18 +367,18 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setLocation("/profile")} className="py-2.5">
                       <User className="mr-2 h-4 w-4" />
-                      Профиль
+                      {t("nav_profile")}
                     </DropdownMenuItem>
                     {isAdmin && (
                       <DropdownMenuItem onClick={() => setLocation("/admin")} className="py-2.5">
                         <Settings className="mr-2 h-4 w-4" />
-                        Админ-панель
+                        {t("nav_admin")}
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout} className="py-2.5 text-destructive focus:text-destructive">
                       <LogOut className="mr-2 h-4 w-4" />
-                      Выйти
+                      {t("nav_logout")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -388,14 +391,14 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                     onClick={() => setLocation("/login")}
                     className="hidden lg:flex text-sm h-9"
                   >
-                    Войти
+                    {t("nav_login")}
                   </Button>
                   <Button
                     size="sm"
                     onClick={() => setLocation("/register")}
                     className="hidden lg:flex text-sm h-9"
                   >
-                    Регистрация
+                    {t("nav_register")}
                   </Button>
                 </>
               )}
@@ -479,7 +482,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                     className="justify-start text-base h-12 w-full rounded-xl"
                   >
                     <User className="mr-3 h-5 w-5" />
-                    Профиль
+                    {t("nav_profile")}
                   </Button>
                   {isAdmin && (
                     <Button
@@ -491,7 +494,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                       className="justify-start text-base h-12 w-full rounded-xl"
                     >
                       <Settings className="mr-3 h-5 w-5" />
-                      Админ-панель
+                      {t("nav_admin")}
                     </Button>
                   )}
                   <Button
@@ -503,7 +506,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                     className="justify-start text-base h-12 w-full rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
                     <LogOut className="mr-3 h-5 w-5" />
-                    Выйти
+                    {t("nav_logout")}
                   </Button>
                 </div>
               ) : (
@@ -516,7 +519,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                     }}
                     className="w-full h-12 text-base rounded-xl"
                   >
-                    Войти
+                    {t("nav_login")}
                   </Button>
                   <Button
                     onClick={() => {
@@ -525,7 +528,7 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                     }}
                     className="w-full h-12 text-base rounded-xl"
                   >
-                    Регистрация
+                    {t("nav_register")}
                   </Button>
                 </div>
               )}

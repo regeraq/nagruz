@@ -298,11 +298,11 @@ export default function Admin() {
     enabled: !!userData && ["admin", "superadmin"].includes((userData as any)?.role),
   });
   
-  // Update cookie settings when data is fetched
+  const cookieSettingsHydrated = useRef(false);
   useEffect(() => {
-    if (cookieSettingsData?.success && cookieSettingsData?.settings) {
-      setCookieSettings(cookieSettingsData.settings);
-    }
+    if (cookieSettingsHydrated.current || !cookieSettingsData?.success || !cookieSettingsData?.settings) return;
+    setCookieSettings(cookieSettingsData.settings);
+    cookieSettingsHydrated.current = true;
   }, [cookieSettingsData]);
 
   // Fetch promocodes
@@ -716,6 +716,7 @@ export default function Admin() {
     mutationFn: async (data: any) => {
       return saveAdminSettings([
         { key: "seo_title", value: data.title, type: "string" },
+        { key: "site_title", value: data.title, type: "string" },
         { key: "seo_description", value: data.description, type: "string" },
         { key: "seo_keywords", value: data.keywords, type: "string" },
       ]);
@@ -762,6 +763,7 @@ export default function Admin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       toast({ title: "Настройка сохранена" });
     },
     onError: (error: any) => {
@@ -4027,7 +4029,7 @@ export default function Admin() {
                       <div>
                         <CardTitle className="text-xl">Управление контентом сайта</CardTitle>
                         <CardDescription>
-                          Готовые поля для каждой страницы + произвольные ключи. Правки применяются сразу.
+                          Каждая фраза сайта — отдельное поле. Сохраните вкладку, обновите страницу сайта: текст меняется без правки кода.
                         </CardDescription>
                       </div>
                     </div>
@@ -4098,16 +4100,10 @@ export default function Admin() {
                           return;
                         }
                         try {
-                          const res = await fetch("/api/admin/site-contacts", {
-                            method: "POST",
-                            headers: {
-                              "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify(newContact),
-                          });
-                          if (!res.ok) throw new Error("Failed to create contact");
+                          await apiRequest("POST", "/api/admin/site-contacts", newContact);
                           toast({ title: "Успешно", description: "Контакт добавлен" });
                           queryClient.invalidateQueries({ queryKey: ["/api/admin/site-contacts"] });
+                          queryClient.invalidateQueries({ queryKey: ["/api/site-contacts"] });
                           setNewContact({ type: "", value: "", label: "", order: 0 });
                         } catch (error: any) {
                           toast({ title: "Ошибка", description: error.message, variant: "destructive" });
@@ -4158,13 +4154,10 @@ export default function Admin() {
                                 onClick={async () => {
                                   if (!confirm("Удалить контакт?")) return;
                                   try {
-                                    const res = await fetch(`/api/admin/site-contacts/${contact.id}`, {
-                                      method: "DELETE",
-                                      
-                                    });
-                                    if (!res.ok) throw new Error("Failed to delete");
+                                    await apiRequest("DELETE", `/api/admin/site-contacts/${contact.id}`);
                                     toast({ title: "Успешно", description: "Контакт удален" });
                                     queryClient.invalidateQueries({ queryKey: ["/api/admin/site-contacts"] });
+                                    queryClient.invalidateQueries({ queryKey: ["/api/site-contacts"] });
                                   } catch (error: any) {
                                     toast({ title: "Ошибка", description: error.message, variant: "destructive" });
                                   }
@@ -4242,6 +4235,7 @@ export default function Admin() {
                       if (!res.ok) throw new Error("Failed to save settings");
                       toast({ title: "Успешно", description: "Настройки сохранены" });
                       queryClient.invalidateQueries({ queryKey: ["/api/admin/cookie-settings"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/cookie-settings"] });
                     } catch (error: any) {
                       toast({ title: "Ошибка", description: error.message, variant: "destructive" });
                     }
@@ -4983,21 +4977,15 @@ export default function Admin() {
                   return;
                 }
                 try {
-                  const res = await fetch(`/api/admin/site-contacts/${editingContact.id}`, {
-                    method: "PUT",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      type: editingContact.type,
-                      value: editingContact.value,
-                      label: editingContact.label,
-                      order: editingContact.order,
-                    }),
+                  await apiRequest("PUT", `/api/admin/site-contacts/${editingContact.id}`, {
+                    type: editingContact.type,
+                    value: editingContact.value,
+                    label: editingContact.label,
+                    order: editingContact.order,
                   });
-                  if (!res.ok) throw new Error("Не удалось обновить контакт");
                   toast({ title: "Успешно", description: "Контакт обновлен" });
                   queryClient.invalidateQueries({ queryKey: ["/api/admin/site-contacts"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/site-contacts"] });
                   setEditingContact(null);
                 } catch (error: any) {
                   toast({ title: "Ошибка", description: error.message, variant: "destructive" });

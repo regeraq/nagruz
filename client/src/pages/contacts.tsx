@@ -13,8 +13,10 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { useSiteContent } from "@/hooks/useSiteContent";
 
 export default function Contacts() {
+  const { t, map: contentSaved } = useSiteContent();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
@@ -48,17 +50,6 @@ export default function Contacts() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Произвольный контент (вступительный текст, часы работы и т.д.)
-  const { data: contentData } = useQuery<any>({
-    queryKey: ['/api/content'],
-    queryFn: async () => {
-      const res = await fetch("/api/content");
-      if (!res.ok) return { success: true, content: [] };
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
   // Список контактов (соцсети, доп. email/телефоны, мессенджеры)
   const { data: siteContactsData } = useQuery<any>({
     queryKey: ['/api/site-contacts'],
@@ -78,14 +69,6 @@ export default function Contacts() {
     return m;
   }, [settingsData]);
 
-  const contentMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const c of (contentData?.content || []) as Array<{ key: string; value?: string }>) {
-      if (c?.key && c.value != null) m.set(c.key, String(c.value));
-    }
-    return m;
-  }, [contentData]);
-
   const extraContacts = useMemo(() => {
     const list = (siteContactsData?.contacts || []) as Array<{
       id: string; type: string; value: string; label?: string | null; order?: number | null;
@@ -97,9 +80,9 @@ export default function Contacts() {
   const contactEmail = settingMap.get("contact_email") || "";
   const contactAddress = settingMap.get("contact_address") || "";
   const contactTelegram = settingMap.get("contact_telegram") || "";
-  const workingHoursMain = contentMap.get("contacts_working_hours") || settingMap.get("contact_working_hours") || "Пн-Пт: 9:00 - 18:00 МСК";
-  const introText = contentMap.get("contacts_intro") || "Мы всегда готовы ответить на ваши вопросы и помочь с выбором оборудования";
-  const mapCaption = contentMap.get("contacts_map_caption") || "";
+  const workingHoursMain = contentSaved.get("contacts_working_hours") || settingMap.get("contact_working_hours") || t("contacts_working_hours");
+  const introText = t("contacts_intro");
+  const mapCaption = t("contacts_map_caption");
 
   const phoneHref = contactPhone ? `tel:${contactPhone.replace(/[^+\d]/g, "")}` : undefined;
   const emailHref = contactEmail ? `mailto:${contactEmail}` : undefined;
@@ -202,14 +185,14 @@ export default function Contacts() {
   return (
     <div className="min-h-screen pt-16 sm:pt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-10 md:py-12">
-        <Breadcrumbs items={[{ label: "Контакты" }]} className="mb-6 sm:mb-8" />
+        <Breadcrumbs items={[{ label: t("contacts_crumb") }]} className="mb-6 sm:mb-8" />
 
         <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
           <Badge variant="secondary" className="mb-3 sm:mb-4">
-            Контакты
+            {t("contacts_badge")}
           </Badge>
           <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 px-2">
-            Свяжитесь с нами
+            {t("contacts_title")}
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2 whitespace-pre-line">
             {introText}
@@ -225,7 +208,7 @@ export default function Contacts() {
                     <Phone className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <CardTitle>Телефон</CardTitle>
+                    <CardTitle>{t("contacts_phone_title")}</CardTitle>
                   </div>
                 </div>
               </CardHeader>
@@ -234,7 +217,7 @@ export default function Contacts() {
                 <p className="text-sm text-muted-foreground">{workingHoursMain}</p>
                 {phoneHref && (
                   <Button variant="outline" className="mt-4 w-full" asChild>
-                    <a href={phoneHref}>Позвонить</a>
+                    <a href={phoneHref}>{t("contacts_phone_action")}</a>
                   </Button>
                 )}
               </CardContent>
@@ -249,18 +232,18 @@ export default function Contacts() {
                     <Mail className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <CardTitle>Email</CardTitle>
+                    <CardTitle>{t("contacts_email_title")}</CardTitle>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <p className="text-lg font-semibold mb-2 break-all">{contactEmail}</p>
                 <p className="text-sm text-muted-foreground">
-                  Ответим в течение 24 часов
+                  {t("contacts_email_hint")}
                 </p>
                 {emailHref && (
                   <Button variant="outline" className="mt-4 w-full" asChild>
-                    <a href={emailHref}>Написать</a>
+                    <a href={emailHref}>{t("contacts_email_action")}</a>
                   </Button>
                 )}
               </CardContent>
@@ -275,7 +258,7 @@ export default function Contacts() {
                     <MapPin className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <CardTitle>Адрес</CardTitle>
+                    <CardTitle>{t("contacts_address_title")}</CardTitle>
                   </div>
                 </div>
               </CardHeader>
@@ -290,7 +273,7 @@ export default function Contacts() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Открыть карту
+                    {t("contacts_map_action")}
                   </a>
                 </Button>
               </CardContent>
@@ -303,7 +286,7 @@ export default function Contacts() {
         <div className="grid sm:grid-cols-2 gap-6 sm:gap-8 md:gap-12 mb-10 sm:mb-12 md:mb-16">
           <Card className="scroll-animate">
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-lg md:text-xl">Режим работы</CardTitle>
+              <CardTitle className="text-base sm:text-lg md:text-xl">{t("contacts_hours_title")}</CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-start gap-3">
@@ -316,7 +299,7 @@ export default function Contacts() {
           {(extraContacts.length > 0 || contactTelegram) && (
             <Card className="scroll-animate">
               <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-base sm:text-lg md:text-xl">Дополнительные контакты</CardTitle>
+                <CardTitle className="text-base sm:text-lg md:text-xl">{t("contacts_extra_title")}</CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
                 <div className="space-y-3 sm:space-y-4">
@@ -369,7 +352,7 @@ export default function Contacts() {
 
         <Card className="scroll-animate bg-primary/5 border-primary/20">
           <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-base sm:text-lg md:text-xl">Форма обратной связи</CardTitle>
+            <CardTitle className="text-base sm:text-lg md:text-xl">{t("contacts_form_title")}</CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
             {submitSuccess && (
@@ -497,7 +480,7 @@ export default function Contacts() {
                 ) : (
                   <>
                     <Send className="mr-2 h-4 w-4" />
-                    Отправить заявку
+                    {t("contacts_form_submit")}
                   </>
                 )}
               </Button>

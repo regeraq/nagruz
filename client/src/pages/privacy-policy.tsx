@@ -2,8 +2,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Navigation } from "@/components/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import { useSiteContent } from "@/hooks/useSiteContent";
+import { CmsBlocks } from "@/components/cms-blocks";
 
 export default function PrivacyPolicy() {
+  const { t, map } = useSiteContent();
   const { data: settingsData, isLoading: settingsLoading } = useQuery({
     queryKey: ['/api/settings'],
     queryFn: async () => {
@@ -36,9 +39,15 @@ export default function PrivacyPolicy() {
       <div className="container mx-auto px-4 py-12 pt-24">
         <Card className="bg-card text-foreground">
           <CardHeader>
-            <CardTitle className="text-2xl md:text-3xl text-foreground">Политика конфиденциальности</CardTitle>
+            <CardTitle className="text-2xl md:text-3xl text-foreground">{t("legal_privacy_title")}</CardTitle>
           </CardHeader>
           <CardContent className="prose prose-slate dark:prose-invert max-w-none text-foreground">
+            {map.get("legal_privacy_body") ? (
+              <CmsBlocks
+                text={map.get("legal_privacy_body") || ""}
+                vars={{ operator_name: operatorName, operator_inn: operatorInn, operator_ogrn: operatorOgrn, responsible_person: responsiblePerson, contact_email: contactEmail, contact_phone: contactPhone, contact_address: contactAddress }}
+              />
+            ) : (
             <div className="space-y-6 text-foreground">
               <section className="text-foreground">
                 <h2 className="text-xl font-semibold mb-3 text-foreground">1. Общие положения и идентификация оператора</h2>
@@ -222,6 +231,7 @@ export default function PrivacyPolicy() {
                 Дата последнего обновления: {new Date().toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' })}
               </p>
             </div>
+            )}
           </CardContent>
         </Card>
       </div>

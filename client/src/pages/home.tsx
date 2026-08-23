@@ -31,14 +31,15 @@ import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useSiteContent } from "@/hooks/useSiteContent";
 
-const navLinks = [
-  { label: "Главная", id: "hero" },
-  { label: "Характеристики", id: "specifications" },
-  { label: "Галерея", id: "gallery" },
-  { label: "Применение", id: "applications" },
-  { label: "Документация", id: "documentation" },
-  { label: "Контакты", id: "contact" },
+const navLinkDefs = [
+  { key: "nav_home", id: "hero" },
+  { key: "nav_specifications", id: "specifications" },
+  { key: "nav_gallery", id: "gallery" },
+  { key: "nav_applications", id: "applications" },
+  { key: "nav_documentation", id: "documentation" },
+  { key: "nav_contacts", id: "contact" },
 ];
 
 function scrollToSection(id: string) {
@@ -105,6 +106,9 @@ const devices = {
 };
 
 export default function Home() {
+  const { t, lines, pairs, stats } = useSiteContent();
+  const navLinks = navLinkDefs.map((link) => ({ id: link.id, label: t(link.key) }));
+
   // Initialize from URL parameter or default to first available device
   const [selectedDevice, setSelectedDeviceState] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -310,6 +314,7 @@ export default function Home() {
   const contactEmail = settingsData?.settings?.find((s: any) => s.key === 'contact_email')?.value || 'info@example.com';
   const contactPhone = settingsData?.settings?.find((s: any) => s.key === 'contact_phone')?.value || '+7 (999) 123-45-67';
   const contactAddress = settingsData?.settings?.find((s: any) => s.key === 'contact_address')?.value || 'Москва, Россия';
+  const fileUploadEnabled = settingsData?.settings?.find((s: any) => s.key === 'enable_file_upload')?.value !== 'false';
   const contactTelegramRaw = settingsData?.settings?.find((s: any) => s.key === 'contact_telegram')?.value || '';
   const telegramInfo = (() => {
     const v = (contactTelegramRaw || '').trim();
@@ -699,7 +704,7 @@ export default function Home() {
             className="mb-4 sm:mb-6 text-xs sm:text-sm font-medium px-3 sm:px-4 py-1.5 sm:py-2 animate-fade-scale"
             data-testid="badge-new-equipment"
           >
-            Новое оборудование 2025 года
+            {t("home_hero_badge")}
           </Badge>
           
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold mb-4 sm:mb-6 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 animate-fade-up leading-tight" style={{ animationDelay: "0.1s" }} data-testid="heading-hero">
@@ -714,7 +719,7 @@ export default function Home() {
             <div className="flex items-center gap-1.5 sm:gap-2 bg-card px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-card-border hover:border-primary/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-power">
               <Gauge className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
               <span className="font-mono text-xs sm:text-sm font-semibold" data-testid="text-power" key={selectedDevice}>{device?.power ? parseInt(device.power) : "—"}</span>
-              <span className="font-mono text-xs sm:text-sm font-semibold">кВт</span>
+              <span className="font-mono text-xs sm:text-sm font-semibold">{t("home_hero_unit_kw")}</span>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2 bg-card px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-card-border hover:border-tech-cyan/50 transition-all duration-300 cursor-pointer hover-fade-up-animation" data-testid="kpi-steps">
               <Zap className="h-4 sm:h-5 w-4 sm:w-5 text-tech-cyan" />
@@ -734,7 +739,7 @@ export default function Home() {
                 data-testid="button-hero-cta-primary"
                 className="text-sm sm:text-base w-full sm:w-auto px-6 sm:px-8 h-11 sm:h-12 magnetic-btn shadow-lg shadow-primary/40 hover:shadow-primary/70 hover:-translate-y-1 transition-all duration-300 font-semibold"
               >
-                Получить спецификацию
+                {t("home_hero_cta")}
                 <ArrowRight className="ml-2 h-4 sm:h-5 w-4 sm:w-5 animated-arrow" />
               </Button>
             </div>
@@ -746,7 +751,7 @@ export default function Home() {
                 data-testid="button-hero-cta-secondary"
                 className="text-sm sm:text-base w-full sm:w-auto px-6 sm:px-8 h-11 sm:h-12 magnetic-btn shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300 font-semibold border-primary/50 hover:border-primary/80"
               >
-                Технические характеристики
+                {t("home_hero_cta_secondary")}
                 <ArrowRight className="ml-2 h-4 sm:h-5 w-4 sm:w-5 animated-arrow" />
               </Button>
             </div>
@@ -759,12 +764,12 @@ export default function Home() {
               className="text-sm sm:text-base w-full sm:w-auto px-8 sm:px-12 h-11 sm:h-12 magnetic-btn shadow-lg shadow-green-600/40 hover:shadow-green-600/70 hover:-translate-y-1 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
             >
               <ShoppingCart className="mr-2 h-4 sm:h-5 w-4 sm:w-5 transition-all duration-300 group-hover:rotate-12" />
-              Купить
+              {t("home_hero_buy")}
             </Button>
           </div>
           
           <div className="mt-8 sm:mt-16 text-xs text-muted-foreground uppercase tracking-wider animate-float hidden sm:block">
-            Прокрутите вниз
+            {t("home_hero_scroll")}
           </div>
         </div>
       </section>
@@ -774,30 +779,26 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-8 sm:gap-10 md:gap-12 items-center">
             <div>
               <Badge variant="secondary" className="mb-4" data-testid="badge-purpose-section">
-                Назначение
+                {t("home_purpose_badge")}
               </Badge>
               <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6" data-testid="heading-purpose">
-                Точная имитация нагрузки
+                {t("home_purpose_title")}
               </h2>
               <p className="text-base sm:text-lg text-muted-foreground mb-4 sm:mb-6 leading-relaxed" data-testid="text-purpose-1">
-                Устройство предназначено для точной имитации реальной нагрузки, полностью контролируемой 
-                и стабильной, в отличие от непредсказуемой реальной нагрузки.
+                {t("home_purpose_p1")}
               </p>
               <p className="text-base sm:text-lg text-muted-foreground mb-6 sm:mb-8 leading-relaxed" data-testid="text-purpose-2">
-                Оборудование позволяет тестировать качество вырабатываемой электроэнергии и оценивать 
-                работоспособность источников питания под различными нагрузками.
+                {t("home_purpose_p2")}
               </p>
               
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4" data-testid="heading-parameters">
-                  Тестируемые параметры:
+                  {t("home_purpose_params_heading")}
                 </h3>
-                {[
-                  { icon: Gauge, label: "Мощность" },
-                  { icon: Zap, label: "Ток и напряжение" },
-                  { icon: Cable, label: "Гармоники и форма сигнала" },
-                  { icon: Cpu, label: "Коэффициент мощности" },
-                ].map((param, idx) => (
+                {lines("home_purpose_params").map((label, idx) => {
+                  const icons = [Gauge, Zap, Cable, Cpu];
+                  const param = { icon: icons[idx % icons.length], label };
+                  return (
                   <div 
                     key={idx} 
                     className="flex items-center gap-3 text-foreground scroll-animate"
@@ -808,7 +809,8 @@ export default function Home() {
                     </div>
                     <span className="font-medium">{param.label}</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             
@@ -826,26 +828,23 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-benefits-section">
-              Преимущества
+              {t("home_benefits_badge")}
             </Badge>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-benefits">
-              Ключевые преимущества устройства
+              {t("home_benefits_title")}
             </h2>
             <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-benefits-desc">
-              Профессиональное решение для комплексного тестирования электрооборудования
+              {t("home_benefits_subtitle")}
             </p>
           </div>
           
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
             {(
-              productAdvantages ?? [
-                { icon: "Gauge", title: "20 ступеней нагрузки", description: "Точная регулировка от 5 до 100 кВт с шагом 5 кВт, формируемых комбинациями 7 кнопок" },
-                { icon: "Cable", title: "AC/DC совместимость", description: "Работа с переменным током (230-400 В, 50 Гц) и постоянным током (110-220 В)" },
-                { icon: "Zap", title: "Объединение устройств", description: "Возможность подключения нескольких устройств для увеличения суммарной мощности" },
-                { icon: "Cpu", title: "Высокий cos φ ≥ 0.99", description: "Оптимальный коэффициент мощности для точного моделирования реальной нагрузки" },
-                { icon: "Shield", title: "Система защиты", description: "Защита от перегрева, отсутствия охлаждения, перегрузки и короткого замыкания" },
-                { icon: "Thermometer", title: "Климатическое исполнение", description: "Работа на улице и в помещении при температуре от −40°C до +40°C" },
-              ]
+              productAdvantages ?? pairs("home_advantages").map((p, i) => ({
+                icon: ["Gauge", "Cable", "Zap", "Cpu", "Shield", "Thermometer"][i % 6],
+                title: p.title,
+                description: p.description,
+              }))
             ).map((benefit, idx) => {
               const BenefitIcon = getAdvantageIcon(benefit.icon ?? null);
               return (
@@ -878,13 +877,13 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-specs-section">
-              Характеристики
+              {t("home_specs_badge")}
             </Badge>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-specifications">
-              {specGroups?.heading || "Технические характеристики"}
+              {specGroups?.heading || t("home_specs_title")}
             </h2>
             <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-specifications-desc">
-              {specGroups?.subheading || `Полная спецификация нагрузочного устройства ${device.name}`}
+              {specGroups?.subheading || t("home_specs_subtitle", { device: device.name })}
             </p>
           </div>
 
@@ -1114,7 +1113,7 @@ export default function Home() {
               className="text-base px-10 h-12 shadow-lg shadow-green-600/40 hover:shadow-green-600/70 transition-all duration-300 font-semibold group bg-green-600 hover:bg-green-700 text-white border-0"
             >
               <ShoppingCart className="mr-2 h-5 w-5 transition-all duration-300 group-hover:rotate-12" />
-              Заказать {device.name}
+              {t("home_specs_order", { device: device.name })}
             </Button>
           </div>
         </div>
@@ -1124,13 +1123,13 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 scroll-animate">
             <Badge variant="secondary" className="mb-4" data-testid="badge-delivery-section">
-              Комплектация
+              {t("home_delivery_badge")}
             </Badge>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-delivery">
-              Комплект поставки
+              {t("home_delivery_title")}
             </h2>
             <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-delivery-desc">
-              Полная комплектация оборудования и документации
+              {t("home_delivery_subtitle")}
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-4 sm:gap-6 md:gap-8 scroll-animate">
@@ -1138,19 +1137,12 @@ export default function Home() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Cpu className="h-5 w-5 text-primary" />
-                  Оборудование
+                  {t("home_delivery_equipment_title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3">
-                  {[
-                    "2 блока переменного тока (AC)",
-                    "2 блока постоянного тока (DC)",
-                    "Кабель 4×50 мм²",
-                    "Кабель 2×185 мм²",
-                    "Кабель 3×1.5 мм²",
-                    "Комплекты колёс для транспортировки",
-                  ].map((item, idx) => (
+                  {lines("home_delivery_equipment").map((item, idx) => (
                     <li 
                       key={idx} 
                       className="flex items-start gap-3"
@@ -1168,17 +1160,12 @@ export default function Home() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileCheck className="h-5 w-5 text-primary" />
-                  Документация
+                  {t("home_delivery_docs_title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3">
-                  {[
-                    "Методика поверки (копия)",
-                    "Аттестат и протокол аттестации",
-                    "Свидетельство об утверждении типа СИ",
-                    "Свидетельство о первичной поверке",
-                  ].map((item, idx) => (
+                  {lines("home_delivery_docs").map((item, idx) => (
                     <li 
                       key={idx} 
                       className="flex items-start gap-3"
@@ -1199,22 +1186,17 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 scroll-animate">
             <Badge variant="secondary" className="mb-4" data-testid="badge-docs-section">
-              Соответствие
+              {t("home_docs_badge")}
             </Badge>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-documentation">
-              Документы и сертификация
+              {t("home_docs_title")}
             </h2>
             <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-documentation-desc">
-              Полное соответствие стандартам и требованиям безопасности
+              {t("home_docs_subtitle")}
             </p>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6 mb-8 sm:mb-10 md:mb-12 scroll-animate">
-            {[
-              { title: "ГОСТ РФ", desc: "Соответствие ГОСТам" },
-              { title: "Безопасность", desc: "Требования РФ" },
-              { title: "ФИФ", desc: "Внесено в фонд" },
-              { title: "Поверка", desc: "Первичная поверка" },
-            ].map((cert, idx) => (
+            {pairs("home_docs_certs").map((cert, idx) => (
               <Card 
                 key={idx} 
                 className="text-center hover-elevate"
@@ -1227,7 +1209,7 @@ export default function Home() {
                   <CardTitle className="text-lg">{cert.title}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <CardDescription>{cert.desc}</CardDescription>
+                  <CardDescription>{cert.description}</CardDescription>
                 </CardContent>
               </Card>
             ))}
@@ -1237,9 +1219,9 @@ export default function Home() {
             <CardContent className="pt-6">
               <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                 <div>
-                  <h3 className="text-lg font-semibold mb-2">Новое оборудование 2025 года выпуска</h3>
+                  <h3 className="text-lg font-semibold mb-2">{t("home_docs_cta_title")}</h3>
                   <p className="text-sm text-muted-foreground">
-                    Соответствие всем современным стандартам качества и безопасности
+                    {t("home_docs_cta_text")}
                   </p>
                 </div>
                 <Button 
@@ -1248,7 +1230,7 @@ export default function Home() {
                   onClick={() => scrollToSection("contact")}
                 >
                   <ArrowRight className="mr-2 h-4 w-4" />
-                  Узнать больше
+                  {t("home_docs_cta_button")}
                 </Button>
               </div>
             </CardContent>
@@ -1261,13 +1243,13 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-4" data-testid="badge-gallery-section">
-              Фотогалерея
+              {t("home_gallery_badge")}
             </Badge>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-gallery">
-              Фотографии устройства {device.name}
+              {t("home_gallery_title", { device: device.name })}
             </h2>
             <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-gallery-desc">
-              Ознакомьтесь с фотографиями нагрузочного устройства
+              {t("home_gallery_subtitle")}
             </p>
           </div>
 
@@ -1278,7 +1260,7 @@ export default function Home() {
                 <Loader2 className="h-8 w-8 text-primary animate-spin" />
               </div>
               <p className="text-muted-foreground">
-                Загрузка фотографий...
+                {t("home_gallery_loading")}
               </p>
             </div>
           )}
@@ -1351,7 +1333,7 @@ export default function Home() {
                 </svg>
               </div>
               <p className="text-muted-foreground">
-                Фотографии устройства скоро появятся
+                {t("home_gallery_empty")}
               </p>
             </div>
           )}
@@ -1362,63 +1344,36 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 scroll-animate">
             <Badge variant="secondary" className="mb-4" data-testid="badge-apps-section">
-              Применение
+              {t("home_apps_badge")}
             </Badge>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4" data-testid="heading-applications">
-              Сферы применения
+              {t("home_apps_title")}
             </h2>
             <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2" data-testid="text-applications-desc">
-              Профессиональное тестирование широкого спектра энергетического оборудования
+              {t("home_apps_subtitle")}
             </p>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8 scroll-animate">
-            {[
-              {
-                icon: Factory,
-                title: "Дизель-генераторы",
-                description: "Испытания и проверка работоспособности дизель-генераторных установок",
-              },
-              {
-                icon: Cpu,
-                title: "Газопоршневые установки",
-                description: "Тестирование ГПУ под различными режимами нагрузки",
-              },
-              {
-                icon: Gauge,
-                title: "Газотурбинные установки",
-                description: "Проверка параметров ГТУ в реальных условиях эксплуатации",
-              },
-              {
-                icon: Shield,
-                title: "Источники ИБП",
-                description: "Испытания систем бесперебойного питания",
-              },
-              {
-                icon: Battery,
-                title: "Аккумуляторные батареи",
-                description: "Проверка ёмкости и работоспособности батарей",
-              },
-              {
-                icon: Zap,
-                title: "Качество электроэнергии",
-                description: "Тестирование параметров электроэнергии различных источников",
-              },
-            ].map((app, idx) => (
+            {pairs("home_applications").map((app, idx) => {
+              const icons = [Factory, Cpu, Gauge, Shield, Battery, Zap];
+              const Icon = icons[idx % icons.length];
+              return (
               <div 
                 key={idx} 
                 className="flex flex-col items-center text-center p-5 sm:p-6 rounded-xl hover-elevate bg-card border border-card-border transition-all duration-300"
                 data-testid={`app-${idx}`}
               >
                 <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary/10 flex items-center justify-center mb-3 sm:mb-4">
-                  <app.icon className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
+                  <Icon className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
                 </div>
                 <h3 className="text-base sm:text-lg md:text-xl font-semibold mb-2 sm:mb-3">{app.title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {app.description}
                 </p>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -1426,23 +1381,17 @@ export default function Home() {
       <section id="about" className="py-16 sm:py-20 md:py-24 lg:py-32 scroll-animate">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 text-center animate-fade-up">
           <Badge variant="secondary" className="mb-4" data-testid="badge-about-section">
-            О компании
+            {t("home_about_badge")}
           </Badge>
           <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6" data-testid="heading-about">
-            Надёжный партнёр в энергетике
+            {t("home_about_title")}
           </h2>
           <p className="text-base sm:text-lg text-muted-foreground mb-8 sm:mb-10 md:mb-12 leading-relaxed" data-testid="text-about-desc">
-            Мы специализируемся на поставке профессионального испытательного оборудования 
-            для крупных промышленных заказчиков, включая предприятия атомной энергетики, 
-            нефтегазовой отрасли и критической инфраструктуры.
+            {t("home_about")}
           </p>
 
           <div className="grid grid-cols-3 gap-4 sm:gap-6 md:gap-8">
-            {[
-              { value: "15+", label: "Лет опыта" },
-              { value: "500+", label: "Проектов" },
-              { value: "50+", label: "Отраслей" },
-            ].map((stat, idx) => (
+            {stats("home_about_stats").map((stat, idx) => (
               <div 
                 key={idx} 
                 className="p-3 sm:p-4 md:p-6"
@@ -1460,13 +1409,13 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8">
           <div className="text-center mb-8 sm:mb-12 md:mb-16 animate-fade-up">
             <Badge variant="secondary" className="mb-3 sm:mb-4" data-testid="badge-contact-section">
-              Контакты
+              {t("home_contact_badge")}
             </Badge>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4" data-testid="heading-contact">
-              Получить коммерческое предложение
+              {t("home_contact_title")}
             </h2>
             <p className="text-sm sm:text-base md:text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto px-2 px-2" data-testid="text-contact-desc">
-              Заполните форму, и мы свяжемся с вами в ближайшее время
+              {t("home_contact_subtitle")}
             </p>
           </div>
 
@@ -1476,9 +1425,9 @@ export default function Home() {
                 <CardContent className="p-4 sm:p-6">
                   <form onSubmit={(e) => { e.preventDefault(); contactMutation.mutate(form.getValues()); }} className="space-y-4 sm:space-y-6">
                     <div>
-                      <label className="text-xs sm:text-sm font-medium">Имя и фамилия *</label>
+                      <label className="text-xs sm:text-sm font-medium">{t("home_contact_name")}</label>
                       <Input 
-                        placeholder="Иван Иванов" 
+                        placeholder={t("home_contact_name_ph")} 
                         value={form.watch("name")}
                         onChange={(e) => form.setValue("name", e.target.value)}
                         data-testid="input-name"
@@ -1488,7 +1437,7 @@ export default function Home() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div>
-                        <label className="text-xs sm:text-sm font-medium">Телефон *</label>
+                        <label className="text-xs sm:text-sm font-medium">{t("home_contact_phone")}</label>
                         <Input 
                           placeholder="+7 (999) 123-45-67" 
                           value={form.watch("phone")}
@@ -1498,7 +1447,7 @@ export default function Home() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs sm:text-sm font-medium">Email *</label>
+                        <label className="text-xs sm:text-sm font-medium">{t("home_contact_email")}</label>
                         <Input 
                           type="email"
                           placeholder="ivanov@company.ru" 
@@ -1511,9 +1460,9 @@ export default function Home() {
                     </div>
 
                     <div>
-                      <label className="text-xs sm:text-sm font-medium">Компания *</label>
+                      <label className="text-xs sm:text-sm font-medium">{t("home_contact_company")}</label>
                       <Input 
-                        placeholder="ООО 'Название компании'" 
+                        placeholder={t("home_contact_company_ph")} 
                         value={form.watch("company")}
                         onChange={(e) => form.setValue("company", e.target.value)}
                         data-testid="input-company"
@@ -1522,9 +1471,9 @@ export default function Home() {
                     </div>
 
                     <div>
-                      <label className="text-xs sm:text-sm font-medium">Сообщение *</label>
+                      <label className="text-xs sm:text-sm font-medium">{t("home_contact_message")}</label>
                       <Textarea 
-                        placeholder="Опишите ваши требования и вопросы..."
+                        placeholder={t("home_contact_message_ph")}
                         className="min-h-[120px] sm:min-h-32 resize-none mt-1.5 sm:mt-2 text-sm"
                         value={form.watch("message")}
                         onChange={(e) => form.setValue("message", e.target.value)}
@@ -1532,8 +1481,9 @@ export default function Home() {
                       />
                     </div>
 
+                    {fileUploadEnabled && (
                     <div>
-                      <Label className="text-xs sm:text-sm">Прикрепить файлы (опционально)</Label>
+                      <Label className="text-xs sm:text-sm">{t("home_contact_files")}</Label>
                       <label
                         htmlFor="file-upload"
                         className="mt-1.5 sm:mt-2 flex flex-col items-center justify-center w-full h-24 sm:h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover-elevate transition-all"
@@ -1541,10 +1491,10 @@ export default function Home() {
                       >
                         <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground mb-1.5 sm:mb-2" />
                         <span className="text-xs sm:text-sm text-muted-foreground">
-                          Нажмите для выбора файлов
+                          {t("home_contact_files_hint")}
                         </span>
                         <span className="text-xs text-muted-foreground mt-1">
-                          До 10 МБ каждый, до 50 МБ общий размер
+                          {t("home_contact_files_limits")}
                         </span>
                         <input
                           id="file-upload"
@@ -1586,6 +1536,7 @@ export default function Home() {
                         </div>
                       )}
                     </div>
+                    )}
 
                     <div className="space-y-3 pt-3 sm:pt-4 border-t border-border">
                       <div className="flex items-start gap-2">
@@ -1597,7 +1548,7 @@ export default function Home() {
                           data-testid="checkbox-consent-personal-data"
                         />
                         <Label htmlFor="consent-personal-data-home" className="text-xs sm:text-sm leading-relaxed cursor-pointer">
-                          Я даю согласие на обработку персональных данных *
+                          {t("home_contact_consent_pd")}
                         </Label>
                       </div>
                       <div className="flex items-start gap-2">
@@ -1630,10 +1581,10 @@ export default function Home() {
                       {contactMutation.isPending ? (
                         <>
                           <Loader2 className="mr-2 h-4 sm:h-5 w-4 sm:w-5 animate-spin" />
-                          Отправка...
+                          {t("home_contact_sending")}
                         </>
                       ) : (
-                        "Получить коммерческое предложение"
+                        t("home_contact_submit")
                       )}
                     </Button>
                   </form>
@@ -1644,13 +1595,13 @@ export default function Home() {
             <div className="lg:col-span-2 space-y-4 sm:space-y-6">
               <Card>
                 <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-4">
-                  <CardTitle className="text-base sm:text-lg">Контактная информация</CardTitle>
+                  <CardTitle className="text-base sm:text-lg">{t("home_contact_info_title")}</CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-3 sm:space-y-4">
                   <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-phone">
                     <Phone className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="text-xs sm:text-sm font-medium">Телефон</div>
+                      <div className="text-xs sm:text-sm font-medium">{t("home_contact_phone_label")}</div>
                       <a href={`tel:${contactPhone.replace(/\D/g, '')}`} className="text-xs sm:text-sm text-muted-foreground hover:text-primary" data-testid="text-phone">{contactPhone}</a>
                     </div>
                   </div>
@@ -1658,7 +1609,7 @@ export default function Home() {
                   <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-email">
                     <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="text-xs sm:text-sm font-medium">Email</div>
+                      <div className="text-xs sm:text-sm font-medium">{t("home_contact_email_label")}</div>
                       <a href={`mailto:${contactEmail}`} className="text-xs sm:text-sm text-muted-foreground hover:text-primary break-all" data-testid="text-email">{contactEmail}</a>
                     </div>
                   </div>
@@ -1668,7 +1619,7 @@ export default function Home() {
                       <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-telegram">
                         <Send className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
                         <div>
-                          <div className="text-xs sm:text-sm font-medium">Telegram</div>
+                          <div className="text-xs sm:text-sm font-medium">{t("home_contact_telegram_label")}</div>
                           <a
                             href={telegramInfo.url}
                             target="_blank"
@@ -1686,7 +1637,7 @@ export default function Home() {
                   <div className="flex items-start gap-2.5 sm:gap-3" data-testid="contact-address">
                     <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="text-xs sm:text-sm font-medium">Адрес</div>
+                      <div className="text-xs sm:text-sm font-medium">{t("home_contact_address_label")}</div>
                       <div className="text-xs sm:text-sm text-muted-foreground" data-testid="text-address">
                         {contactAddress}
                       </div>
@@ -1698,9 +1649,9 @@ export default function Home() {
               <Card className="bg-primary/5 border-primary/20" data-testid="card-response-time">
                 <CardContent className="p-4 sm:pt-6">
                   <div className="text-xs sm:text-sm text-center">
-                    <div className="font-semibold mb-1.5 sm:mb-2" data-testid="text-response-time-title">Время ответа</div>
+                    <div className="font-semibold mb-1.5 sm:mb-2" data-testid="text-response-time-title">{t("home_contact_response_title")}</div>
                     <div className="text-muted-foreground" data-testid="text-response-time-desc">
-                      Мы отвечаем на заявки в течение 24 часов в рабочие дни
+                      {t("home_contact_response_text")}
                     </div>
                   </div>
                 </CardContent>
@@ -1716,20 +1667,20 @@ export default function Home() {
             <div className="text-center sm:text-left">
               <div className="flex items-center gap-3 mb-3 sm:mb-4 justify-center sm:justify-start">
                 <div className="w-9 h-9 sm:w-10 sm:h-10 bg-primary rounded-md flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-lg sm:text-xl font-mono">НУ</span>
+                  <span className="text-primary-foreground font-bold text-lg sm:text-xl font-mono">{t("footer_brand_mark")}</span>
                 </div>
                 <div>
                   <div className="text-sm font-semibold">{device.name}</div>
-                  <div className="text-xs text-muted-foreground">Нагрузочное устройство</div>
+                  <div className="text-xs text-muted-foreground">{t("footer_tagline_short")}</div>
                 </div>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground">
-                Профессиональное оборудование для тестирования электрогенераторов и ИБП
+                {t("footer_tagline")}
               </p>
             </div>
 
             <div className="text-center sm:text-left">
-              <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Навигация</h3>
+              <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">{t("footer_nav_title")}</h3>
               <ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
                 {navLinks.filter(link => link.id !== "gallery" || productImages.length > 0).map((link) => (
                   <li key={link.id}>
@@ -1746,7 +1697,7 @@ export default function Home() {
             </div>
 
             <div className="text-center sm:text-left sm:col-span-2 md:col-span-1">
-              <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Контакты</h3>
+              <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">{t("footer_contacts_title")}</h3>
               <ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
                 {contactPhone && (
                   <li>
@@ -1773,16 +1724,16 @@ export default function Home() {
           <Separator className="mb-6 sm:mb-8" />
 
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs sm:text-sm text-muted-foreground">
-            <div className="text-center md:text-left">© 2025 {device.name}. Все права защищены.</div>
+            <div className="text-center md:text-left">{t("footer_copyright", { year: new Date().getFullYear(), device: device.name })}</div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 md:gap-6 text-center">
               <a href="/privacy-policy" className="hover:text-foreground transition-colors">
-                Политика конфиденциальности
+                {t("footer_privacy")}
               </a>
               <a href="/data-processing-policy" className="hover:text-foreground transition-colors">
-                Политика обработки данных
+                {t("footer_processing")}
               </a>
               <a href="/public-offer" className="hover:text-foreground transition-colors">
-                Публичная оферта
+                {t("footer_offer")}
               </a>
             </div>
           </div>

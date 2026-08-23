@@ -3578,6 +3578,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ADMIN: Update many content keys at once (one admin tab).
+  app.put("/api/admin/content/bulk", requireAdmin, async (req, res) => {
+    try {
+      const itemSchema = z.object({
+        key: z.string().min(1).max(255).regex(/^[a-z0-9_]+$/i),
+        value: z.string().max(200_000),
+        page: z.string().max(255).optional(),
+        section: z.string().max(255).optional(),
+      });
+      const parsed = z.object({ items: z.array(itemSchema).min(1).max(200) }).safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Ошибка валидации данных", errors: parsed.error.errors });
+        return;
+      }
+      const saved = await storage.setSiteContentBulk(parsed.data.items);
+      res.json({ success: true, content: saved });
+    } catch (error) {
+      console.error("Bulk update content error:", error);
+      res.status(500).json({ success: false, message: "Failed to update content" });
+    }
+  });
+
   // ADMIN: Get Site Content by Key
   app.get("/api/admin/content/:key", requireAdmin, async (req, res) => {
     try {

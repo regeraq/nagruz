@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,69 +8,22 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Trash2, Plus, FileText, Globe, Home as HomeIcon } from "lucide-react";
+import { Save, Trash2, Plus, FileText, Globe, Home as HomeIcon, HelpCircle, Menu, Phone, AlertCircle, LayoutTemplate } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { CONTENT_GROUPS, getContentFallback, type ContentField } from "@shared/content-catalog";
 
-// Каталог "известных" ключей контента: человекочитаемая метка, подсказка
-// и страница, к которой относится ключ. При сохранении заполняем page и
-// section автоматически. Новые ключи добавлять сюда — и они сразу появятся
-// в UI, в соответствующей вкладке.
-export interface ContentPreset {
-  key: string;
-  label: string;
-  hint?: string;
-  placeholder?: string;
-  multiline?: boolean;
-  section?: string;
-}
-
-export interface ContentPageGroup {
-  id: string;
-  label: string;
-  icon?: React.ComponentType<{ className?: string }>;
-  items: ContentPreset[];
-}
-
-// Каталог групп. Если надо добавить ещё секцию на страницу —
-// дописываем ключ здесь, без правок кода.
-const DEFAULT_GROUPS: ContentPageGroup[] = [
-  {
-    id: "home",
-    label: "Главная",
-    icon: HomeIcon,
-    items: [
-      { key: "home_hero_title", label: "Заголовок Hero", section: "hero", placeholder: "Нагрузочные устройства…" },
-      { key: "home_hero_subtitle", label: "Подзаголовок Hero", section: "hero", multiline: true, placeholder: "Короткий слоган" },
-      { key: "home_hero_cta", label: "Текст кнопки Hero", section: "hero", placeholder: "Заказать" },
-      { key: "home_about", label: "О продукте", section: "about", multiline: true, hint: "Крупный блок с описанием." },
-      { key: "home_advantages", label: "Преимущества", section: "advantages", multiline: true, hint: "Список преимуществ; каждая строка — пункт." },
-      { key: "home_seo_title", label: "SEO: title", section: "seo" },
-      { key: "home_seo_description", label: "SEO: description", section: "seo", multiline: true },
-    ],
-  },
-  {
-    id: "contacts",
-    label: "Контакты",
-    icon: FileText,
-    items: [
-      { key: "contacts_intro", label: "Вступительный текст", section: "intro", multiline: true },
-      { key: "contacts_working_hours", label: "Часы работы", section: "info" },
-      { key: "contacts_map_caption", label: "Подпись карты", section: "map" },
-    ],
-  },
-  {
-    id: "legal",
-    label: "Юридическое",
-    icon: Globe,
-    items: [
-      { key: "legal_company_name", label: "Название юр. лица", section: "legal" },
-      { key: "legal_inn", label: "ИНН", section: "legal" },
-      { key: "legal_ogrn", label: "ОГРН", section: "legal" },
-      { key: "legal_address", label: "Юр. адрес", section: "legal", multiline: true },
-      { key: "legal_privacy_notice", label: "Короткое примечание в футере", section: "legal", multiline: true },
-    ],
-  },
-];
+const GROUP_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+  nav: Menu,
+  home: HomeIcon,
+  home_sections: LayoutTemplate,
+  home_contact: Phone,
+  footer: Globe,
+  about: FileText,
+  faq: HelpCircle,
+  contacts: Phone,
+  legal: FileText,
+  errors: AlertCircle,
+};
 
 interface ContentItem {
   key: string;
@@ -88,20 +41,17 @@ export function ContentManager({ items }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Кэш существующих значений по ключу — чтобы инпуты стартовали с текущего.
   const byKey = useMemo(() => {
     const map = new Map<string, ContentItem>();
     for (const it of items || []) if (it?.key) map.set(it.key, it);
     return map;
   }, [items]);
 
-  // Локальный черновик всех значений. Сохраняем только изменённые.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [savingTab, setSavingTab] = useState<string | null>(null);
 
   useEffect(() => {
-    // При изменении items сбрасываем только те черновики, которые совпали
-    // с "облачным" значением — пусть неотправленные правки не теряются.
     setDrafts((prev) => {
       const next: Record<string, string> = {};
       for (const [k, v] of Object.entries(prev)) {
@@ -114,7 +64,7 @@ export function ContentManager({ items }: Props) {
 
   const knownKeys = useMemo(() => {
     const s = new Set<string>();
-    for (const g of DEFAULT_GROUPS) for (const i of g.items) s.add(i.key);
+    for (const g of CONTENT_GROUPS) for (const i of g.items) s.add(i.key);
     return s;
   }, []);
 
@@ -123,34 +73,36 @@ export function ContentManager({ items }: Props) {
     [items, knownKeys],
   );
 
+  const storedValue = (key: string): string => byKey.get(key)?.value ?? "";
+
   const currentValue = (key: string): string => {
     if (key in drafts) return drafts[key];
-    return byKey.get(key)?.value || "";
+    const stored = storedValue(key);
+    return stored || getContentFallback(key);
   };
 
   const isDirty = (key: string): boolean => {
-    if (!(key in drafts)) return false;
-    return drafts[key] !== (byKey.get(key)?.value || "");
+    if (key in drafts) return drafts[key] !== storedValue(key);
+    return !byKey.has(key) && !!getContentFallback(key);
   };
 
-  async function saveOne(preset: ContentPreset | { key: string; section?: string }, pageId?: string) {
+  async function persist(key: string, value: string, page?: string, section?: string) {
+    await apiRequest("PUT", `/api/admin/content/${encodeURIComponent(key)}`, {
+      value,
+      page: page || byKey.get(key)?.page || "",
+      section: section || byKey.get(key)?.section || "",
+    });
+  }
+
+  async function saveOne(preset: ContentField | { key: string; section?: string }, pageId?: string) {
     const key = preset.key;
     const value = currentValue(key);
-    if (!value.trim()) {
-      toast({ title: "Пусто", description: "Нельзя сохранить пустое значение", variant: "destructive" });
-      return;
-    }
     setSaving((s) => ({ ...s, [key]: true }));
     try {
-      await apiRequest("PUT", `/api/admin/content/${encodeURIComponent(key)}`, {
-        value,
-        page: pageId || byKey.get(key)?.page || "",
-        section: preset.section || byKey.get(key)?.section || "",
-      });
-      toast({ title: "Сохранено", description: `«${key}» обновлён` });
+      await persist(key, value, pageId, "section" in preset ? preset.section : undefined);
+      toast({ title: "Сохранено", description: `«${preset.key}» обновлён` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
-      // убираем draft, т.к. теперь это совпадает с remote
       setDrafts((prev) => {
         const next = { ...prev };
         delete next[key];
@@ -163,11 +115,38 @@ export function ContentManager({ items }: Props) {
     }
   }
 
+  async function saveGroup(groupId: string) {
+    const group = CONTENT_GROUPS.find((g) => g.id === groupId);
+    if (!group) return;
+    const payload = group.items.map((item) => ({
+      key: item.key,
+      value: currentValue(item.key),
+      page: groupId,
+      section: item.section || "",
+    }));
+    setSavingTab(groupId);
+    try {
+      await apiRequest("PUT", "/api/admin/content/bulk", { items: payload });
+      toast({ title: "Вкладка сохранена", description: `Обновлено полей: ${payload.length}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/content"] });
+      setDrafts((prev) => {
+        const next = { ...prev };
+        for (const item of group.items) delete next[item.key];
+        return next;
+      });
+    } catch (e: any) {
+      toast({ title: "Ошибка", description: e?.message || "Не удалось сохранить вкладку", variant: "destructive" });
+    } finally {
+      setSavingTab(null);
+    }
+  }
+
   async function removeOne(key: string) {
-    if (!confirm(`Удалить контент «${key}»?`)) return;
+    if (!confirm(`Удалить сохранённый текст «${key}»? На сайте снова появится исходный вариант.`)) return;
     try {
       await apiRequest("DELETE", `/api/admin/content/${encodeURIComponent(key)}`);
-      toast({ title: "Удалено", description: `«${key}» удалён` });
+      toast({ title: "Сброшено", description: `«${key}» удалён, снова исходный текст` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
       setDrafts((prev) => {
@@ -180,7 +159,6 @@ export function ContentManager({ items }: Props) {
     }
   }
 
-  // Форма добавления произвольного ключа
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const [newPage, setNewPage] = useState("");
@@ -188,18 +166,15 @@ export function ContentManager({ items }: Props) {
 
   async function saveCustom() {
     const k = newKey.trim();
-    if (!k || !newValue.trim()) {
-      toast({ title: "Ошибка", description: "Заполните ключ и содержимое", variant: "destructive" });
+    if (!k) {
+      toast({ title: "Ошибка", description: "Укажите ключ", variant: "destructive" });
       return;
     }
     try {
-      await apiRequest("PUT", `/api/admin/content/${encodeURIComponent(k)}`, {
-        value: newValue,
-        page: newPage || "",
-        section: newSection || "",
-      });
+      await persist(k, newValue, newPage, newSection);
       toast({ title: "Сохранено", description: `«${k}» создан` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/content"] });
       setNewKey(""); setNewValue(""); setNewPage(""); setNewSection("");
     } catch (e: any) {
       toast({ title: "Ошибка", description: e?.message || "Не удалось сохранить", variant: "destructive" });
@@ -208,10 +183,14 @@ export function ContentManager({ items }: Props) {
 
   return (
     <div className="space-y-4">
-      <Tabs defaultValue={DEFAULT_GROUPS[0].id} className="w-full">
+      <p className="text-sm text-muted-foreground">
+        Здесь можно править каждую фразу сайта. Пустое поле = исходный текст. Кнопка корзины возвращает исходный вариант.
+        «Сохранить вкладку» записывает все поля сразу.
+      </p>
+      <Tabs defaultValue={CONTENT_GROUPS[0].id} className="w-full">
         <TabsList className="flex flex-wrap w-full justify-start h-auto">
-          {DEFAULT_GROUPS.map((g) => {
-            const Icon = g.icon;
+          {CONTENT_GROUPS.map((g) => {
+            const Icon = GROUP_ICONS[g.id];
             const itemCount = g.items.filter((it) => byKey.has(it.key)).length;
             return (
               <TabsTrigger key={g.id} value={g.id} className="gap-1.5">
@@ -231,8 +210,14 @@ export function ContentManager({ items }: Props) {
           </TabsTrigger>
         </TabsList>
 
-        {DEFAULT_GROUPS.map((g) => (
+        {CONTENT_GROUPS.map((g) => (
           <TabsContent key={g.id} value={g.id} className="space-y-3 mt-4">
+            <div className="flex justify-end">
+              <Button onClick={() => saveGroup(g.id)} disabled={savingTab === g.id}>
+                <Save className="w-4 h-4 mr-1" />
+                {savingTab === g.id ? "Сохранение..." : "Сохранить вкладку"}
+              </Button>
+            </div>
             {g.items.map((preset) => {
               const existing = byKey.get(preset.key);
               const dirty = isDirty(preset.key);
@@ -248,7 +233,7 @@ export function ContentManager({ items }: Props) {
                           {existing ? (
                             <Badge variant="secondary" className="text-[10px]">сохранён</Badge>
                           ) : (
-                            <Badge variant="outline" className="text-[10px]">не задан</Badge>
+                            <Badge variant="outline" className="text-[10px]">исходный текст</Badge>
                           )}
                           {dirty && <Badge className="text-[10px]">есть изменения</Badge>}
                         </div>
@@ -270,7 +255,7 @@ export function ContentManager({ items }: Props) {
                             size="sm"
                             variant="outline"
                             onClick={() => removeOne(preset.key)}
-                            title="Удалить"
+                            title="Вернуть исходный текст"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
@@ -280,8 +265,8 @@ export function ContentManager({ items }: Props) {
                     {preset.multiline ? (
                       <Textarea
                         value={currentValue(preset.key)}
-                        placeholder={preset.placeholder}
-                        rows={4}
+                        placeholder={preset.fallback || "Исходный текст"}
+                        rows={preset.rows || 4}
                         onChange={(e) =>
                           setDrafts((prev) => ({ ...prev, [preset.key]: e.target.value }))
                         }
@@ -289,7 +274,7 @@ export function ContentManager({ items }: Props) {
                     ) : (
                       <Input
                         value={currentValue(preset.key)}
-                        placeholder={preset.placeholder}
+                        placeholder={preset.fallback || ""}
                         onChange={(e) =>
                           setDrafts((prev) => ({ ...prev, [preset.key]: e.target.value }))
                         }
@@ -303,7 +288,6 @@ export function ContentManager({ items }: Props) {
         ))}
 
         <TabsContent value="__custom" className="space-y-3 mt-4">
-          {/* Добавить произвольный ключ */}
           <Card className="border-dashed">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -330,11 +314,11 @@ export function ContentManager({ items }: Props) {
                 </div>
               </div>
               <div>
-                <Label className="text-xs">Содержимое *</Label>
+                <Label className="text-xs">Содержимое</Label>
                 <Textarea value={newValue} onChange={(e) => setNewValue(e.target.value)} rows={3} />
               </div>
               <div className="flex justify-end">
-                <Button onClick={saveCustom} disabled={!newKey.trim() || !newValue.trim()}>
+                <Button onClick={saveCustom} disabled={!newKey.trim()}>
                   <Save className="w-4 h-4 mr-1" />
                   Создать
                 </Button>
@@ -342,7 +326,6 @@ export function ContentManager({ items }: Props) {
             </CardContent>
           </Card>
 
-          {/* Уже существующие пользовательские ключи */}
           {customItems.length === 0 ? (
             <div className="text-sm text-muted-foreground text-center py-6">
               Произвольных ключей нет.
