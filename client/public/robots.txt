@@ -6,5 +6,9 @@ Disallow: /login
 Disallow: /register
 Disallow: /api/
 
+# Оферту и политики намеренно НЕ закрываем здесь: чтобы убрать страницу
+# из выдачи, робот должен её скачать и увидеть <meta name="robots" content="noindex">.
+# Запрет в robots.txt как раз помешал бы это сделать.
+
 Sitemap: https://voltkeeper.ru/sitemap.xml
 Host: https://voltkeeper.ru

@@ -38,6 +38,7 @@ import {
   DEFAULT_PRIVATE_NOTICE,
   SITE_ACCESS_KEYS,
 } from "./siteAccess";
+import { INDEXABLE_PATHS, SITE_URL } from "@shared/page-meta";
 import { randomBytes } from "crypto";
 
 // Import new API routes
@@ -206,21 +207,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Закрытый режим: всё, кроме входа, недоступно анонимным посетителям.
   app.use("/api", enforceSiteAccess);
 
-  // Serve sitemap.xml for SEO
-  app.get("/sitemap.xml", async (req, res) => {
+  /**
+   * sitemap.xml собирается из того же списка страниц, что и мета-теги:
+   * иначе в карту снова попадут оферта и политики, которые мы прячем от выдачи.
+   */
+  app.get("/sitemap.xml", async (_req, res) => {
     // В закрытом режиме карта сайта не нужна: страницы всё равно не отдаются.
     const { privateMode } = await getSiteAccessState();
     if (privateMode) {
       res.status(404).send('Sitemap not found');
       return;
     }
-    res.setHeader('Content-Type', 'application/xml');
-    res.sendFile('sitemap.xml', { root: './client/public' }, (err) => {
-      if (err) {
-        console.error('Error serving sitemap:', err);
-        res.status(404).send('Sitemap not found');
-      }
-    });
+    const urls = INDEXABLE_PATHS.map((p) => {
+      const loc = `${SITE_URL}${p === "/" ? "/" : p}`;
+      const priority = p === "/" ? "1.0" : "0.8";
+      const changefreq = p === "/" ? "weekly" : "monthly";
+      return `  <url>\n    <loc>${loc}</loc>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`;
+    }).join("\n");
+    res.type('application/xml').send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`,
+    );
   });
 
   /**

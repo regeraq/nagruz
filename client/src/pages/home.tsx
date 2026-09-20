@@ -390,23 +390,12 @@ export default function Home() {
     return (devices[selectedDevice as keyof typeof devices] || devices["nu-100"]);
   }, [currentProductForDevice, selectedDevice, specGroups]);
 
-  // Update page title and Open Graph meta tags when device changes
-  useEffect(() => {
-    const deviceName = currentProductForDevice?.name || device.name;
-    const devicePower = device.power || "—";
-    const pageTitle = `${deviceName} — Нагрузочное устройство ${devicePower}`;
-    document.title = pageTitle;
-    
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) {
-      metaDescription.setAttribute("content", device.description);
-    }
-    
-    const ogTitle = document.querySelector('meta[property="og:title"]');
-    if (ogTitle) {
-      ogTitle.setAttribute("content", pageTitle);
-    }
-  }, [selectedDevice, device.description, device.name, device.power, currentProductForDevice]);
+  /*
+   * Раньше здесь переписывались <title> и description под выбранное устройство.
+   * Из-за этого главная попадала в поиск как «НУ-100 — Нагрузочное устройство
+   * 100 кВт» без названия компании, а сниппет менялся вместе с карточкой.
+   * Теги главной теперь задаёт usePageTitle из shared/page-meta.ts.
+   */
 
   // Auto-switch to first available device if current is not available
   useEffect(() => {

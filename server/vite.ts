@@ -5,6 +5,22 @@ import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+import { injectPageMeta, injectPrivateModeMeta } from "./pageMeta";
+import { getSiteAccessState } from "./siteAccess";
+
+/**
+ * SEO-теги подставляются до отдачи HTML: робот читает разметку без выполнения
+ * JS, поэтому title/description/canonical должны быть в исходном ответе.
+ */
+async function applySeoMeta(html: string, url: string): Promise<string> {
+  try {
+    const { privateMode } = await getSiteAccessState();
+    if (privateMode) return injectPrivateModeMeta(html);
+  } catch {
+    // Недоступная БД не повод отдавать страницу без заголовка.
+  }
+  return injectPageMeta(html, url);
+}
 
 const viteLogger = createLogger();
 
@@ -96,7 +112,9 @@ export async function setupVite(app: Express, server: Server) {
             `<meta name="csrf-token" content="${csrfToken}"></head>`
           );
         }
-        
+
+        template = await applySeoMeta(template, url);
+
         const page = await vite.transformIndexHtml(url, template);
         res.status(200).set({ "Content-Type": "text/html" }).end(page);
       } catch (e) {
@@ -172,7 +190,9 @@ export function serveStatic(app: Express) {
         `<meta name="csrf-token" content="${csrfToken}"></head>`
       );
     }
-    
+
+    html = await applySeoMeta(html, url);
+
     res.send(html);
   });
 }

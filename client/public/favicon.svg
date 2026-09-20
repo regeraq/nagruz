@@ -1,93 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Voltkeeper">
   <defs>
-    <!-- Background gradient - палитра сайта -->
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#2563eb"/>
-      <stop offset="100%" stop-color="#1e40af"/>
+    <linearGradient id="vk-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
     </linearGradient>
-    
-    <!-- Needle gradient для красивой стрелки -->
-    <linearGradient id="needleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
-      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.9"/>
-      <stop offset="100%" stop-color="#e0e7ff" stop-opacity="0.85"/>
-    </linearGradient>
-    
-    <!-- Hub gradient для центра -->
-    <radialGradient id="hubGradient" cx="50%" cy="50%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="70%" stop-color="#cbd5e1"/>
-      <stop offset="100%" stop-color="#0f172a"/>
-    </radialGradient>
-    
-    <!-- Эффект свечения для стрелки -->
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
+    <clipPath id="vk-disc">
+      <circle cx="128" cy="128" r="128"/>
+    </clipPath>
   </defs>
 
-  <!-- Background -->
-  <rect width="256" height="256" rx="32" fill="url(#bgGradient)"/>
+  <!-- Круг, а не скруглённый квадрат: поисковики обрезают фавикон по кругу -->
+  <circle cx="128" cy="128" r="128" fill="url(#vk-bg)"/>
+  <circle cx="128" cy="79" r="100" fill="#ffffff" opacity="0.07" clip-path="url(#vk-disc)"/>
 
-  <!-- Gauge arc -->
-  <path
-    d="M56 160
-       A72 72 0 0 1 200 160"
-    fill="none"
-    stroke="rgba(255, 255, 255, 0.95)"
-    stroke-width="14"
-    stroke-linecap="round"
-    opacity="0.9"/>
-
-  <!-- Улучшенная стрелка с градиентом и формой -->
-  <g transform="translate(128, 160)">
-    <!-- Тень/обводка стрелки для глубины -->
-    <line
-      x1="0"
-      y1="0"
-      x2="44"
-      y2="-42"
-      stroke="rgba(15, 23, 42, 0.3)"
-      stroke-width="9"
-      stroke-linecap="round"
-      opacity="0.4"/>
-    
-    <!-- Основная стрелка с градиентом -->
-    <line
-      x1="0"
-      y1="0"
-      x2="44"
-      y2="-42"
-      stroke="url(#needleGradient)"
-      stroke-width="8"
-      stroke-linecap="round"
-      filter="url(#glow)"/>
-    
-    <!-- Острие стрелки (треугольник) -->
-    <path
-      d="M 44 -42 L 50 -48 L 46 -44 Z"
-      fill="url(#needleGradient)"
-      opacity="0.95"/>
-  </g>
-
-  <!-- Needle hub (центр) с градиентом -->
-  <circle
-    cx="128"
-    cy="160"
-    r="10"
-    fill="url(#hubGradient)"/>
-  
-  <!-- Внешнее кольцо центра -->
-  <circle
-    cx="128"
-    cy="160"
-    r="10"
-    fill="none"
-    stroke="rgba(255, 255, 255, 0.6)"
-    stroke-width="2"
-    opacity="0.8"/>
+  <!-- Молния -->
+  <path d="M136.3 44.8 L53.1 144.6 L128 144.6 L119.7 211.2 L202.9 111.4 L128 111.4 Z" fill="#ffffff"/>
 </svg>

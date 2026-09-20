@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Запасная копия. Обычно sitemap отдаёт сервер и собирает его из
+  shared/page-meta.ts, чтобы список не расходился с мета-тегами.
+-->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://voltkeeper.ru/</loc>
@@ -11,43 +15,13 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://voltkeeper.ru/applications</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://voltkeeper.ru/specifications</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://voltkeeper.ru/documentation</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://voltkeeper.ru/faq</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://voltkeeper.ru/contacts</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://voltkeeper.ru/privacy-policy</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.4</priority>
-  </url>
-  <url>
-    <loc>https://voltkeeper.ru/data-processing-policy</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.4</priority>
-  </url>
-  <url>
-    <loc>https://voltkeeper.ru/public-offer</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.4</priority>
+    <priority>0.8</priority>
   </url>
 </urlset>
