@@ -371,8 +371,14 @@ async function main() {
     await restoreAccess();
   }
 
+  // Сравниваем с исходным значением, а не с false: тест могут гонять и на
+  // закрытом сайте, и тогда «вернуть как было» — это вернуть закрытый режим.
   r = await req("GET", "/api/site-access");
-  log(r.status === 200 && r.json?.privateMode === false, "private mode restored to off", String(r.status));
+  log(
+    r.status === 200 && r.json?.privateMode === accessBefore.privateMode,
+    "private mode restored to previous value",
+    `${r.status} privateMode=${r.json?.privateMode}`,
+  );
 
   const failed = results.filter((x) => !x.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
