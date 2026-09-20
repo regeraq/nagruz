@@ -151,7 +151,10 @@ export function serveStatic(app: Express) {
   }
   
   console.log(`✅ [serveStatic] Serving static files from: ${finalDistPath}`);
-  app.use(express.static(finalDistPath));
+  // index: false — иначе express.static отдаёт index.html на «/» сам,
+  // в обход подстановки SEO-тегов ниже, и главная остаётся без заголовка,
+  // canonical и разметки Organization.
+  app.use(express.static(finalDistPath, { index: false }));
 
   // fall through to index.html if the file doesn't exist
   app.use("*", async (req, res, next) => {
