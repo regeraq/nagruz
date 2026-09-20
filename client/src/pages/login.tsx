@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useSiteAccess } from "@/hooks/useSiteAccess";
 
 const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),
@@ -23,6 +24,7 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { access } = useSiteAccess();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -154,16 +156,22 @@ export default function Login() {
               {isLoading ? "Вход..." : "Войти"}
             </Button>
 
-            <div className="text-center text-sm">
-              <span className="text-muted-foreground">Нет аккаунта? </span>
-              <button
-                type="button"
-                onClick={() => setLocation("/register")}
-                className="text-primary hover:underline font-medium"
-              >
-                Зарегистрироваться
-              </button>
-            </div>
+            {access.registrationEnabled ? (
+              <div className="text-center text-sm">
+                <span className="text-muted-foreground">Нет аккаунта? </span>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/register")}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Зарегистрироваться
+                </button>
+              </div>
+            ) : (
+              <p className="text-center text-sm text-muted-foreground">
+                Регистрация новых пользователей временно закрыта.
+              </p>
+            )}
           </form>
         </CardContent>
       </Card>

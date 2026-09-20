@@ -1,29 +1,28 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Trash2, Plus, FileText, Globe, Home as HomeIcon, HelpCircle, Menu, Phone, AlertCircle, LayoutTemplate } from "lucide-react";
+import { RotateCcw, Plus, Trash2, Search, Check, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { CONTENT_GROUPS, getContentFallback, type ContentField } from "@shared/content-catalog";
-
-const GROUP_ICONS: Record<string, ComponentType<{ className?: string }>> = {
-  nav: Menu,
-  home: HomeIcon,
-  home_sections: LayoutTemplate,
-  home_contact: Phone,
-  footer: Globe,
-  about: FileText,
-  faq: HelpCircle,
-  contacts: Phone,
-  legal: FileText,
-  errors: AlertCircle,
-};
+import {
+  CONTENT_GROUPS,
+  CONTENT_PAGES,
+  SECTION_LABELS,
+  getContentFallback,
+  getContentKind,
+  parseFaqText,
+  parseLineList,
+  parseStatLines,
+  parseTitleDescLines,
+  serializeFaqText,
+  serializeLineList,
+  serializeStatLines,
+  serializeTitleDescLines,
+  type ContentField,
+  type FaqParsedItem,
+} from "@shared/content-catalog";
 
 interface ContentItem {
   key: string;
@@ -37,6 +36,14 @@ interface Props {
   items: ContentItem[];
 }
 
+type SaveState = "idle" | "saving" | "saved" | "error";
+
+function fieldMatches(preset: ContentField, query: string, current: string): boolean {
+  if (!query) return true;
+  const hay = `${preset.label} ${preset.fallback} ${current} ${preset.hint || ""}`.toLowerCase();
+  return hay.includes(query);
+}
+
 export function ContentManager({ items }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -48,19 +55,29 @@ export function ContentManager({ items }: Props) {
   }, [items]);
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState<Record<string, boolean>>({});
-  const [savingTab, setSavingTab] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<Record<string, SaveState>>({});
+  const [pageId, setPageId] = useState(CONTENT_PAGES[0].id);
+  const [query, setQuery] = useState("");
+  const timers = useRef<Record<string, number>>({});
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
 
   useEffect(() => {
     setDrafts((prev) => {
       const next: Record<string, string> = {};
       for (const [k, v] of Object.entries(prev)) {
-        const remote = byKey.get(k)?.value ?? "";
+        const remote = byKey.get(k)?.value ?? getContentFallback(k);
         if (v !== remote) next[k] = v;
       }
       return next;
     });
   }, [byKey]);
+
+  useEffect(() => {
+    return () => {
+      for (const id of Object.values(timers.current)) window.clearTimeout(id);
+    };
+  }, []);
 
   const knownKeys = useMemo(() => {
     const s = new Set<string>();
@@ -74,17 +91,15 @@ export function ContentManager({ items }: Props) {
   );
 
   const storedValue = (key: string): string => byKey.get(key)?.value ?? "";
+  const baseline = (key: string): string => storedValue(key) || getContentFallback(key);
+  const currentValue = (key: string): string => (key in drafts ? drafts[key] : baseline(key));
+  const isDirty = (key: string): boolean => key in drafts && drafts[key] !== baseline(key);
+  const isCustomized = (key: string): boolean => byKey.has(key);
 
-  const currentValue = (key: string): string => {
-    if (key in drafts) return drafts[key];
-    const stored = storedValue(key);
-    return stored || getContentFallback(key);
-  };
-
-  const isDirty = (key: string): boolean => {
-    if (key in drafts) return drafts[key] !== storedValue(key);
-    return !byKey.has(key) && !!getContentFallback(key);
-  };
+  function setDraft(key: string, value: string) {
+    setDrafts((prev) => ({ ...prev, [key]: value }));
+    setSaveState((prev) => ({ ...prev, [key]: "idle" }));
+  }
 
   async function persist(key: string, value: string, page?: string, section?: string) {
     await apiRequest("PUT", `/api/admin/content/${encodeURIComponent(key)}`, {
@@ -94,13 +109,50 @@ export function ContentManager({ items }: Props) {
     });
   }
 
-  async function saveOne(preset: ContentField | { key: string; section?: string }, pageId?: string) {
-    const key = preset.key;
-    const value = currentValue(key);
-    setSaving((s) => ({ ...s, [key]: true }));
+  async function saveNow(key: string, page?: string, section?: string) {
+    const value = key in draftsRef.current ? draftsRef.current[key] : currentValue(key);
+    setSaveState((prev) => ({ ...prev, [key]: "saving" }));
     try {
-      await persist(key, value, pageId, "section" in preset ? preset.section : undefined);
-      toast({ title: "Сохранено", description: `«${preset.key}» обновлён` });
+      await persist(key, value, page, section);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/content"] });
+      // Пока запрос шёл, админ мог продолжить печатать — такой черновик терять нельзя.
+      setDrafts((prev) => {
+        if (!(key in prev) || prev[key] !== value) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setSaveState((prev) => ({ ...prev, [key]: "saved" }));
+      window.setTimeout(() => {
+        setSaveState((prev) => (prev[key] === "saved" ? { ...prev, [key]: "idle" } : prev));
+      }, 1600);
+    } catch (e: any) {
+      setSaveState((prev) => ({ ...prev, [key]: "error" }));
+      toast({ title: "Не удалось сохранить", description: e?.message || "Попробуйте ещё раз", variant: "destructive" });
+    }
+  }
+
+  function scheduleSave(key: string, page?: string, section?: string) {
+    window.clearTimeout(timers.current[key]);
+    timers.current[key] = window.setTimeout(() => {
+      void saveNow(key, page, section);
+    }, 700);
+  }
+
+  function onTextChange(key: string, value: string, page?: string, section?: string) {
+    setDraft(key, value);
+    scheduleSave(key, page, section);
+  }
+
+  async function resetOne(key: string, label: string) {
+    window.clearTimeout(timers.current[key]);
+    if (!byKey.has(key) && !(key in drafts)) return;
+    if (!confirm(`Вернуть исходный текст для «${label}»?`)) return;
+    try {
+      if (byKey.has(key)) {
+        await apiRequest("DELETE", `/api/admin/content/${encodeURIComponent(key)}`);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
       setDrafts((prev) => {
@@ -108,271 +160,541 @@ export function ContentManager({ items }: Props) {
         delete next[key];
         return next;
       });
+      setSaveState((prev) => ({ ...prev, [key]: "saved" }));
     } catch (e: any) {
-      toast({ title: "Ошибка", description: e?.message || "Не удалось сохранить", variant: "destructive" });
-    } finally {
-      setSaving((s) => ({ ...s, [key]: false }));
+      toast({ title: "Не удалось вернуть", description: e?.message || "Ошибка", variant: "destructive" });
     }
   }
 
-  async function saveGroup(groupId: string) {
-    const group = CONTENT_GROUPS.find((g) => g.id === groupId);
-    if (!group) return;
-    const payload = group.items.map((item) => ({
-      key: item.key,
-      value: currentValue(item.key),
-      page: groupId,
-      section: item.section || "",
-    }));
-    setSavingTab(groupId);
-    try {
-      await apiRequest("PUT", "/api/admin/content/bulk", { items: payload });
-      toast({ title: "Вкладка сохранена", description: `Обновлено полей: ${payload.length}` });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/content"] });
-      setDrafts((prev) => {
-        const next = { ...prev };
-        for (const item of group.items) delete next[item.key];
-        return next;
-      });
-    } catch (e: any) {
-      toast({ title: "Ошибка", description: e?.message || "Не удалось сохранить вкладку", variant: "destructive" });
-    } finally {
-      setSavingTab(null);
-    }
-  }
+  const q = query.trim().toLowerCase();
+  const activePage = CONTENT_PAGES.find((p) => p.id === pageId) || CONTENT_PAGES[0];
 
-  async function removeOne(key: string) {
-    if (!confirm(`Удалить сохранённый текст «${key}»? На сайте снова появится исходный вариант.`)) return;
-    try {
-      await apiRequest("DELETE", `/api/admin/content/${encodeURIComponent(key)}`);
-      toast({ title: "Сброшено", description: `«${key}» удалён, снова исходный текст` });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/content"] });
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-    } catch (e: any) {
-      toast({ title: "Ошибка", description: e?.message || "Не удалось удалить", variant: "destructive" });
-    }
-  }
+  const visiblePages = useMemo(() => {
+    const pages = q ? CONTENT_PAGES : [activePage];
+    return pages
+      .map((page) => {
+        const groups = CONTENT_GROUPS.filter((g) => page.groupIds.includes(g.id))
+          .map((g) => ({
+            ...g,
+            items: g.items.filter((item) => fieldMatches(item, q, currentValue(item.key))),
+          }))
+          .filter((g) => g.items.length > 0);
+        return { page, groups };
+      })
+      .filter((entry) => entry.groups.length > 0);
+  }, [activePage, q, drafts, byKey]);
 
-  const [newKey, setNewKey] = useState("");
-  const [newValue, setNewValue] = useState("");
-  const [newPage, setNewPage] = useState("");
-  const [newSection, setNewSection] = useState("");
-
-  async function saveCustom() {
-    const k = newKey.trim();
-    if (!k) {
-      toast({ title: "Ошибка", description: "Укажите ключ", variant: "destructive" });
-      return;
+  const searchHits = useMemo(() => {
+    if (!q) return 0;
+    let n = 0;
+    for (const g of CONTENT_GROUPS) {
+      for (const item of g.items) {
+        if (fieldMatches(item, q, currentValue(item.key))) n += 1;
+      }
     }
-    try {
-      await persist(k, newValue, newPage, newSection);
-      toast({ title: "Сохранено", description: `«${k}» создан` });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/content"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/content"] });
-      setNewKey(""); setNewValue(""); setNewPage(""); setNewSection("");
-    } catch (e: any) {
-      toast({ title: "Ошибка", description: e?.message || "Не удалось сохранить", variant: "destructive" });
-    }
-  }
+    return n;
+  }, [q, drafts, byKey]);
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Здесь можно править каждую фразу сайта. Пустое поле = исходный текст. Кнопка корзины возвращает исходный вариант.
-        «Сохранить вкладку» записывает все поля сразу.
-      </p>
-      <Tabs defaultValue={CONTENT_GROUPS[0].id} className="w-full">
-        <TabsList className="flex flex-wrap w-full justify-start h-auto">
-          {CONTENT_GROUPS.map((g) => {
-            const Icon = GROUP_ICONS[g.id];
-            const itemCount = g.items.filter((it) => byKey.has(it.key)).length;
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Найдите текст, который хотите поменять — например «Получить спецификацию»"
+          className="pl-9 h-11"
+        />
+      </div>
+      {q && (
+        <p className="text-sm text-muted-foreground">
+          Найдено: {searchHits}. Откройте нужную страницу слева или листайте список ниже.
+        </p>
+      )}
+
+      <div className="grid lg:grid-cols-[220px_1fr] gap-4">
+        <nav className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-1">
+          {CONTENT_PAGES.map((page) => {
+            const active = page.id === pageId;
             return (
-              <TabsTrigger key={g.id} value={g.id} className="gap-1.5">
-                {Icon && <Icon className="w-3.5 h-3.5" />}
-                {g.label}
-                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                  {itemCount}/{g.items.length}
-                </Badge>
-              </TabsTrigger>
+              <button
+                key={page.id}
+                type="button"
+                onClick={() => setPageId(page.id)}
+                className={`text-left rounded-lg px-3 py-2 text-sm whitespace-nowrap transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted text-foreground"
+                }`}
+              >
+                <div className="font-medium">{page.label}</div>
+                <div className={`text-[11px] leading-snug ${active ? "opacity-80" : "text-muted-foreground"}`}>
+                  {page.description}
+                </div>
+              </button>
             );
           })}
-          <TabsTrigger value="__custom" className="gap-1.5">
-            Свои ключи
-            <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-              {customItems.length}
-            </Badge>
-          </TabsTrigger>
-        </TabsList>
+        </nav>
 
-        {CONTENT_GROUPS.map((g) => (
-          <TabsContent key={g.id} value={g.id} className="space-y-3 mt-4">
-            <div className="flex justify-end">
-              <Button onClick={() => saveGroup(g.id)} disabled={savingTab === g.id}>
-                <Save className="w-4 h-4 mr-1" />
-                {savingTab === g.id ? "Сохранение..." : "Сохранить вкладку"}
-              </Button>
+        <div className="space-y-8 min-w-0">
+          {!q && (
+            <div>
+              <h3 className="text-lg font-semibold">{activePage.label}</h3>
+              <p className="text-sm text-muted-foreground">
+                Поменяли текст — он сам сохранится через секунду. «Как было» возвращает исходный вариант.
+              </p>
             </div>
-            {g.items.map((preset) => {
-              const existing = byKey.get(preset.key);
-              const dirty = isDirty(preset.key);
-              return (
-                <Card key={preset.key} className={dirty ? "border-primary/40" : ""}>
-                  <CardContent className="p-4 space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <Label className="text-sm font-semibold">{preset.label}</Label>
-                        <div className="flex flex-wrap gap-1.5 mt-1 items-center text-xs">
-                          <code className="bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{preset.key}</code>
-                          {preset.section && <Badge variant="outline" className="text-[10px]">{preset.section}</Badge>}
-                          {existing ? (
-                            <Badge variant="secondary" className="text-[10px]">сохранён</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px]">исходный текст</Badge>
-                          )}
-                          {dirty && <Badge className="text-[10px]">есть изменения</Badge>}
-                        </div>
-                        {preset.hint && (
-                          <p className="text-xs text-muted-foreground mt-1">{preset.hint}</p>
-                        )}
-                      </div>
-                      <div className="flex gap-1.5 flex-shrink-0">
-                        <Button
-                          size="sm"
-                          onClick={() => saveOne(preset, g.id)}
-                          disabled={!!saving[preset.key] || !dirty}
-                        >
-                          <Save className="w-3.5 h-3.5 mr-1" />
-                          Сохранить
-                        </Button>
-                        {existing && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => removeOne(preset.key)}
-                            title="Вернуть исходный текст"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    {preset.multiline ? (
-                      <Textarea
-                        value={currentValue(preset.key)}
-                        placeholder={preset.fallback || "Исходный текст"}
-                        rows={preset.rows || 4}
-                        onChange={(e) =>
-                          setDrafts((prev) => ({ ...prev, [preset.key]: e.target.value }))
-                        }
-                      />
-                    ) : (
-                      <Input
-                        value={currentValue(preset.key)}
-                        placeholder={preset.fallback || ""}
-                        onChange={(e) =>
-                          setDrafts((prev) => ({ ...prev, [preset.key]: e.target.value }))
-                        }
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </TabsContent>
-        ))}
-
-        <TabsContent value="__custom" className="space-y-3 mt-4">
-          <Card className="border-dashed">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                Добавить произвольный ключ
-              </CardTitle>
-              <CardDescription>
-                Для продвинутых сценариев. Используй ключи вида <code>page_section_field</code>.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid sm:grid-cols-3 gap-3">
-                <div>
-                  <Label className="text-xs">Ключ *</Label>
-                  <Input value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder="custom_key" />
-                </div>
-                <div>
-                  <Label className="text-xs">Страница</Label>
-                  <Input value={newPage} onChange={(e) => setNewPage(e.target.value)} placeholder="home" />
-                </div>
-                <div>
-                  <Label className="text-xs">Раздел</Label>
-                  <Input value={newSection} onChange={(e) => setNewSection(e.target.value)} placeholder="hero" />
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs">Содержимое</Label>
-                <Textarea value={newValue} onChange={(e) => setNewValue(e.target.value)} rows={3} />
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={saveCustom} disabled={!newKey.trim()}>
-                  <Save className="w-4 h-4 mr-1" />
-                  Создать
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {customItems.length === 0 ? (
-            <div className="text-sm text-muted-foreground text-center py-6">
-              Произвольных ключей нет.
-            </div>
-          ) : (
-            customItems.map((it) => {
-              const dirty = isDirty(it.key);
-              return (
-                <Card key={it.key} className={dirty ? "border-primary/40" : ""}>
-                  <CardContent className="p-4 space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <code className="text-sm font-semibold break-all">{it.key}</code>
-                        <div className="flex flex-wrap gap-1.5 mt-1 items-center text-xs">
-                          {it.page && <Badge variant="outline" className="text-[10px]">page: {it.page}</Badge>}
-                          {it.section && <Badge variant="outline" className="text-[10px]">{it.section}</Badge>}
-                          {dirty && <Badge className="text-[10px]">есть изменения</Badge>}
-                        </div>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <Button
-                          size="sm"
-                          onClick={() => saveOne({ key: it.key, section: it.section || undefined }, it.page || undefined)}
-                          disabled={!!saving[it.key] || !dirty}
-                        >
-                          <Save className="w-3.5 h-3.5 mr-1" />
-                          Сохранить
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => removeOne(it.key)}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                    <Textarea
-                      value={currentValue(it.key)}
-                      rows={3}
-                      onChange={(e) =>
-                        setDrafts((prev) => ({ ...prev, [it.key]: e.target.value }))
-                      }
-                    />
-                  </CardContent>
-                </Card>
-              );
-            })
           )}
-        </TabsContent>
-      </Tabs>
+
+          {visiblePages.length === 0 && (
+            <p className="text-sm text-muted-foreground">Ничего не нашли. Попробуйте другие слова с сайта.</p>
+          )}
+
+          {visiblePages.map(({ page, groups }) => (
+            <div key={page.id} className="space-y-6">
+              {q && <h3 className="text-lg font-semibold">{page.label}</h3>}
+              {groups.map((group) => {
+                const bySection = new Map<string, ContentField[]>();
+                for (const item of group.items) {
+                  const sid = item.section || group.id;
+                  const list = bySection.get(sid) || [];
+                  list.push(item);
+                  bySection.set(sid, list);
+                }
+                return Array.from(bySection.entries()).map(([sid, fields]) => (
+                  <section key={`${page.id}-${group.id}-${sid}`} className="space-y-3">
+                    <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                      {SECTION_LABELS[sid] || group.label}
+                    </h4>
+                    {fields.map((preset) => (
+                      <FieldEditor
+                        key={preset.key}
+                        preset={preset}
+                        value={currentValue(preset.key)}
+                        dirty={isDirty(preset.key)}
+                        customized={isCustomized(preset.key)}
+                        state={saveState[preset.key] || "idle"}
+                        onChange={(value) => onTextChange(preset.key, value, group.id, preset.section)}
+                        onBlur={() => {
+                          if (isDirty(preset.key)) void saveNow(preset.key, group.id, preset.section);
+                        }}
+                        onReset={() => resetOne(preset.key, preset.label)}
+                      />
+                    ))}
+                  </section>
+                ));
+              })}
+            </div>
+          ))}
+
+          {customItems.length > 0 && pageId === "nav" && !q && (
+            <section className="space-y-3">
+              <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Прочие записи</h4>
+              {customItems.map((it) => (
+                <FieldEditor
+                  key={it.key}
+                  preset={{ key: it.key, label: it.key, fallback: "" }}
+                  value={currentValue(it.key)}
+                  dirty={isDirty(it.key)}
+                  customized
+                  state={saveState[it.key] || "idle"}
+                  onChange={(value) => onTextChange(it.key, value, it.page || undefined, it.section || undefined)}
+                  onBlur={() => {
+                    if (isDirty(it.key)) void saveNow(it.key, it.page || undefined, it.section || undefined);
+                  }}
+                  onReset={() => resetOne(it.key, it.key)}
+                />
+              ))}
+            </section>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SaveMark({ state }: { state: SaveState }) {
+  if (state === "saving") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Сохраняю…
+      </span>
+    );
+  }
+  if (state === "saved") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+        <Check className="w-3 h-3" />
+        Сохранено
+      </span>
+    );
+  }
+  if (state === "error") {
+    return <span className="text-xs text-destructive">Не сохранилось</span>;
+  }
+  return null;
+}
+
+function FieldEditor({
+  preset,
+  value,
+  dirty,
+  customized,
+  state,
+  onChange,
+  onBlur,
+  onReset,
+}: {
+  preset: ContentField;
+  value: string;
+  dirty: boolean;
+  customized: boolean;
+  state: SaveState;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  onReset: () => void;
+}) {
+  const kind = getContentKind(preset.key);
+  return (
+    <div className={`rounded-xl border bg-background p-4 space-y-2 ${dirty ? "border-primary/50" : ""}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-medium text-sm">{preset.label}</div>
+          {preset.hint && kind === "text" && (
+            <p className="text-xs text-muted-foreground mt-0.5">{preset.hint.replace(/Формат:.*/i, "").trim()}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <SaveMark state={state} />
+          {(customized || dirty) && (
+            <Button type="button" size="sm" variant="ghost" onClick={onReset} title="Вернуть исходный текст">
+              <RotateCcw className="w-3.5 h-3.5 mr-1" />
+              Как было
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {kind === "list" && (
+        <ListEditor value={value} onChange={onChange} onBlur={onBlur} placeholder="Новый пункт" />
+      )}
+      {kind === "cards" && (
+        <CardsEditor value={value} onChange={onChange} onBlur={onBlur} />
+      )}
+      {(kind === "stats" || kind === "stats3") && (
+        <StatsEditor value={value} withDescription={kind === "stats3"} onChange={onChange} onBlur={onBlur} />
+      )}
+      {kind === "faq" && (
+        <FaqEditor value={value} onChange={onChange} onBlur={onBlur} />
+      )}
+      {kind === "text" && (
+        preset.multiline ? (
+          <Textarea
+            value={value}
+            placeholder={preset.fallback || "Текст на сайте"}
+            rows={preset.rows || 4}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
+          />
+        ) : (
+          <Input
+            value={value}
+            placeholder={preset.fallback || ""}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
+          />
+        )
+      )}
+    </div>
+  );
+}
+
+function ListEditor({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  placeholder: string;
+}) {
+  const items = parseLineList(value, true);
+  const rows = items.length === 0 ? [""] : items;
+  function update(next: string[]) {
+    onChange(serializeLineList(next.length ? next : [""]));
+  }
+  return (
+    <div className="space-y-2">
+      {rows.map((row, i) => (
+        <div key={i} className="flex gap-2">
+          <Input
+            value={row}
+            placeholder={placeholder}
+            onChange={(e) => {
+              const next = [...rows];
+              next[i] = e.target.value;
+              update(next);
+            }}
+            onBlur={onBlur}
+          />
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            onClick={() => {
+              const next = rows.filter((_, idx) => idx !== i);
+              update(next.length ? next : [""]);
+              onBlur();
+            }}
+            title="Убрать пункт"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      ))}
+      <Button type="button" size="sm" variant="outline" onClick={() => update([...rows, ""])}>
+        <Plus className="w-4 h-4 mr-1" />
+        Добавить пункт
+      </Button>
+    </div>
+  );
+}
+
+function CardsEditor({
+  value,
+  onChange,
+  onBlur,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+}) {
+  const items = parseTitleDescLines(value, true);
+  const rows = items.length === 0 ? [{ title: "", description: "" }] : items;
+  function update(next: { title: string; description: string }[]) {
+    onChange(serializeTitleDescLines(next));
+  }
+  return (
+    <div className="space-y-3">
+      {rows.map((row, i) => (
+        <div key={i} className="rounded-lg border p-3 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">Карточка {i + 1}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                const next = rows.filter((_, idx) => idx !== i);
+                update(next.length ? next : [{ title: "", description: "" }]);
+                onBlur();
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Убрать
+            </Button>
+          </div>
+          <Input
+            value={row.title}
+            placeholder="Заголовок"
+            onChange={(e) => {
+              const next = [...rows];
+              next[i] = { ...row, title: e.target.value };
+              update(next);
+            }}
+            onBlur={onBlur}
+          />
+          <Textarea
+            value={row.description}
+            placeholder="Короткое описание"
+            rows={2}
+            onChange={(e) => {
+              const next = [...rows];
+              next[i] = { ...row, description: e.target.value };
+              update(next);
+            }}
+            onBlur={onBlur}
+          />
+        </div>
+      ))}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => update([...rows, { title: "", description: "" }])}
+      >
+        <Plus className="w-4 h-4 mr-1" />
+        Добавить карточку
+      </Button>
+    </div>
+  );
+}
+
+function StatsEditor({
+  value,
+  withDescription,
+  onChange,
+  onBlur,
+}: {
+  value: string;
+  withDescription: boolean;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+}) {
+  const items = parseStatLines(value, true);
+  const rows = items.length === 0 ? [{ value: "", label: "", description: "" }] : items;
+  function update(next: { value: string; label: string; description?: string }[]) {
+    onChange(serializeStatLines(next, withDescription));
+  }
+  return (
+    <div className="space-y-3">
+      {rows.map((row, i) => (
+        <div key={i} className="rounded-lg border p-3 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">Цифра {i + 1}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                const next = rows.filter((_, idx) => idx !== i);
+                update(next.length ? next : [{ value: "", label: "", description: "" }]);
+                onBlur();
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Убрать
+            </Button>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2">
+            <Input
+              value={row.value}
+              placeholder="15+"
+              onChange={(e) => {
+                const next = [...rows];
+                next[i] = { ...row, value: e.target.value };
+                update(next);
+              }}
+              onBlur={onBlur}
+            />
+            <Input
+              value={row.label}
+              placeholder="Лет опыта"
+              onChange={(e) => {
+                const next = [...rows];
+                next[i] = { ...row, label: e.target.value };
+                update(next);
+              }}
+              onBlur={onBlur}
+            />
+          </div>
+          {withDescription && (
+            <Input
+              value={row.description || ""}
+              placeholder="Короткое пояснение"
+              onChange={(e) => {
+                const next = [...rows];
+                next[i] = { ...row, description: e.target.value };
+                update(next);
+              }}
+              onBlur={onBlur}
+            />
+          )}
+        </div>
+      ))}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => update([...rows, { value: "", label: "", description: "" }])}
+      >
+        <Plus className="w-4 h-4 mr-1" />
+        Добавить цифру
+      </Button>
+    </div>
+  );
+}
+
+function FaqEditor({
+  value,
+  onChange,
+  onBlur,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+}) {
+  const items = parseFaqText(value, true);
+  const rows: FaqParsedItem[] = items.length === 0 ? [{ category: "Общие вопросы", question: "", answer: "" }] : items;
+  function update(next: FaqParsedItem[]) {
+    onChange(serializeFaqText(next));
+  }
+  return (
+    <div className="space-y-3">
+      {rows.map((row, i) => (
+        <div key={i} className="rounded-lg border p-3 space-y-2">
+          <div className="flex justify-between items-center gap-2">
+            <Input
+              value={row.category}
+              placeholder="Раздел, например «Покупка»"
+              onChange={(e) => {
+                const next = [...rows];
+                next[i] = { ...row, category: e.target.value };
+                update(next);
+              }}
+              onBlur={onBlur}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                const next = rows.filter((_, idx) => idx !== i);
+                update(next.length ? next : [{ category: "Общие вопросы", question: "", answer: "" }]);
+                onBlur();
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Убрать
+            </Button>
+          </div>
+          <Input
+            value={row.question}
+            placeholder="Вопрос"
+            onChange={(e) => {
+              const next = [...rows];
+              next[i] = { ...row, question: e.target.value };
+              update(next);
+            }}
+            onBlur={onBlur}
+          />
+          <Textarea
+            value={row.answer}
+            placeholder="Ответ"
+            rows={3}
+            onChange={(e) => {
+              const next = [...rows];
+              next[i] = { ...row, answer: e.target.value };
+              update(next);
+            }}
+            onBlur={onBlur}
+          />
+        </div>
+      ))}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() =>
+          update([...rows, { category: rows[rows.length - 1]?.category || "Общие вопросы", question: "", answer: "" }])
+        }
+      >
+        <Plus className="w-4 h-4 mr-1" />
+        Добавить вопрос
+      </Button>
     </div>
   );
 }

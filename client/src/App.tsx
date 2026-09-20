@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Navigation } from "@/components/navigation";
@@ -10,7 +10,9 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import NotFound from "@/pages/not-found";
 import { CookieBanner } from "@/components/cookie-banner";
+import { SiteLocked } from "@/components/site-locked";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useSiteAccess } from "@/hooks/useSiteAccess";
 
 // PERF: без разделения кода вся админка (~275 КБ исходника), личный кабинет
 // и юридические страницы попадали в один бандл, который скачивал каждый
@@ -36,6 +38,16 @@ function RouteFallback() {
   );
 }
 
+/**
+ * Регистрацию можно закрыть из админки. Прямой заход на /register в этом
+ * случае показывает вход, а не форму создания аккаунта.
+ */
+function RegisterRoute() {
+  const { access, isLoading } = useSiteAccess();
+  if (isLoading) return <RouteFallback />;
+  return access.registrationEnabled ? <Register /> : <Login />;
+}
+
 function Router() {
   return (
     <Suspense fallback={<RouteFallback />}>
@@ -45,7 +57,7 @@ function Router() {
         <Route path="/faq" component={FAQ} />
         <Route path="/contacts" component={Contacts} />
         <Route path="/login" component={Login} />
-        <Route path="/register" component={Register} />
+        <Route path="/register" component={RegisterRoute} />
         <Route path="/profile" component={Profile} />
         <Route path="/admin" component={Admin} />
         <Route path="/specifications" component={Specifications} />
@@ -78,8 +90,38 @@ function ScrollToTopOnRouteChange() {
   return null;
 }
 
+/**
+ * Пока в админке включён закрытый режим, анонимный посетитель видит только
+ * форму входа. Это дубль серверной проверки (см. server/siteAccess.ts):
+ * здесь — чтобы не мигало содержимое, там — чтобы данные реально не отдавались.
+ */
+function useIsAuthenticated(enabled: boolean) {
+  return useQuery({
+    queryKey: ["/api/auth/me"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data?.user ?? null;
+    },
+    enabled,
+    retry: false,
+    staleTime: 60 * 1000,
+  });
+}
+
 function AppContent() {
   usePageTitle();
+  const { access, isLoading: accessLoading } = useSiteAccess();
+  const { data: currentUser, isLoading: userLoading } = useIsAuthenticated(access.privateMode);
+
+  if (accessLoading || (access.privateMode && userLoading)) {
+    return <RouteFallback />;
+  }
+
+  if (access.privateMode && !currentUser) {
+    return <SiteLocked notice={access.notice} />;
+  }
 
   return (
     <>

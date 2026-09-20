@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useSiteContent } from "@/hooks/useSiteContent";
+import { useSiteAccess } from "@/hooks/useSiteAccess";
 
 interface User {
   id: string;
@@ -42,6 +43,7 @@ const navLinkDefs = [
 
 export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availableDeviceIds = [] }: NavigationProps = {}) {
   const { t } = useSiteContent();
+  const { access } = useSiteAccess();
   const navLinks = navLinkDefs.map((link) => ({ id: link.id, label: t(link.key) }));
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -393,13 +395,15 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                   >
                     {t("nav_login")}
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => setLocation("/register")}
-                    className="hidden lg:flex text-sm h-9"
-                  >
-                    {t("nav_register")}
-                  </Button>
+                  {access.registrationEnabled && (
+                    <Button
+                      size="sm"
+                      onClick={() => setLocation("/register")}
+                      className="hidden lg:flex text-sm h-9"
+                    >
+                      {t("nav_register")}
+                    </Button>
+                  )}
                 </>
               )}
 
@@ -521,15 +525,17 @@ export function Navigation({ selectedDevice = "nu-100", onDeviceChange, availabl
                   >
                     {t("nav_login")}
                   </Button>
-                  <Button
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      setLocation("/register");
-                    }}
-                    className="w-full h-12 text-base rounded-xl"
-                  >
-                    {t("nav_register")}
-                  </Button>
+                  {access.registrationEnabled && (
+                    <Button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setLocation("/register");
+                      }}
+                      className="w-full h-12 text-base rounded-xl"
+                    >
+                      {t("nav_register")}
+                    </Button>
+                  )}
                 </div>
               )}
             </div>

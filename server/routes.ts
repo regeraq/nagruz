@@ -31,6 +31,13 @@ import { rateLimiters } from "./rateLimiter";
 import { cache, CACHE_TTL } from "./cache";
 import { csrfProtection } from "./csrf";
 import { bruteForceProtection, recordLoginAttempt, checkBruteForce } from "./middleware/bruteForce";
+import {
+  enforceSiteAccess,
+  getSiteAccessState,
+  invalidateSiteAccessCache,
+  DEFAULT_PRIVATE_NOTICE,
+  SITE_ACCESS_KEYS,
+} from "./siteAccess";
 import { randomBytes } from "crypto";
 
 // Import new API routes
@@ -182,14 +189,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * PUBLIC: состояние доступа к сайту. Нужен до входа, поэтому открыт всегда
+   * и не раскрывает ничего, кроме факта «сайт закрыт» и текста заглушки.
+   */
+  app.get("/api/site-access", async (_req, res) => {
+    const state = await getSiteAccessState();
+    res.json({
+      success: true,
+      privateMode: state.privateMode,
+      registrationEnabled: state.registrationEnabled && !state.privateMode,
+      notice: state.notice,
+    });
+  });
+
+  // Закрытый режим: всё, кроме входа, недоступно анонимным посетителям.
+  app.use("/api", enforceSiteAccess);
+
   // Serve sitemap.xml for SEO
-  app.get("/sitemap.xml", (req, res) => {
+  app.get("/sitemap.xml", async (req, res) => {
+    // В закрытом режиме карта сайта не нужна: страницы всё равно не отдаются.
+    const { privateMode } = await getSiteAccessState();
+    if (privateMode) {
+      res.status(404).send('Sitemap not found');
+      return;
+    }
     res.setHeader('Content-Type', 'application/xml');
     res.sendFile('sitemap.xml', { root: './client/public' }, (err) => {
       if (err) {
         console.error('Error serving sitemap:', err);
         res.status(404).send('Sitemap not found');
       }
+    });
+  });
+
+  /**
+   * robots.txt: в закрытом режиме запрещаем индексацию целиком, чтобы сайт
+   * не попадал в выдачу, пока идут работы.
+   */
+  app.get("/robots.txt", async (_req, res) => {
+    const { privateMode } = await getSiteAccessState();
+    res.type('text/plain');
+    if (privateMode) {
+      res.send('User-agent: *\nDisallow: /\n');
+      return;
+    }
+    res.sendFile('robots.txt', { root: './client/public' }, (err) => {
+      if (err) res.send('User-agent: *\nAllow: /\n');
     });
   });
 
@@ -1534,6 +1580,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/register", csrfProtection, rateLimiters.auth, async (req, res) => {
     try {
       const { email, password, firstName, lastName, phone } = req.body;
+
+      // Закрытый режим / выключенная регистрация: новые аккаунты не создаём.
+      // Проверка именно здесь, а не только в UI — форму легко обойти запросом.
+      const access = await getSiteAccessState();
+      if (access.privateMode || !access.registrationEnabled) {
+        res.status(403).json({
+          success: false,
+          code: "REGISTRATION_CLOSED",
+          message: access.privateMode
+            ? access.notice
+            : "Регистрация новых пользователей временно закрыта",
+        });
+        return;
+      }
 
       if (!email || !password) {
         res.status(400).json({ success: false, message: "Email and password required" });
@@ -3523,6 +3583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       const saved = await storage.setSiteSettingsBulk(parsed.data.settings, req.user!.id);
+      invalidateSiteAccessCache();
       res.json({ success: true, settings: saved });
     } catch (error) {
       console.error("Bulk update settings error:", error);
@@ -3546,6 +3607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const { value, type, description } = parsed.data;
       const setting = await storage.setSiteSetting(req.params.key, value, type, description, req.user!.id);
+      invalidateSiteAccessCache();
       res.json({ success: true, setting });
     } catch (error) {
       console.error("Update setting error:", error);

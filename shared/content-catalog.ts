@@ -20,6 +20,70 @@ export type ContentGroupDef = {
   items: ContentField[];
 };
 
+export type ContentKind = "text" | "list" | "cards" | "stats" | "stats3" | "faq";
+
+export type ContentPageDef = {
+  id: string;
+  label: string;
+  description: string;
+  groupIds: string[];
+};
+
+/** Страницы так, как их видит человек на сайте — не технические блоки. */
+export const CONTENT_PAGES: ContentPageDef[] = [
+  { id: "home", label: "Главная", description: "Первая страница, сверху вниз", groupIds: ["home", "home_sections", "home_contact"] },
+  { id: "about", label: "О компании", description: "Страница «О компании»", groupIds: ["about"] },
+  { id: "faq", label: "Вопросы и ответы", description: "Страница с вопросами", groupIds: ["faq"] },
+  { id: "contacts", label: "Контакты", description: "Страница «Контакты»", groupIds: ["contacts"] },
+  { id: "nav", label: "Меню сверху", description: "Кнопки в шапке на всех страницах", groupIds: ["nav"] },
+  { id: "footer", label: "Подвал", description: "Низ каждой страницы", groupIds: ["footer"] },
+  { id: "legal", label: "Документы", description: "Политики и оферта", groupIds: ["legal"] },
+  { id: "errors", label: "Страница не найдена", description: "Что видит человек, если ссылка битая", groupIds: ["errors"] },
+];
+
+export const SECTION_LABELS: Record<string, string> = {
+  nav: "Пункты меню",
+  hero: "Самый верх страницы",
+  purpose: "Блок «Назначение»",
+  benefits: "Преимущества",
+  specs: "Характеристики",
+  delivery: "Что входит в комплект",
+  docs: "Документы и сертификаты",
+  gallery: "Фотографии",
+  apps: "Где применяют",
+  about: "О компании",
+  contact: "Форма заявки",
+  footer: "Подвал",
+  intro: "Заголовок страницы",
+  cards: "Карточки",
+  map: "Карта",
+  info: "Режим работы и доп. контакты",
+  form: "Форма на странице",
+  privacy: "Политика конфиденциальности",
+  processing: "Политика обработки данных",
+  offer: "Публичная оферта",
+  "404": "Сообщение об ошибке",
+  faq: "Список вопросов",
+};
+
+const KIND_BY_KEY: Record<string, ContentKind> = {
+  home_purpose_params: "list",
+  home_advantages: "cards",
+  home_delivery_equipment: "list",
+  home_delivery_docs: "list",
+  home_docs_certs: "cards",
+  home_applications: "cards",
+  home_about_stats: "stats",
+  about_values: "list",
+  about_stats: "stats3",
+  about_clients_industries: "list",
+  faq_items: "faq",
+};
+
+export function getContentKind(key: string): ContentKind {
+  return KIND_BY_KEY[key] || "text";
+}
+
 export const CONTENT_GROUPS: ContentGroupDef[] = [
   {
     id: "nav",
@@ -405,31 +469,81 @@ export function interpolate(
   });
 }
 
-export function parseLineList(text: string): string[] {
-  return text
+export function parseLineList(text: string, keepEmpty = false): string[] {
+  const rows = text
     .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*[-•]\s*/, "").trim())
-    .filter(Boolean);
+    .map((line) => line.replace(/^\s*[-•]\s*/, "").trim());
+  if (keepEmpty) return rows.length ? rows : [""];
+  return rows.filter(Boolean);
 }
 
-export function parseTitleDescLines(text: string): { title: string; description: string }[] {
-  return parseLineList(text).map((line) => {
+export function parseTitleDescLines(text: string, keepEmpty = false): { title: string; description: string }[] {
+  const source = keepEmpty
+    ? (text.length ? text.split(/\r?\n/) : [""])
+    : parseLineList(text);
+  const rows = source.map((line) => {
     const sep = line.includes(" | ") ? " | " : "|";
     const [title, ...rest] = line.split(sep);
     return { title: (title || "").trim(), description: rest.join(sep).trim() };
-  }).filter((row) => row.title);
+  });
+  if (keepEmpty) return rows.length ? rows : [{ title: "", description: "" }];
+  return rows.filter((row) => row.title);
 }
 
-export function parseStatLines(text: string): { value: string; label: string; description?: string }[] {
-  return parseLineList(text).map((line) => {
+export function parseStatLines(text: string, keepEmpty = false): { value: string; label: string; description?: string }[] {
+  const source = keepEmpty
+    ? (text.length ? text.split(/\r?\n/) : [""])
+    : parseLineList(text);
+  const rows = source.map((line) => {
     const parts = line.split("|").map((p) => p.trim());
     return { value: parts[0] || "", label: parts[1] || "", description: parts[2] };
-  }).filter((row) => row.value || row.label);
+  });
+  if (keepEmpty) return rows.length ? rows : [{ value: "", label: "", description: "" }];
+  return rows.filter((row) => row.value || row.label);
 }
 
 export type FaqParsedItem = { category: string; question: string; answer: string };
 
-export function parseFaqText(text: string): FaqParsedItem[] {
+export function serializeLineList(items: string[]): string {
+  return items.map((s) => s.replace(/^\s*[-•]\s*/, "")).join("\n");
+}
+
+export function serializeTitleDescLines(items: { title: string; description: string }[]): string {
+  return items
+    .map((row) => `${(row.title || "").trim()} | ${(row.description || "").trim()}`)
+    .join("\n");
+}
+
+export function serializeStatLines(items: { value: string; label: string; description?: string }[], withDescription = false): string {
+  return items
+    .map((row) => {
+      const value = (row.value || "").trim();
+      const label = (row.label || "").trim();
+      const description = (row.description || "").trim();
+      const parts = [value, label];
+      if (withDescription || description) parts.push(description);
+      return parts.join("|");
+    })
+    .join("\n");
+}
+
+export function serializeFaqText(items: FaqParsedItem[]): string {
+  const lines: string[] = [];
+  let lastCategory = "";
+  for (const item of items) {
+    const category = (item.category || "").trim() || "Общие вопросы";
+    const question = (item.question || "").trim();
+    const answer = (item.answer || "").trim();
+    if (category !== lastCategory) {
+      lines.push(`# ${category}`);
+      lastCategory = category;
+    }
+    lines.push(`${question} || ${answer}`);
+  }
+  return lines.join("\n");
+}
+
+export function parseFaqText(text: string, keepEmpty = false): FaqParsedItem[] {
   const items: FaqParsedItem[] = [];
   let category = "Общие вопросы";
   for (const raw of text.split(/\r?\n/)) {
@@ -444,7 +558,12 @@ export function parseFaqText(text: string): FaqParsedItem[] {
     const answer = rest.join(sep).trim();
     if (question?.trim() && answer) {
       items.push({ category, question: question.trim(), answer });
+    } else if (keepEmpty) {
+      items.push({ category, question: (question || "").trim(), answer });
     }
+  }
+  if (keepEmpty && items.length === 0) {
+    items.push({ category: "Общие вопросы", question: "", answer: "" });
   }
   return items;
 }

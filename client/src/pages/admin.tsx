@@ -21,7 +21,7 @@ import {
   Save, X, Search, Shield, Tag, Mail, UserPlus, Image, Bell, Upload, Database, Download,
   FileText as FileTextIcon, Phone, Cookie, CheckCircle, TrendingUp, Activity,
   Crown, Zap, ChevronRight, Eye, Clock, AlertTriangle, Home, LogOut,
-  DollarSign, ShoppingCart, UserCheck, Sparkles
+  DollarSign, ShoppingCart, UserCheck, Sparkles, Lock
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
@@ -32,6 +32,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar } from "rec
 import { SpecGroupsEditor } from "@/components/admin/spec-groups-editor";
 import { UserDetailDialog } from "@/components/admin/user-detail-dialog";
 import { ContentManager } from "@/components/admin/content-manager";
+import { AccessManager } from "@/components/admin/access-manager";
 import { AdvantagesEditor } from "@/components/admin/advantages-editor";
 import type { ProductAdvantage } from "@shared/schema";
 import {
@@ -1156,7 +1157,8 @@ export default function Admin() {
     { id: "orders", label: "Заказы", icon: ShoppingCart, color: "from-emerald-500 to-teal-500", badge: allOrders.length },
     { id: "contacts", label: "Заявки", icon: Mail, color: "from-pink-500 to-rose-500", badge: contactSubmissions.length },
     { id: "promocodes", label: "Промокоды", icon: Tag, color: "from-lime-500 to-green-500" },
-    { id: "content", label: "Контент", icon: FileTextIcon, color: "from-slate-500 to-gray-600" },
+    { id: "access", label: "Доступ к сайту", icon: Lock, color: "from-amber-500 to-orange-600" },
+    { id: "content", label: "Тексты сайта", icon: FileTextIcon, color: "from-slate-500 to-gray-600" },
     { id: "site-contacts", label: "Контакты сайта", icon: Phone, color: "from-teal-500 to-cyan-500" },
     { id: "compliance", label: "Compliance", icon: Cookie, color: "from-orange-500 to-amber-500" },
     { id: "privacy", label: "Политика", icon: Shield, color: "from-red-500 to-rose-500" },
@@ -4016,6 +4018,34 @@ export default function Admin() {
               </div>
             )}
 
+            {/* Site Access Section */}
+            {activeTab === "access" && (
+              <div className="space-y-6">
+                <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500" />
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg">
+                        <Lock className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl">Доступ к сайту</CardTitle>
+                        <CardDescription>
+                          Закрыть сайт от посторонних на время работ: видно только окно входа.
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <AccessManager
+                      settings={(settingsData?.settings as any[]) || []}
+                      registeredUsers={allUsers.length}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
             {/* Content Section */}
             {activeTab === "content" && (
               <div className="space-y-6">
@@ -4027,9 +4057,9 @@ export default function Admin() {
                         <FileTextIcon className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <CardTitle className="text-xl">Управление контентом сайта</CardTitle>
+                        <CardTitle className="text-xl">Тексты сайта</CardTitle>
                         <CardDescription>
-                          Каждая фраза сайта — отдельное поле. Сохраните вкладку, обновите страницу сайта: текст меняется без правки кода.
+                          Выберите страницу слева или найдите фразу сверху. Поменяли — само сохранилось. «Как было» возвращает исходный текст.
                         </CardDescription>
                       </div>
                     </div>
@@ -4231,7 +4261,12 @@ export default function Admin() {
                 <Button
                   onClick={async () => {
                     try {
-                      const res = await apiRequest("PUT", "/api/admin/cookie-settings", cookieSettings);
+                      const res = await apiRequest("PUT", "/api/admin/cookie-settings", {
+                        enabled: cookieSettings.enabled,
+                        message: cookieSettings.message || "",
+                        acceptButtonText: cookieSettings.acceptButtonText || "",
+                        declineButtonText: cookieSettings.declineButtonText || "",
+                      });
                       if (!res.ok) throw new Error("Failed to save settings");
                       toast({ title: "Успешно", description: "Настройки сохранены" });
                       queryClient.invalidateQueries({ queryKey: ["/api/admin/cookie-settings"] });
