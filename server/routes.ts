@@ -13,7 +13,10 @@ import {
 } from "./authCookies";
 import {
   insertContactSubmissionSchema,
-  insertOrderSchema,
+  createOrderRequestSchema,
+  isOrderStatus,
+  ORDER_STATUSES,
+  validatePasswordStrength,
   adminCreateProductSchema,
   adminUpdateProductSchema,
 } from "@shared/schema";
@@ -57,6 +60,23 @@ import {
 // Хардкод-фолбэка здесь быть не должно: при незаданном OWNER_EMAIL заявки
 // с персональными данными клиентов уходили бы на чужой посторонний ящик.
 const OWNER_EMAIL = process.env.OWNER_EMAIL || "";
+
+// COMPLIANCE (152-ФЗ ст.9): текст согласия хранится вместе с записью о нём,
+// поэтому он должен быть один на все точки, где согласие принимается.
+const PERSONAL_DATA_CONSENT_TEXT =
+  "Согласие на обработку персональных данных, Политика обработки данных и Политика конфиденциальности";
+
+/** Срок жизни ссылки подтверждения e-mail — сутки. */
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Отладочный вывод каталога. На проде он писал строку по каждому товару и
+ * каждой картинке на каждый запрос — логи распухали, полезное в них тонуло.
+ */
+const isDebugLogging = process.env.NODE_ENV !== "production";
+function debugLog(...args: unknown[]): void {
+  if (isDebugLogging) console.log(...args);
+}
 
 if (!OWNER_EMAIL) {
   const message =
@@ -510,8 +530,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileData: null, // Don't save in old fields
       };
       const submission = await storage.createContactSubmission(submissionData);
-      
+
+      // COMPLIANCE (152-ФЗ): фиксируем согласие, а не только проверяем флаг —
+      // иначе доказать факт согласия по заявке нечем.
+      storage
+        .createPersonalDataConsent({
+          userId,
+          consentType: "contact",
+          isConsented: true,
+          consentText: PERSONAL_DATA_CONSENT_TEXT,
+          ipAddress: getClientIp(req),
+          userAgent: req.headers["user-agent"] || undefined,
+        })
+        .catch((err) => console.error("Failed to record contact consent:", err));
+
       // Save files to new table if provided
+      let filesFailed = false;
       if (isFileUploadEnabled && filesToProcess.length > 0) {
         try {
           const { fileService } = await import("./services/files");
@@ -539,7 +573,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (fileError) {
           console.error("❌ [Contact] Error saving files to new table:", fileError);
-          // Continue - submission is already created
+          // Заявку не откатываем — текст обращения важнее вложений. Но клиент
+          // должен узнать, что файлы не приняты, иначе он будет уверен, что мы
+          // их получили.
+          filesFailed = true;
         }
       }
       
@@ -759,8 +796,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json({
         success: true,
-        message: "Спасибо за вашу заявку! Мы свяжемся с вами в ближайшее время.",
+        message: filesFailed
+          ? "Заявка принята, но приложенные файлы сохранить не удалось — пришлите их ответом на письмо."
+          : "Спасибо за вашу заявку! Мы свяжемся с вами в ближайшее время.",
         submissionId: submission.id,
+        filesFailed,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -825,13 +865,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let products: any[] | null = cacheBust ? null : (cache.get(cacheKey) as any[] | undefined) || null;
       
       if (!products) {
-        console.log(`📦 [GET /api/products] Cache miss${cacheBust ? ' (cache bust)' : ''}, fetching from DB`);
+        debugLog(`📦 [GET /api/products] Cache miss${cacheBust ? ' (cache bust)' : ''}, fetching from DB`);
         const allProducts = await storage.getProducts();
-        console.log(`📦 [GET /api/products] Got ${allProducts.length} total products from DB`);
+        debugLog(`📦 [GET /api/products] Got ${allProducts.length} total products from DB`);
         
         // FIXED: Log product IDs for debugging
         if (allProducts.length > 0) {
-          console.log(`📦 [GET /api/products] Product IDs:`, allProducts.map((p: any) => ({ id: p.id, name: p.name, isActive: p.isActive })));
+          debugLog(`📦 [GET /api/products] Product IDs:`, allProducts.map((p: any) => ({ id: p.id, name: p.name, isActive: p.isActive })));
           
           // FIXED: Check for expected products (nu-100, nu-200, nu-30)
           const expectedIds = ['nu-100', 'nu-200', 'nu-30'];
@@ -906,7 +946,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         });
         
-        console.log(`✅ [GET /api/products] Parsed ${products.length} active products, setting cache`);
+        debugLog(`✅ [GET /api/products] Parsed ${products.length} active products, setting cache`);
         
         // FIXED: Warn if no active products found
         if (products.length === 0 && allProducts.length > 0) {
@@ -919,7 +959,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cache.set(cacheKey, products, CACHE_TTL.PRODUCTS);
         }
       } else {
-        console.log(`⚡ [GET /api/products] Using cached products (${products?.length || 0} items)`);
+        debugLog(`⚡ [GET /api/products] Using cached products (${products?.length || 0} items)`);
       }
       
       // Ensure products is always an array before sending
@@ -928,7 +968,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log images for debugging
       safeProducts.forEach((p: any) => {
         if (p.images && p.images.length > 0) {
-          console.log(`🖼️ [GET /api/products] Product ${p.id} has ${p.images.length} images`);
+          debugLog(`🖼️ [GET /api/products] Product ${p.id} has ${p.images.length} images`);
         }
       });
       
@@ -984,14 +1024,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const cacheKey = `product-images-${productId}`;
     const cacheBust = req.query._t || req.query.timestamp;
     
-    console.log(`🖼️ [${requestId}] GET /api/products/${productId}/images - PUBLIC request`);
+    debugLog(`🖼️ [${requestId}] GET /api/products/${productId}/images - PUBLIC request`);
     
     try {
       // Check cache first (unless cache bust requested)
       if (!cacheBust) {
         const cachedImages = cache.get(cacheKey);
         if (cachedImages) {
-          console.log(`⚡ [${requestId}] Using cached images for ${productId}`);
+          debugLog(`⚡ [${requestId}] Using cached images for ${productId}`);
           res.setHeader('Cache-Control', 'public, max-age=300');
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('X-Cache', 'HIT');
@@ -1003,18 +1043,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const product = await storage.getProduct(productId);
       
       if (!product) {
-        console.log(`❌ [${requestId}] Product not found: ${productId}`);
+        debugLog(`❌ [${requestId}] Product not found: ${productId}`);
         res.status(404).json({ success: false, message: "Товар не найден", images: [] });
         return;
       }
       
-      console.log(`📦 [${requestId}] Product found: ${product.name}, isActive: ${product.isActive}`);
+      debugLog(`📦 [${requestId}] Product found: ${product.name}, isActive: ${product.isActive}`);
       
       // Parse images - robust handling of different formats
       let parsedImages: string[] = [];
       
       if (product.images) {
-        console.log(`📷 [${requestId}] Raw images field type: ${typeof product.images}`);
+        debugLog(`📷 [${requestId}] Raw images field type: ${typeof product.images}`);
         
         if (typeof product.images === 'string') {
           const trimmed = product.images.trim();
@@ -1025,25 +1065,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const parsed = JSON.parse(trimmed);
                 if (Array.isArray(parsed)) {
                   parsedImages = parsed;
-                  console.log(`✅ [${requestId}] Parsed JSON array with ${parsed.length} images`);
+                  debugLog(`✅ [${requestId}] Parsed JSON array with ${parsed.length} images`);
                 }
               } catch (e) {
                 // Not valid JSON, treat as single URL
                 parsedImages = [trimmed];
-                console.log(`⚠️ [${requestId}] JSON parse failed, treating as single URL`);
+                debugLog(`⚠️ [${requestId}] JSON parse failed, treating as single URL`);
               }
             } else {
               // Single image URL
               parsedImages = [trimmed];
-              console.log(`📷 [${requestId}] Single image URL detected`);
+              debugLog(`📷 [${requestId}] Single image URL detected`);
             }
           }
         } else if (Array.isArray(product.images)) {
           parsedImages = product.images;
-          console.log(`✅ [${requestId}] Images already array with ${parsedImages.length} items`);
+          debugLog(`✅ [${requestId}] Images already array with ${parsedImages.length} items`);
         }
       } else {
-        console.log(`📷 [${requestId}] No images field in product`);
+        debugLog(`📷 [${requestId}] No images field in product`);
       }
       
       // Include imageUrl at the beginning if not already present
@@ -1051,7 +1091,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const mainImg = product.imageUrl.trim();
         if (mainImg.length > 0 && !parsedImages.includes(mainImg)) {
           parsedImages.unshift(mainImg);
-          console.log(`➕ [${requestId}] Added imageUrl to beginning`);
+          debugLog(`➕ [${requestId}] Added imageUrl to beginning`);
         }
       }
       
@@ -1062,12 +1102,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Must be non-empty and start with valid prefix
         const isValid = s.length > 0 && (s.startsWith('http') || s.startsWith('data:') || s.startsWith('/'));
         if (!isValid && s.length > 0) {
-          console.log(`⚠️ [${requestId}] Skipping invalid image URL: ${s.substring(0, 50)}...`);
+          debugLog(`⚠️ [${requestId}] Skipping invalid image URL: ${s.substring(0, 50)}...`);
         }
         return isValid;
       }).map(img => img.trim());
       
-      console.log(`✅ [${requestId}] Returning ${validImages.length} valid images for product ${productId}`);
+      debugLog(`✅ [${requestId}] Returning ${validImages.length} valid images for product ${productId}`);
       
       // Cache the result for 5 minutes (images don't change often)
       if (!cacheBust && validImages.length > 0) {
@@ -1091,7 +1131,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const product = await storage.getProduct(req.params.id);
       
-      if (!product) {
+      // Список каталога фильтрует неактивные товары, а получение по id — нет:
+      // снятая с витрины модель оставалась доступной по старой ссылке.
+      if (!product || !product.isActive) {
         res.status(404).json({
           success: false,
           message: "Товар не найден",
@@ -1206,49 +1248,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
-      const validatedData = insertOrderSchema.parse(req.body);
-      
-      // FIXED: Add userId to order
-      const orderDataWithUserId = {
-        ...validatedData,
+      const validatedData = createOrderRequestSchema.parse(req.body);
+
+      // Суммы, скидка, статус оплаты и резерв считаются внутри транзакции по
+      // данным БД — из запроса берутся только товар, количество и контакты.
+      const result = await storage.createOrder({
         userId,
-      };
-      
-      const product = await storage.getProduct(orderDataWithUserId.productId);
-      if (!product) {
-        res.status(404).json({
+        productId: validatedData.productId,
+        quantity: validatedData.quantity,
+        paymentMethod: validatedData.paymentMethod,
+        promoCode: validatedData.promoCode ?? null,
+        customerName: validatedData.customerName,
+        customerEmail: validatedData.customerEmail,
+        customerPhone: validatedData.customerPhone,
+      });
+
+      if (!result.ok) {
+        const messages: Record<string, string> = {
+          PRODUCT_NOT_FOUND: "Товар не найден",
+          PRODUCT_INACTIVE: "Товар недоступен для заказа",
+          OUT_OF_STOCK: `Недостаточно товара на складе. Доступно: ${result.available ?? 0} шт.`,
+          PROMO_INVALID: "Промокод недействителен или истёк",
+          PRICE_INVALID: "Некорректная цена товара, обратитесь к менеджеру",
+        };
+        res.status(result.code === "PRODUCT_NOT_FOUND" ? 404 : 400).json({
           success: false,
-          message: "Товар не найден",
+          code: result.code,
+          message: messages[result.code],
         });
         return;
       }
 
-      // FIXED: Check if enough stock available
-      if (product.stock < orderDataWithUserId.quantity) {
-        res.status(400).json({
-          success: false,
-          message: `Недостаточно товара на складе. Доступно: ${product.stock} шт.`,
-        });
-        return;
-      }
+      const order = result.order;
+      // `product` — карточка товара уже с обновлённым остатком: письма
+      // владельцу и проверка «товар закончился» смотрят на неё.
+      const product = result.product;
+      const updatedProduct = result.product;
 
-      // FIXED: Use UTC for consistent timezone handling
-      const reservedUntil = new Date();
-      reservedUntil.setUTCMinutes(reservedUntil.getUTCMinutes() + 15);
+      // COMPLIANCE (152-ФЗ): согласие при заказе фиксируем так же, как при
+      // регистрации — иначе доказать его нечем.
+      storage
+        .createPersonalDataConsent({
+          userId,
+          consentType: "order",
+          isConsented: true,
+          consentText: PERSONAL_DATA_CONSENT_TEXT,
+          ipAddress: getClientIp(req),
+          userAgent: req.headers["user-agent"] || undefined,
+        })
+        .catch((err) => console.error("Failed to record order consent:", err));
 
-      const orderData = {
-        ...orderDataWithUserId,
-        reservedUntil,
-      };
-
-      const order = await storage.createOrder(orderData);
-      
       // Clear cache after order to show updated stock
       cache.delete('products');
       cache.delete('products-active');
-      
-      // FIXED: Refresh product data after order creation to get updated stock
-      const updatedProduct = await storage.getProduct(orderDataWithUserId.productId);
       
       // FIXED: Send notification to admins if product is out of stock
       if (updatedProduct && updatedProduct.stock === 0) {
@@ -1468,7 +1520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Delete all orders error:", error);
       res.status(500).json({ 
         success: false, 
-        message: error.message || "Failed to delete orders" 
+        message: "Не удалось удалить заказы" 
       });
     }
   });
@@ -1525,6 +1577,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // FIXED: Sanitize input
       const sanitizedStatus = sanitizeInput(status, 50);
       const sanitizedPaymentDetails = paymentDetails ? sanitizeInput(paymentDetails, 1000) : undefined;
+
+      // Без белого списка в поле статуса оказывалась любая строка, включая
+      // опечатку, и она же уходила клиенту в уведомление.
+      if (!isOrderStatus(sanitizedStatus)) {
+        res.status(400).json({
+          success: false,
+          message: `Недопустимый статус. Возможные значения: ${ORDER_STATUSES.join(", ")}`,
+        });
+        return;
+      }
 
       const isAdmin = user.role === "admin" || user.role === "superadmin";
 
@@ -1606,11 +1668,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      // SECURITY: у регистрации не было вообще никаких требований к паролю,
+      // хотя смена пароля требовала 8 символов, а создание админа — 12.
+      const passwordError = validatePasswordStrength(password);
+      if (passwordError) {
+        res.status(400).json({ success: false, message: passwordError });
+        return;
+      }
+
       // COMPLIANCE (152-ФЗ ст.9): согласие должно быть конкретным и доказуемым.
       // Проверять галочки только на клиенте бессмысленно — прямой запрос к API
       // их обходит. Требуем явные флаги и отказываем в регистрации без них.
-      const CONSENT_TEXT =
-        "Согласие на обработку персональных данных, Политика обработки данных и Политика конфиденциальности";
+      const CONSENT_TEXT = PERSONAL_DATA_CONSENT_TEXT;
       if (req.body?.consentPersonalData !== true || req.body?.consentPolicies !== true) {
         res.status(400).json({
           success: false,
@@ -1896,6 +1965,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: user.role,
       });
       setAccessCookie(req, res, accessToken);
+
+      // SECURITY: ротация refresh-токена. Без неё украденный токен работал бы
+      // все 7 дней. Если ротация не удалась — старый токен ещё валиден,
+      // поэтому сессию не рвём, просто не меняем cookie.
+      try {
+        const newRefreshToken = generateRefreshToken(user.id);
+        const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const rotated = await storage.rotateSession(session.id, newRefreshToken, newExpiresAt);
+        if (rotated) {
+          setRefreshCookie(req, res, newRefreshToken);
+        }
+      } catch (rotateErr) {
+        console.warn("[Refresh] Не удалось провести ротацию refresh-токена:", rotateErr);
+      }
 
       res.json({ success: true });
     } catch (error) {
@@ -2309,8 +2392,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return;
         }
       }
-      // Генерируем безопасный токен и сохраняем его в БД
-      const token = randomBytes(32).toString("hex");
+      // Генерируем безопасный токен и сохраняем его в БД.
+      // SECURITY: срок годности зашит в сам токен (`секрет.времяИстечения`),
+      // чтобы не заводить отдельную колонку. Раньше срока не было вовсе:
+      // ссылка из письма годовой давности оставалась рабочей.
+      const token = `${randomBytes(32).toString("hex")}.${Date.now() + EMAIL_VERIFICATION_TTL_MS}`;
       await storage.updateUser(user.id, { emailVerificationToken: token });
 
       const origin = (req.headers["x-forwarded-host"] as string)
@@ -2362,7 +2448,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { eq } = await import("drizzle-orm");
       const result = await db.select().from(users).where(eq(users.emailVerificationToken, token));
       const user = result[0];
-      if (!user) {
+      // Токены без метки срока — из старой схемы, считаем их просроченными.
+      const expiresAt = Number(String(token).split(".")[1]);
+      const expired = !Number.isFinite(expiresAt) || expiresAt < Date.now();
+      if (!user || expired) {
+        if (user && expired) {
+          await storage.updateUser(user.id, { emailVerificationToken: null });
+        }
         res.status(400).send(
           `<html><body style="font-family:sans-serif;padding:32px;text-align:center;">
             <h2>Ссылка устарела</h2>
@@ -2496,6 +2588,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
 
       const { paymentStatus } = req.body;
+
+      if (!isOrderStatus(paymentStatus)) {
+        res.status(400).json({
+          success: false,
+          message: `Недопустимый статус. Возможные значения: ${ORDER_STATUSES.join(", ")}`,
+        });
+        return;
+      }
+
       const order = await storage.updateOrderStatus(req.params.id, paymentStatus);
       
       if (!order) {
@@ -3995,7 +4096,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: "Ошибка при получении информации о размере базы данных",
-        error: error.message || "Unknown error",
+        // Текст ошибки PostgreSQL раскрывает структуру БД — оставляем его в
+        // логах, а наружу отдаём только в разработке.
+        ...(process.env.NODE_ENV !== "production" && { error: error.message || "Unknown error" }),
       });
     } finally {
       if (client) {
@@ -4150,8 +4253,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      if (newPassword.length < 8) {
-        res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+      const passwordError = validatePasswordStrength(newPassword);
+      if (passwordError) {
+        res.status(400).json({ success: false, message: passwordError });
         return;
       }
 
@@ -4159,6 +4263,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // BUGFIX: колонки `password` в таблице users нет — есть только
       // `password_hash`. Лишний ключ уходил в Drizzle .set() как несуществующее поле.
       await storage.updateUser(user.id, { passwordHash: hashedPassword, updatedAt: new Date() });
+
+      // SECURITY: смена пароля должна выкидывать всех остальных. Раньше
+      // злоумышленник с украденным refresh-токеном спокойно продолжал
+      // обновлять доступ, и смена пароля ничего не меняла.
+      try {
+        await storage.deleteUserSessions(user.id);
+      } catch (sessionErr) {
+        console.error("[ChangePassword] Не удалось отозвать сессии:", sessionErr);
+      }
+
+      // Текущему пользователю сразу выдаём новую пару, чтобы его не
+      // разлогинило прямо на форме смены пароля.
+      const newAccessToken = generateAccessToken({
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      });
+      const newRefreshToken = generateRefreshToken(user.id);
+      try {
+        await storage.createSession({
+          userId: user.id,
+          refreshToken: newRefreshToken,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          ipAddress: getClientIp(req),
+          userAgent: (req.headers["user-agent"] || "").toString().slice(0, 500),
+        });
+        setAccessCookie(req, res, newAccessToken);
+        setRefreshCookie(req, res, newRefreshToken);
+      } catch (sessionErr) {
+        console.error("[ChangePassword] Не удалось создать новую сессию:", sessionErr);
+        clearAuthCookies(req, res);
+      }
 
       res.json({ success: true, message: "Password changed successfully" });
     } catch (error) {

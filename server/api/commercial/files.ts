@@ -4,6 +4,7 @@ import { fileService } from "../../services/files";
 import { commercialProposalService } from "../../services/commercial";
 import { logger } from "../../services/logger";
 import { validateUUID, validateFileName, validateMimeType, validateFileSize, checkResourceOwnership } from "../../middleware/security";
+import { calculateBase64Size } from "../../security";
 import { insertContactSubmissionSchema } from "@shared/schema";
 import { z } from "zod";
 import { rateLimiters } from "../../rateLimiter";
@@ -71,6 +72,18 @@ router.post(
       // Validate file size (10MB max)
       const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
       if (!validateFileSize(validatedData.fileSize, MAX_FILE_SIZE)) {
+        return res.status(413).json({
+          success: false,
+          code: "FILE_TOO_LARGE",
+          message: `Размер файла превышает максимально допустимый (10 МБ)`,
+        });
+      }
+
+      // SECURITY: заявленный размер проверять недостаточно — можно прислать
+      // fileSize: 1 и гигабайт данных, который сервер развернёт в памяти.
+      // Считаем фактический размер, как это уже делает форма контактов.
+      const actualSize = calculateBase64Size(validatedData.fileData);
+      if (actualSize > MAX_FILE_SIZE) {
         return res.status(413).json({
           success: false,
           code: "FILE_TOO_LARGE",

@@ -122,7 +122,12 @@ export default function Profile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: userData, isLoading } = useQuery<UserData>({
+  const {
+    data: userData,
+    isLoading,
+    isError: isUserError,
+    refetch: refetchUser,
+  } = useQuery<UserData>({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
 
@@ -131,7 +136,11 @@ export default function Profile() {
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error("Failed to fetch user");
+      // 401 — это «не вошёл», всё остальное — сбой сети или сервера.
+      // Раньше оба случая показывали экран «Требуется авторизация», и человек
+      // с живой сессией шёл логиниться заново при обычном обрыве связи.
+      if (res.status === 401) return null as unknown as UserData;
+      if (!res.ok) throw new Error(`Не удалось загрузить профиль (${res.status})`);
       const data = await res.json();
       return data.user;
     },
@@ -379,15 +388,12 @@ export default function Profile() {
         credentials: "include",
         body: JSON.stringify({
           productId,
-          productPrice: selectedProduct.price,
           quantity,
-          totalAmount: totalAmount.toString(),
-          discountAmount: "0",
-          finalAmount: finalAmount.toString(),
           paymentMethod: "Банковская карта",
           customerName,
           customerEmail: userData.email,
           customerPhone,
+          consentPersonalData: true,
         }),
       });
 
@@ -725,15 +731,12 @@ export default function Profile() {
         credentials: "include",
         body: JSON.stringify({
           productId: order.productId,
-          productPrice: order.productPrice,
           quantity: order.quantity || 1,
-          totalAmount: order.totalAmount,
-          discountAmount: "0",
-          finalAmount: order.finalAmount,
           paymentMethod: order.paymentMethod || "Банковская карта",
           customerName,
           customerEmail: userData.email,
           customerPhone: phone,
+          consentPersonalData: true,
         }),
       });
       if (!res.ok) {
@@ -1148,6 +1151,31 @@ export default function Profile() {
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (isUserError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/10 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full border-0 shadow-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+          <CardContent className="pt-8 pb-8 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-rose-400 to-red-500 flex items-center justify-center">
+              <AlertTriangle className="w-10 h-10 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Не удалось загрузить профиль</h2>
+            <p className="text-muted-foreground mb-6">
+              Проверьте соединение и попробуйте ещё раз — выходить из аккаунта не нужно.
+            </p>
+            <Button
+              onClick={() => refetchUser()}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              data-testid="button-retry-profile"
+            >
+              Повторить
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

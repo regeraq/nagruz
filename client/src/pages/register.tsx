@@ -10,10 +10,17 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { PASSWORD_MIN_LENGTH } from "@shared/schema";
 
 const registerSchema = z.object({
   email: z.string().email("Введите корректный email"),
-  password: z.string().min(8, "Пароль должен содержать минимум 8 символов"),
+  // Те же правила, что и на сервере (validatePasswordStrength), иначе форма
+  // пропускает пароль, который бэкенд потом отклоняет.
+  password: z
+    .string()
+    .min(PASSWORD_MIN_LENGTH, `Пароль должен содержать минимум ${PASSWORD_MIN_LENGTH} символов`)
+    .regex(/[a-zA-Zа-яА-ЯёЁ]/, "Пароль должен содержать хотя бы одну букву")
+    .regex(/\d/, "Пароль должен содержать хотя бы одну цифру"),
   confirmPassword: z.string(),
   firstName: z.string().min(2, "Имя должно содержать минимум 2 символа").optional(),
   lastName: z.string().min(2, "Фамилия должна содержать минимум 2 символа").optional(),

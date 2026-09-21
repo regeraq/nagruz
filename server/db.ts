@@ -56,6 +56,14 @@ if (isForeignDatabase) {
   console.error('    к штрафам от Роскомнадзора до 75 000 рублей для ИП');
   console.error('    и до 200 000 рублей для юридических лиц.');
   console.error('');
+
+  // COMPLIANCE: в production это не предупреждение, а блокер. Раньше процесс
+  // спокойно стартовал и продолжал писать ПДн граждан РФ за рубеж.
+  // ALLOW_FOREIGN_DB=true — осознанный обход для тестового окружения.
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_FOREIGN_DB !== 'true') {
+    console.error('🛑 Запуск остановлен. Укажите российскую БД или задайте ALLOW_FOREIGN_DB=true.');
+    process.exit(1);
+  }
 }
 
 // RELIABILITY: без явных лимитов пул использует настройки по умолчанию и,

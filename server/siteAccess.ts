@@ -126,7 +126,16 @@ export async function enforceSiteAccess(req: Request, res: Response, next: NextF
       message: state.notice,
     });
   } catch (error) {
+    // Fail-closed: раньше при сбое чтения настроек запрос пропускался дальше,
+    // и закрытый на обслуживание сайт временно становился публичным — ровно
+    // противоположное тому, зачем режим включают.
     console.error("[siteAccess] ошибка проверки доступа:", error);
-    next();
+    if (isOpenPath(req.path)) return next();
+    if (await hasValidSession(req).catch(() => false)) return next();
+    res.status(503).json({
+      success: false,
+      code: "SITE_ACCESS_UNKNOWN",
+      message: "Сервис временно недоступен, попробуйте позже",
+    });
   }
 }

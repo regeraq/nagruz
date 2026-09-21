@@ -11,6 +11,7 @@ import Register from "@/pages/register";
 import NotFound from "@/pages/not-found";
 import { CookieBanner } from "@/components/cookie-banner";
 import { SiteLocked } from "@/components/site-locked";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSiteAccess } from "@/hooks/useSiteAccess";
 
@@ -49,8 +50,12 @@ function RegisterRoute() {
 }
 
 function Router() {
+  const [location] = useLocation();
   return (
-    <Suspense fallback={<RouteFallback />}>
+    // key по маршруту: после падения страницы переход на другую сбрасывает
+    // состояние ошибки, а шапка и баннер cookie остаются на месте.
+    <ErrorBoundary scope={location} key={location}>
+      <Suspense fallback={<RouteFallback />}>
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/about" component={About} />
@@ -68,7 +73,8 @@ function Router() {
         <Route path="/public-offer" component={PublicOffer} />
         <Route component={NotFound} />
       </Switch>
-    </Suspense>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -112,6 +118,8 @@ function useIsAuthenticated(enabled: boolean) {
 
 function AppContent() {
   usePageTitle();
+  const [location] = useLocation();
+  const isHome = location === "/";
   const { access, isLoading: accessLoading } = useSiteAccess();
   const { data: currentUser, isLoading: userLoading } = useIsAuthenticated(access.privateMode);
 
@@ -126,7 +134,10 @@ function AppContent() {
   return (
     <>
       <ScrollToTopOnRouteChange />
-      <Navigation />
+      {/* Главная рендерит свою шапку: ей нужны пропсы переключателя моделей,
+          которых нет на остальных маршрутах. Без этого исключения на `/`
+          отрисовывались две шапки одна поверх другой. */}
+      {!isHome && <Navigation />}
       <Router />
       <CookieBanner />
     </>
@@ -135,12 +146,14 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AppContent />
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary scope="app">
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <AppContent />
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

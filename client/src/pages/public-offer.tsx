@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Navigation } from "@/components/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useSiteContent } from "@/hooks/useSiteContent";
@@ -34,7 +33,6 @@ export default function PublicOffer() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation />
       <div className="container mx-auto px-4 py-12 pt-24">
         <Card className="bg-card text-foreground">
           <CardHeader>

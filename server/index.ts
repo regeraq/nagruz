@@ -289,6 +289,23 @@ app.use((req, res, next) => {
   void purgeExpiredPersonalData();
   setInterval(purgeExpiredPersonalData, 24 * 60 * 60 * 1000).unref();
 
+  // Заказ держит товар 15 минут. Без этой задачи остаток, списанный при
+  // оформлении, не возвращался бы никогда — неоплаченный заказ навсегда
+  // «съедал» единицу со склада.
+  const releaseExpiredOrders = async () => {
+    try {
+      const { storage } = await import('./storage');
+      const released = await storage.releaseExpiredOrders();
+      if (released) {
+        log(`[reserve] снято просроченных резервов: ${released}`);
+      }
+    } catch (error) {
+      console.error('[reserve] не удалось снять просроченные резервы:', error);
+    }
+  };
+  void releaseExpiredOrders();
+  setInterval(releaseExpiredOrders, 60 * 1000).unref();
+
   // RELIABILITY: без обработки SIGTERM `pm2 reload` убивает процесс мгновенно,
   // обрывая запросы в полёте (в том числе незавершённые записи в БД) и оставляя
   // соединения PostgreSQL висеть до таймаута.

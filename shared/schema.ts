@@ -206,6 +206,75 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type Order = typeof orders.$inferSelect;
 
+/**
+ * Тело запроса на создание заказа.
+ *
+ * SECURITY: здесь намеренно нет сумм, скидки, статуса оплаты и срока резерва.
+ * Всё это считает сервер по цене товара из БД (см. `storage.createOrder`).
+ * `insertOrderSchema` для этой цели не годится: он выведен из таблицы и
+ * пропускает служебные поля, поэтому клиент мог бы прислать свою цену
+ * и статус «оплачено». Лишние поля в теле запроса zod просто отбрасывает.
+ */
+export const createOrderRequestSchema = z.object({
+  productId: z.string().min(1, "Не указан товар"),
+  quantity: z.number().int().min(1, "Минимальное количество - 1").max(99, "Максимальное количество - 99"),
+  paymentMethod: z.string().min(1, "Выберите способ оплаты").max(100),
+  promoCode: z.string().trim().max(64).nullable().optional(),
+  customerName: z.string().min(2, "Имя должно содержать минимум 2 символа").max(200),
+  customerEmail: z.string().email("Введите корректный email"),
+  customerPhone: z.string().min(5, "Введите корректный номер телефона").max(50),
+});
+
+export type CreateOrderRequest = z.infer<typeof createOrderRequestSchema>;
+
+/**
+ * Допустимые статусы заказа. Раньше админка могла записать в это поле любую
+ * строку, включая опечатку, и она уходила клиенту в уведомление.
+ */
+export const ORDER_STATUSES = [
+  "pending",
+  "paid",
+  "processing",
+  "shipped",
+  "delivered",
+  "completed",
+  "cancelled",
+] as const;
+
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export function isOrderStatus(value: unknown): value is OrderStatus {
+  return typeof value === "string" && (ORDER_STATUSES as readonly string[]).includes(value);
+}
+
+export const PASSWORD_MIN_LENGTH = 8;
+
+/**
+ * Единые требования к паролю для регистрации, смены и восстановления.
+ * Раньше регистрация не проверяла пароль вообще (проходил «1»), смена
+ * требовала 8 символов, а создание админа — 12.
+ *
+ * Планка намеренно умеренная: буква + цифра + длина. Более жёсткие правила
+ * заблокировали бы смену пароля уже существующим пользователям.
+ *
+ * @returns текст ошибки или null, если пароль подходит
+ */
+export function validatePasswordStrength(password: unknown): string | null {
+  if (typeof password !== "string" || password.length < PASSWORD_MIN_LENGTH) {
+    return `Пароль должен содержать минимум ${PASSWORD_MIN_LENGTH} символов`;
+  }
+  if (password.length > 128) {
+    return "Пароль не должен быть длиннее 128 символов";
+  }
+  if (!/[a-zA-Zа-яА-ЯёЁ]/.test(password)) {
+    return "Пароль должен содержать хотя бы одну букву";
+  }
+  if (!/\d/.test(password)) {
+    return "Пароль должен содержать хотя бы одну цифру";
+  }
+  return null;
+}
+
 // User roles enum
 export const userRoles = ["user", "moderator", "admin", "superadmin"] as const;
 export type UserRole = typeof userRoles[number];

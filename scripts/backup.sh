@@ -71,11 +71,13 @@ echo "[backup] DB dump size: $DB_SIZE"
 # -------- 2. Архив файлов --------
 FILES_FILE="$BACKUP_DIR/loaddevice-files-$TS.tar.gz"
 echo "[backup] tar -> $FILES_FILE"
-# .env + uploads/ (вложения коммерческих предложений на диске)
+# SECURITY: .env в архив больше НЕ кладём. Архивы не шифруются и лежат на том
+# же сервере — раньше каждая копия бэкапа была ещё и копией всех секретов
+# (JWT, строка подключения к БД, доступы к почте). Секреты храните отдельно,
+# в менеджере паролей; список нужных переменных есть в .env.example.
 tar -czf "$FILES_FILE" \
     --ignore-failed-read \
     -C / \
-    "${PROJECT_DIR#/}/.env" \
     "${PROJECT_DIR#/}/uploads" 2>/dev/null || true
 
 # nginx и pm2 конфиги (если есть)

@@ -5,7 +5,46 @@ import {
   siteContent, siteContacts, cookieSettings, personalDataConsents,
   commercialProposalFiles
 } from "@shared/schema";
-import { eq, and, desc, inArray, lt } from "drizzle-orm";
+import { eq, and, desc, inArray, lt, sql } from "drizzle-orm";
+import { randomInt } from "node:crypto";
+import { hashToken } from "./authCookies";
+
+/** Сколько минут товар держится за неоплаченным заказом. */
+export const ORDER_RESERVE_MINUTES = 15;
+
+export type CreateOrderResult =
+  | { ok: true; order: any; product: any; discountPercent: number }
+  | {
+      ok: false;
+      code: "PRODUCT_NOT_FOUND" | "PRODUCT_INACTIVE" | "OUT_OF_STOCK" | "PROMO_INVALID" | "PRICE_INVALID";
+      available?: number;
+    };
+
+/** Округление денег до копеек без накопления ошибки float. */
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Короткий числовой номер заказа — его диктуют по телефону, поэтому UUID тут
+ * неудобен. Берём криптостойкий источник, чтобы номера нельзя было угадывать.
+ */
+function generateOrderId(): string {
+  return String(randomInt(1_000_000_000, 10_000_000_000));
+}
+
+/**
+ * Промокод пригоден к применению.
+ * `isActive` в этой таблице — integer, но драйвер pg в разных версиях отдаёт
+ * его то числом, то булевым, то строкой, поэтому проверяем все варианты.
+ */
+function isPromoUsable(promo: { isActive: unknown; expiresAt: Date | string | null }): boolean {
+  const raw = promo.isActive;
+  const active = raw === true || raw === 1 || raw === "1" || raw === "t" || raw === "true";
+  if (!active) return false;
+  if (promo.expiresAt && new Date(promo.expiresAt) < new Date()) return false;
+  return true;
+}
 
 /**
  * Сериализация `advantages` перед записью в БД.
@@ -57,6 +96,7 @@ export interface IStorage {
   updateUser(id: string, data: any): Promise<any>;
   getSessionByToken(token: string): Promise<any>;
   createSession(session: any): Promise<any>;
+  rotateSession(sessionId: string, newToken: string, expiresAt: Date): Promise<any>;
   deleteSession(id: string): Promise<boolean>;
   getAllNotifications(userId: string): Promise<any[]>;
   getNotificationById(id: string): Promise<any>;
@@ -81,7 +121,18 @@ export interface IStorage {
   purgeExpiredData(loginAttemptRetentionDays?: number): Promise<{ sessions: number; loginAttempts: number }>;
   getOrder(id: string): Promise<any>;
   updateOrderStatus(id: string, status: string, details?: string): Promise<any>;
-  createOrder(order: any): Promise<any>;
+  createOrder(input: {
+    userId: string | null;
+    productId: string;
+    quantity: number;
+    paymentMethod: string;
+    promoCode?: string | null;
+    customerName?: string | null;
+    customerEmail?: string | null;
+    customerPhone?: string | null;
+    reserveMinutes?: number;
+  }): Promise<CreateOrderResult>;
+  releaseExpiredOrders(): Promise<number>;
   getUserOrders(userId: string): Promise<any[]>;
   getAllOrders(): Promise<any[]>;
   deleteAllOrders(): Promise<number>;
@@ -147,8 +198,17 @@ export class DrizzleStorage implements IStorage {
     return result[0];
   }
 
+  /**
+   * SECURITY: в колонке `refresh_token` хранится SHA-256 хэш, а не сам токен.
+   * Раньше лежал сам токен: любая копия БД (ночной бэкап, выгрузка из админки)
+   * отдавала рабочие ключи к чужим аккаунтам на весь срок жизни сессии.
+   *
+   * Хэширование прозрачно для вызывающего кода — он по-прежнему передаёт
+   * сырой токен. Побочный эффект перехода: старые сессии с открытыми токенами
+   * перестают находиться, и пользователям нужно войти заново — ровно один раз.
+   */
   async getSessionByToken(token: string) {
-    const result = await db.select().from(sessions).where(eq(sessions.refreshToken, token));
+    const result = await db.select().from(sessions).where(eq(sessions.refreshToken, hashToken(token)));
     return result[0] || null;
   }
 
@@ -156,12 +216,27 @@ export class DrizzleStorage implements IStorage {
     const result = await db.insert(sessions).values({
       id: session.id || undefined,
       userId: session.userId,
-      refreshToken: session.refreshToken,
+      refreshToken: hashToken(session.refreshToken),
       expiresAt: new Date(session.expiresAt),
       ipAddress: session.ipAddress || null,
       userAgent: session.userAgent || null,
     }).returning();
     return result[0];
+  }
+
+  /**
+   * Замена refresh-токена внутри существующей сессии.
+   *
+   * Без ротации украденный токен работал все 7 дней и его повторное
+   * использование ничем не отличалось от легитимного.
+   */
+  async rotateSession(sessionId: string, newToken: string, expiresAt: Date) {
+    const result = await db
+      .update(sessions)
+      .set({ refreshToken: hashToken(newToken), expiresAt })
+      .where(eq(sessions.id, sessionId))
+      .returning();
+    return result[0] || null;
   }
 
   async deleteSession(id: string) {
@@ -379,8 +454,31 @@ export class DrizzleStorage implements IStorage {
     return result[0] || null;
   }
 
+  /**
+   * Удаление заявки вместе с вложениями.
+   *
+   * CASCADE в схеме убирает строки в `commercial_proposal_files`, но сами
+   * файлы оставались на диске: и мусор, и персональные данные, которые
+   * формально удалены. Файлы трогаем после удаления строк — откатить
+   * unlink нельзя.
+   */
   async deleteContactSubmission(id: string) {
+    const files = await db
+      .select()
+      .from(commercialProposalFiles)
+      .where(eq(commercialProposalFiles.proposalId, id));
+
     await db.delete(contactSubmissions).where(eq(contactSubmissions.id, id));
+
+    if (files.length > 0) {
+      const { deleteStoredFile, isStoredFilePath } = await import("./services/fileStorage");
+      for (const file of files) {
+        if (file.filePath && isStoredFilePath(file.filePath)) {
+          await deleteStoredFile(file.filePath);
+        }
+      }
+    }
+
     return true;
   }
 
@@ -421,41 +519,173 @@ export class DrizzleStorage implements IStorage {
     return result[0] || null;
   }
 
+  /**
+   * Смена статуса заказа.
+   *
+   * При переходе в "cancelled" количество возвращается на склад. Заказ
+   * блокируется на время транзакции, а возврат делается только если заказ
+   * ещё не был отменён — иначе повторная отмена накрутила бы остаток.
+   */
   async updateOrderStatus(id: string, status: string, details?: string) {
-    const result = await db.update(orders).set({ paymentStatus: status, paymentDetails: details }).where(eq(orders.id, id)).returning();
-    return result[0];
+    return await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(orders).where(eq(orders.id, id)).for("update");
+      if (!existing) return undefined;
+
+      const restock = status === "cancelled" && existing.paymentStatus !== "cancelled";
+
+      const [updated] = await tx
+        .update(orders)
+        .set({ paymentStatus: status, paymentDetails: details, updatedAt: new Date() })
+        .where(eq(orders.id, id))
+        .returning();
+
+      if (restock && existing.quantity > 0) {
+        await tx
+          .update(products)
+          .set({ stock: sql`${products.stock} + ${existing.quantity}`, updatedAt: new Date() })
+          .where(eq(products.id, existing.productId));
+      }
+
+      return updated;
+    });
   }
 
-  async createOrder(order: any) {
-    // Generate short numeric order ID (10 digits)
-    const orderId = order.id || `${Math.floor(Math.random() * 10000000000)}`;
-    const result = await db.insert(orders).values({
-      id: orderId,
-      userId: order.userId || null,
-      productId: order.productId,
-      quantity: order.quantity || 1,
-      totalAmount: order.totalAmount,
-      discountAmount: order.discountAmount || "0",
-      finalAmount: order.finalAmount,
-      promoCode: order.promoCode || null,
-      paymentMethod: order.paymentMethod,
-      paymentStatus: order.paymentStatus || "pending",
-      customerName: order.customerName || null,
-      customerEmail: order.customerEmail || null,
-      customerPhone: order.customerPhone || null,
-      paymentDetails: order.paymentDetails || null,
-    }).returning();
-    
-    if (order.quantity) {
-      const product = await this.getProduct(order.productId);
-      if (product) {
-        await this.updateProduct(order.productId, {
-          stock: Math.max(0, (product.stock || 0) - order.quantity),
-        });
+  /**
+   * Создание заказа одной транзакцией.
+   *
+   * Суммы считаются здесь по цене товара из БД: значения, присланные
+   * клиентом, игнорируются, иначе заказ можно оформить на любую сумму.
+   * Статус оплаты всегда "pending" — его меняет только админка или,
+   * в будущем, платёжный шлюз.
+   *
+   * Строка товара блокируется через SELECT ... FOR UPDATE: без этого два
+   * одновременных заказа оба проходили проверку остатка и выкупали один и
+   * тот же последний экземпляр.
+   */
+  async createOrder(input: {
+    userId: string | null;
+    productId: string;
+    quantity: number;
+    paymentMethod: string;
+    promoCode?: string | null;
+    customerName?: string | null;
+    customerEmail?: string | null;
+    customerPhone?: string | null;
+    reserveMinutes?: number;
+  }): Promise<CreateOrderResult> {
+    const quantity = Math.max(1, Math.trunc(input.quantity));
+
+    return await db.transaction(async (tx) => {
+      const [product] = await tx
+        .select()
+        .from(products)
+        .where(eq(products.id, input.productId))
+        .for("update");
+
+      if (!product) return { ok: false as const, code: "PRODUCT_NOT_FOUND" as const };
+      if (!product.isActive) return { ok: false as const, code: "PRODUCT_INACTIVE" as const };
+      if (product.stock < quantity) {
+        return { ok: false as const, code: "OUT_OF_STOCK" as const, available: product.stock };
       }
-    }
-    
-    return result[0];
+
+      let discountPercent = 0;
+      let appliedPromoCode: string | null = null;
+
+      if (input.promoCode && input.promoCode.trim()) {
+        const normalized = input.promoCode.trim().toUpperCase();
+        const [promo] = await tx.select().from(promoCodes).where(eq(promoCodes.code, normalized));
+        if (!promo || !isPromoUsable(promo)) {
+          return { ok: false as const, code: "PROMO_INVALID" as const };
+        }
+        discountPercent = promo.discountPercent;
+        appliedPromoCode = promo.code;
+      }
+
+      const unitPrice = Number(product.price);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        return { ok: false as const, code: "PRICE_INVALID" as const };
+      }
+
+      const totalAmount = round2(unitPrice * quantity);
+      const discountAmount = round2((totalAmount * discountPercent) / 100);
+      const finalAmount = round2(totalAmount - discountAmount);
+
+      const reserveMinutes = input.reserveMinutes ?? ORDER_RESERVE_MINUTES;
+      const reservedUntil = new Date(Date.now() + reserveMinutes * 60_000);
+
+      const [order] = await tx
+        .insert(orders)
+        .values({
+          id: generateOrderId(),
+          userId: input.userId,
+          productId: product.id,
+          quantity,
+          totalAmount: totalAmount.toFixed(2),
+          discountAmount: discountAmount.toFixed(2),
+          finalAmount: finalAmount.toFixed(2),
+          promoCode: appliedPromoCode,
+          paymentMethod: input.paymentMethod,
+          paymentStatus: "pending",
+          customerName: input.customerName || null,
+          customerEmail: input.customerEmail || null,
+          customerPhone: input.customerPhone || null,
+          paymentDetails: null,
+          reservedUntil,
+        })
+        .returning();
+
+      const [updatedProduct] = await tx
+        .update(products)
+        .set({ stock: product.stock - quantity, updatedAt: new Date() })
+        .where(eq(products.id, product.id))
+        .returning();
+
+      return { ok: true as const, order, product: updatedProduct, discountPercent };
+    });
+  }
+
+  /**
+   * Снятие просроченных резервов.
+   *
+   * Заказ держит товар `ORDER_RESERVE_MINUTES` минут. Раньше срок резерва
+   * даже не записывался, и остаток списывался навсегда при любом неоплаченном
+   * заказе. Теперь просроченные заказы отменяются, а товар возвращается.
+   */
+  async releaseExpiredOrders(): Promise<number> {
+    return await db.transaction(async (tx) => {
+      const expired = await tx
+        .select()
+        .from(orders)
+        .where(
+          and(
+            eq(orders.paymentStatus, "pending"),
+            lt(orders.reservedUntil, new Date()),
+          ),
+        )
+        .for("update");
+
+      if (expired.length === 0) return 0;
+
+      for (const order of expired) {
+        await tx
+          .update(orders)
+          .set({
+            paymentStatus: "cancelled",
+            paymentDetails: "Резерв истёк, заказ отменён автоматически",
+            updatedAt: new Date(),
+          })
+          .where(eq(orders.id, order.id));
+
+        if (order.productId && order.quantity > 0) {
+          await tx
+            .update(products)
+            .set({ stock: sql`${products.stock} + ${order.quantity}`, updatedAt: new Date() })
+            .where(eq(products.id, order.productId));
+        }
+      }
+
+      return expired.length;
+    });
   }
 
   async getUserOrders(userId: string) {
@@ -468,17 +698,40 @@ export class DrizzleStorage implements IStorage {
     return await db.select().from(orders);
   }
 
+  /**
+   * Массовое удаление заказов с возвратом товара на склад.
+   *
+   * Раньше остатки, списанные при оформлении, не восстанавливались, и после
+   * чистки тестовых заказов каталог показывал заниженное наличие. Возвращаем
+   * только незавершённые заказы: по отгруженным товар действительно ушёл.
+   */
   async deleteAllOrders(): Promise<number> {
-    // Get count before deletion for return value
-    const allOrders = await db.select().from(orders);
-    const count = allOrders.length;
-    
-    // Delete all orders
-    if (count > 0) {
-      await db.delete(orders);
-    }
-    
-    return count;
+    return await db.transaction(async (tx) => {
+      const allOrders = await tx.select().from(orders);
+      const count = allOrders.length;
+      if (count === 0) return 0;
+
+      const restockable = allOrders.filter(
+        (o) => o.paymentStatus !== "cancelled" && o.paymentStatus !== "delivered" && o.paymentStatus !== "completed",
+      );
+
+      const byProduct = new Map<string, number>();
+      for (const order of restockable) {
+        if (!order.productId || !order.quantity) continue;
+        byProduct.set(order.productId, (byProduct.get(order.productId) || 0) + order.quantity);
+      }
+
+      await tx.delete(orders);
+
+      for (const [productId, quantity] of byProduct) {
+        await tx
+          .update(products)
+          .set({ stock: sql`${products.stock} + ${quantity}`, updatedAt: new Date() })
+          .where(eq(products.id, productId));
+      }
+
+      return count;
+    });
   }
 
   async addToFavorites(userId: string, productId: string) {
@@ -521,28 +774,13 @@ export class DrizzleStorage implements IStorage {
     const promo = result[0];
     
     if (!promo) {
-      console.log(`❌ [validatePromoCode] Promo code "${normalizedCode}" not found`);
       return null;
     }
     
-    // isActive может приходить и как boolean, и как integer (1/0) из драйвера pg
-    const rawActive = promo.isActive as unknown;
-    const isActive = rawActive === true || rawActive === 1 || rawActive === "1" || rawActive === "t" || rawActive === "true";
-    if (!isActive) {
-      console.log(`❌ [validatePromoCode] Promo code "${normalizedCode}" is not active (isActive: ${promo.isActive})`);
+    if (!isPromoUsable(promo)) {
       return null;
     }
     
-    if (promo.expiresAt) {
-      const expiresAt = new Date(promo.expiresAt);
-      const now = new Date();
-      if (expiresAt < now) {
-        console.log(`❌ [validatePromoCode] Promo code "${normalizedCode}" expired (expiresAt: ${expiresAt}, now: ${now})`);
-        return null;
-      }
-    }
-    
-    console.log(`✅ [validatePromoCode] Promo code "${normalizedCode}" is valid (discount: ${promo.discountPercent}%)`);
     return {
       valid: true,
       code: promo.code,
@@ -562,6 +800,13 @@ export class DrizzleStorage implements IStorage {
 
   async blockUser(id: string, blocked: boolean) {
     const result = await db.update(users).set({ isBlocked: blocked }).where(eq(users.id, id)).returning();
+
+    // SECURITY: без удаления сессий выданный ранее access-токен оставался
+    // технически валидным ещё до 15 минут после блокировки.
+    if (blocked) {
+      await db.delete(sessions).where(eq(sessions.userId, id));
+    }
+
     return result[0];
   }
 

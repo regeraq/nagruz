@@ -455,12 +455,13 @@ export default function Home() {
 
   const contactMutation = useMutation({
     mutationFn: async (data: InsertContactSubmission) => {
-      return await apiRequest("POST", "/api/contact", data);
+      const res = await apiRequest("POST", "/api/contact", data);
+      return await res.json();
     },
     onSuccess: (response: any) => {
       toast({
         title: "Заявка отправлена!",
-        description: response.message || "Мы свяжемся с вами в ближайшее время.",
+        description: response?.message || "Мы свяжемся с вами в ближайшее время.",
         variant: "default",
       });
       queueMicrotask(() => {
@@ -623,6 +624,22 @@ export default function Home() {
       return;
     }
     contactMutation.mutate({ ...data, consentPersonalData: true } as any);
+  };
+
+  // Ошибки показываем только после первой попытки отправки, иначе подсказки
+  // выскакивают уже на первом введённом символе.
+  const setField = (field: "name" | "phone" | "email" | "company" | "message", value: string) => {
+    form.setValue(field, value, { shouldValidate: form.formState.isSubmitted });
+  };
+
+  const fieldError = (field: "name" | "phone" | "email" | "company" | "message") => {
+    const message = form.formState.errors[field]?.message;
+    if (!message) return null;
+    return (
+      <p className="text-xs text-destructive mt-1.5" data-testid={`error-${field}`}>
+        {String(message)}
+      </p>
+    );
   };
 
   const scrollToContact = () => {
@@ -1412,62 +1429,72 @@ export default function Home() {
             <div className="lg:col-span-3">
               <Card>
                 <CardContent className="p-4 sm:p-6">
-                  <form onSubmit={(e) => { e.preventDefault(); contactMutation.mutate(form.getValues()); }} className="space-y-4 sm:space-y-6">
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
                     <div>
-                      <label className="text-xs sm:text-sm font-medium">{t("home_contact_name")}</label>
+                      <Label htmlFor="contact-name" className="text-xs sm:text-sm font-medium">{t("home_contact_name")}</Label>
                       <Input 
+                        id="contact-name"
                         placeholder={t("home_contact_name_ph")} 
                         value={form.watch("name")}
-                        onChange={(e) => form.setValue("name", e.target.value)}
+                        onChange={(e) => setField("name", e.target.value)}
                         data-testid="input-name"
                         className="mt-1.5 sm:mt-2 h-11 sm:h-12"
                       />
+                      {fieldError("name")}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div>
-                        <label className="text-xs sm:text-sm font-medium">{t("home_contact_phone")}</label>
+                        <Label htmlFor="contact-phone" className="text-xs sm:text-sm font-medium">{t("home_contact_phone")}</Label>
                         <Input 
+                          id="contact-phone"
                           placeholder="+7 (999) 123-45-67" 
                           value={form.watch("phone")}
-                          onChange={(e) => form.setValue("phone", e.target.value)}
+                          onChange={(e) => setField("phone", e.target.value)}
                           data-testid="input-phone"
                           className="mt-1.5 sm:mt-2 h-11 sm:h-12"
                         />
+                        {fieldError("phone")}
                       </div>
                       <div>
-                        <label className="text-xs sm:text-sm font-medium">{t("home_contact_email")}</label>
+                        <Label htmlFor="contact-email" className="text-xs sm:text-sm font-medium">{t("home_contact_email")}</Label>
                         <Input 
+                          id="contact-email"
                           type="email"
                           placeholder="ivanov@company.ru" 
                           value={form.watch("email")}
-                          onChange={(e) => form.setValue("email", e.target.value)}
+                          onChange={(e) => setField("email", e.target.value)}
                           data-testid="input-email"
                           className="mt-1.5 sm:mt-2 h-11 sm:h-12"
                         />
+                        {fieldError("email")}
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-xs sm:text-sm font-medium">{t("home_contact_company")}</label>
+                      <Label htmlFor="contact-company" className="text-xs sm:text-sm font-medium">{t("home_contact_company")}</Label>
                       <Input 
+                        id="contact-company"
                         placeholder={t("home_contact_company_ph")} 
                         value={form.watch("company")}
-                        onChange={(e) => form.setValue("company", e.target.value)}
+                        onChange={(e) => setField("company", e.target.value)}
                         data-testid="input-company"
                         className="mt-1.5 sm:mt-2 h-11 sm:h-12"
                       />
+                      {fieldError("company")}
                     </div>
 
                     <div>
-                      <label className="text-xs sm:text-sm font-medium">{t("home_contact_message")}</label>
+                      <Label htmlFor="contact-message" className="text-xs sm:text-sm font-medium">{t("home_contact_message")}</Label>
                       <Textarea 
+                        id="contact-message"
                         placeholder={t("home_contact_message_ph")}
                         className="min-h-[120px] sm:min-h-32 resize-none mt-1.5 sm:mt-2 text-sm"
                         value={form.watch("message")}
-                        onChange={(e) => form.setValue("message", e.target.value)}
+                        onChange={(e) => setField("message", e.target.value)}
                         data-testid="input-message"
                       />
+                      {fieldError("message")}
                     </div>
 
                     {fileUploadEnabled && (

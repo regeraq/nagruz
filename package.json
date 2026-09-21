@@ -9,6 +9,8 @@
     "start": "cross-env NODE_ENV=production node dist/index.js",
     "check": "tsc",
     "smoke": "node scripts/smoke-auth.mjs",
+    "smoke:orders": "node scripts/smoke-orders.mjs",
+    "smoke:admin": "node scripts/admin-smoke.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push"
