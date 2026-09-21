@@ -17,15 +17,29 @@
 set -euo pipefail
 
 # -------- Подгружаем настройки --------
+# Переменные из окружения приоритетнее файла: pre-deploy бэкап запускается
+# от пользователя deploy и складывает копию в свой каталог, а не в общий.
+_env_project_dir="${PROJECT_DIR:-}"
+_env_backup_dir="${BACKUP_DIR:-}"
+_env_keep_days="${KEEP_DAYS:-}"
+_env_keep_min="${KEEP_MIN:-}"
+
 if [ -f /etc/loaddevice-backup.env ]; then
-    # shellcheck disable=SC1091
-    . /etc/loaddevice-backup.env
+    if [ -r /etc/loaddevice-backup.env ]; then
+        # shellcheck disable=SC1091
+        . /etc/loaddevice-backup.env
+    else
+        # Файл принадлежит root с правами 0600, а в нём только пути и срок
+        # хранения. Из-за set -e нечитаемый файл ронял весь бэкап — и деплой
+        # оставался без свежей копии БД.
+        echo "[backup] WARN: /etc/loaddevice-backup.env недоступен для чтения, берём значения по умолчанию"
+    fi
 fi
 
-PROJECT_DIR="${PROJECT_DIR:-/var/www/loaddevice}"
-BACKUP_DIR="${BACKUP_DIR:-/var/backups/loaddevice}"
-KEEP_DAYS="${KEEP_DAYS:-14}"
-KEEP_MIN="${KEEP_MIN:-7}"
+PROJECT_DIR="${_env_project_dir:-${PROJECT_DIR:-/var/www/loaddevice}}"
+BACKUP_DIR="${_env_backup_dir:-${BACKUP_DIR:-/var/backups/loaddevice}}"
+KEEP_DAYS="${_env_keep_days:-${KEEP_DAYS:-14}}"
+KEEP_MIN="${_env_keep_min:-${KEEP_MIN:-7}}"
 
 # Найти корень проекта (если проект внутри подпапки)
 if [ ! -f "$PROJECT_DIR/package.json" ] && [ -f "$PROJECT_DIR/HelloWhoAreYou-1/package.json" ]; then
@@ -50,7 +64,11 @@ if [ -z "$DATABASE_URL" ]; then
     exit 1
 fi
 
-mkdir -p "$BACKUP_DIR"
+if ! mkdir -p "$BACKUP_DIR" 2>/dev/null || [ ! -w "$BACKUP_DIR" ]; then
+    echo "[backup] ERROR: нет прав на запись в $BACKUP_DIR (запущено от $(id -un))"
+    exit 1
+fi
+
 TS="$(date +%Y%m%d-%H%M%S)"
 
 echo "=========================================="
@@ -75,15 +93,21 @@ echo "[backup] tar -> $FILES_FILE"
 # же сервере — раньше каждая копия бэкапа была ещё и копией всех секретов
 # (JWT, строка подключения к БД, доступы к почте). Секреты храните отдельно,
 # в менеджере паролей; список нужных переменных есть в .env.example.
-tar -czf "$FILES_FILE" \
-    --ignore-failed-read \
-    -C / \
-    "${PROJECT_DIR#/}/uploads" 2>/dev/null || true
+# Кладём всё за один вызов: `tar -r` не умеет дописывать в сжатый архив,
+# поэтому конфиг nginx раньше молча терялся (ошибку глотал `|| true`).
+BACKUP_PATHS=()
+[ -d "$PROJECT_DIR/uploads" ] && BACKUP_PATHS+=("${PROJECT_DIR#/}/uploads")
 
-# nginx и pm2 конфиги (если есть)
 NGINX_CONF="/etc/nginx/sites-available/loaddevice"
-if [ -f "$NGINX_CONF" ]; then
-    tar -rzf "$FILES_FILE" -C / "${NGINX_CONF#/}" 2>/dev/null || true
+[ -r "$NGINX_CONF" ] && BACKUP_PATHS+=("${NGINX_CONF#/}")
+
+ECOSYSTEM="$PROJECT_DIR/ecosystem.config.cjs"
+[ -r "$ECOSYSTEM" ] && BACKUP_PATHS+=("${ECOSYSTEM#/}")
+
+if [ ${#BACKUP_PATHS[@]} -eq 0 ]; then
+    echo "[backup] WARN: нечего архивировать кроме дампа БД"
+else
+    tar -czf "$FILES_FILE" --ignore-failed-read -C / "${BACKUP_PATHS[@]}"
 fi
 
 FILES_SIZE="$(du -h "$FILES_FILE" 2>/dev/null | cut -f1 || echo '0')"

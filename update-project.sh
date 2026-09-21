@@ -133,8 +133,13 @@ fi
 if [ -f "scripts/backup.sh" ]; then
     echo "💾 Шаг 0: Резервная копия БД перед миграциями..."
     BACKUP_LOG="/tmp/loaddevice-predeploy-backup.log"
-    if bash scripts/backup.sh >"$BACKUP_LOG" 2>&1; then
-        echo "   ✅ Бэкап создан"
+    # Ночной бэкап от cron пишет в /var/backups/loaddevice (root, 0700).
+    # Деплой идёт от deploy и туда писать не может, поэтому pre-deploy копия
+    # живёт отдельно — это страховка на откат миграции, а не архив.
+    PREDEPLOY_BACKUP_DIR="${PREDEPLOY_BACKUP_DIR:-$HOME/loaddevice-predeploy-backups}"
+    if BACKUP_DIR="$PREDEPLOY_BACKUP_DIR" KEEP_DAYS=7 KEEP_MIN=3 \
+        bash scripts/backup.sh >"$BACKUP_LOG" 2>&1; then
+        echo "   ✅ Бэкап создан: $PREDEPLOY_BACKUP_DIR"
     else
         echo "   ❌ Бэкап не удался — обновление остановлено."
         echo "   Лог: $BACKUP_LOG"
