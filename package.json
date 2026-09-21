@@ -10,6 +10,7 @@
     "check": "tsc",
     "smoke": "node scripts/smoke-auth.mjs",
     "smoke:orders": "node scripts/smoke-orders.mjs",
+    "smoke:contact": "node scripts/smoke-contact.mjs",
     "smoke:admin": "node scripts/admin-smoke.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
